@@ -80,6 +80,7 @@ internal sealed class SettingsApi : IDisposable
             .Where(n => snapshot[n] is not null).Select(n => new JProperty(n, snapshot[n]!.DeepClone())));
         return new JObject { ["Success"] = true, ["Identity"] = "WrathFork", ["ApiVersion"] = 2, ["SettingsSchemaVersion"] = 2,
             ["EngineVersion"] = UpstreamVersion.Text, ["Instance"] = instance, ["Revision"] = Revision(snapshot),
+            ["DirectActionOffset"] = DirectAction.Offset,
             ["LegacyRevisionV1"] = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(legacy.ToString(Formatting.None)))),
             ["ConfigurationId"] = Service.Configuration.ForkConfigurationId,
             ["Effective"] = Effective(), ["LeaseCount"] = WrathCombo.P!.IPC.Leasing.Registrations.Count,
@@ -124,7 +125,12 @@ internal sealed class SettingsApi : IDisposable
         new JsonSerializerSettings { ObjectCreationHandling = ObjectCreationHandling.Replace });
     private static void Refresh()
     {
-        if (Player.Available) Service.ActionReplacer.UpdateFilteredCombos();
+        if (WrathCombo.P?.CustomActions?.Manager is { } manager) ActionRoutes.RegisterDirectActions(manager);
+        if (Player.Available)
+        {
+            Service.ActionReplacer.LastActionInvokeFor.Clear();
+            Service.ActionReplacer.UpdateFilteredCombos();
+        }
         WrathCombo.P!.ActionRetargeting.ClearCachedRetargets();
         if (Player.Available) WrathCombo.P.IPCSearch.UpdateActiveJobPresets();
     }

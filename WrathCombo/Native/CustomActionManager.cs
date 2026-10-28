@@ -437,6 +437,7 @@ public sealed unsafe class CustomActionSetup : IDisposable
             new CustomAction(Engine.PvPIntentRouting.Support,"Allied support","Select eligible allied support.",1510),
             new CustomAction(Engine.PvPIntentRouting.Mechanic,"Job mechanic","Begin an eligible job mechanic; damage presses carry it through.",1505),
             new CustomAction(Engine.PvPIntentRouting.Release,"Release early","Release an already active effect; never starts a new one.",1505));
+        Engine.ActionRoutes.RegisterDirectActions(Manager);
     }
     public void Dispose()
     {

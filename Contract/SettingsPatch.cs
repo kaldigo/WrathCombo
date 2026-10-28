@@ -16,7 +16,7 @@ public static class SettingsPatch
         "DancerDanceCompatActionIDs", "ForkFeatures", "BlockSpellOnMove", "ActionChanging",
         "QueueAdjust", "QueueAdjustThreshold", "OverwriteQueue", "Throttle", "PenaltyPause", "MovementLeeway",
         "OpenerTimeout", "MeleeOffset", "InterruptDelay", "MaximumWeavesPerWindow", "UseExperimentalHP",
-        "AddOutOfPartyNPCsToRetargeting", "CustomActionSettings", "ActiveBLUSpells", "IgnoredNPCs"];
+        "AddOutOfPartyNPCsToRetargeting", "CustomActionSettings", "ActiveBLUSpells", "IgnoredNPCs", "ActionRoutes"];
 
     public static void NormalizePresetMaps(JObject settings, JObject presetIds)
     {
@@ -26,16 +26,50 @@ public static class SettingsPatch
                     int.TryParse(p.Name, out _) ? p.Name : presetIds.Value<int?>(p.Name)?.ToString() ?? throw new ArgumentException("Unknown preset: " + p.Name), p.Value.DeepClone())));
     }
 
+    public static JObject RecoveryPatch(JObject previous, JObject current)
+    {
+        var fields = (JObject)previous.DeepClone();
+        fields.Remove("EnabledActionsV6");
+        return new JObject
+        {
+            ["Settings"] = fields, ["ReplaceSettings"] = true,
+            ["Enable"] = previous["EnabledActionsV6"]!.DeepClone(),
+            ["Disable"] = current["EnabledActionsV6"]!.DeepClone(),
+        };
+    }
+
     public static JObject Apply(JObject current, JObject patch, ISet<int> knownPresets)
     {
-        if (patch.Properties().Any(p => p.Name is not ("Settings" or "Enable" or "Disable")))
+        if (patch.Properties().Any(p => p.Name is not ("Settings" or "Enable" or "Disable" or "ReplaceSettings")))
             throw new ArgumentException("Unknown patch member.");
+        if (patch["ReplaceSettings"] is { Type: not JTokenType.Boolean })
+            throw new ArgumentException("ReplaceSettings must be a boolean.");
         var result = (JObject)current.DeepClone();
         if (patch["Settings"] is not JObject changes) throw new ArgumentException("Settings must be an object.");
         foreach (var p in changes.Properties())
         {
             if (!Fields.Contains(p.Name)) throw new ArgumentException("Unsupported setting: " + p.Name);
-            if (p.Name == "ForkFeatures")
+            if (p.Name == "ActionRoutes")
+            {
+                if (p.Value is not JObject jobs || jobs.Count > 42) throw new ArgumentException("Invalid action route map.");
+                foreach (var job in jobs.Properties())
+                {
+                    if (!uint.TryParse(job.Name, out var id) || id is < 1 or > 42 || job.Value is not JObject routes || routes.Count > 256)
+                        throw new ArgumentException("Invalid action route job.");
+                    foreach (var route in routes.Properties())
+                    {
+                        if (!uint.TryParse(route.Name, out var input) || input == 0 || route.Value is not JObject policy ||
+                            policy.Properties().Any(v => v.Name is not ("Direct" or "Excluded" or "Target")) ||
+                            policy["Direct"]?.Type != JTokenType.Boolean || policy["Excluded"] is not JArray excluded || excluded.Count > 512 ||
+                            excluded.Any(v => v.Type != JTokenType.Integer || v.Value<long>() is <= 0 or > uint.MaxValue))
+                            throw new ArgumentException("Invalid action route policy.");
+                        if (policy["Target"] is { } target && (target.Type != JTokenType.Integer || target.Value<long>() is < 0 or >= 1000000 ||
+                            (target.Value<uint>() != 0 && (!policy.Value<bool>("Direct") || input != DirectAction.Id(target.Value<uint>())))))
+                            throw new ArgumentException("Invalid direct-action target.");
+                    }
+                }
+            }
+            else if (p.Name == "ForkFeatures")
             {
                 if (p.Value is not JObject jobs) throw new ArgumentException("Invalid feature map.");
                 foreach (var job in jobs.Properties())
@@ -91,7 +125,13 @@ public static class SettingsPatch
             else
                 ValidateValue(p.Value, current[p.Name] ?? throw new ArgumentException("Unavailable setting: " + p.Name), p.Name);
         }
-        result.Merge(changes, new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace });
+        if (patch.Value<bool?>("ReplaceSettings") == true)
+            foreach (var field in changes.Properties()) result[field.Name] = field.Value.DeepClone();
+        else result.Merge(changes, new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace });
+        // Each supplied job is a complete route set; deleted exclusions must not
+        // survive JObject's recursive merge. Other jobs remain untouched.
+        if (changes["ActionRoutes"] is JObject routeChanges)
+            foreach (var job in routeChanges.Properties()) result["ActionRoutes"]![job.Name] = job.Value.DeepClone();
         // Normalise to the engine's float storage before computing a transaction revision.
         foreach (var field in current.Properties())
         {

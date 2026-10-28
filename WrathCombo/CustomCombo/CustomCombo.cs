@@ -75,14 +75,20 @@ internal abstract partial class CustomCombo : CustomComboFunctions
         if (Job != Job.ADV && Job != classJobID)
             return false;
 
+        // Auto-rotation invokes combos directly rather than through the icon
+        // hook. Establish the same route policy for both entry points.
+        var routePolicy = Engine.ActionRoutes.For(actionID);
+        if (routePolicy?.Direct == true) return false;
+        using var route = routePolicy is null ? null : new WrathFork.Contract.ActionRouteContext(routePolicy);
+
 
         if (ActionRequestIPCProvider.TryGetRequestedAction(out var id))
         {
-            newActionID = id;
+            newActionID = Engine.ActionRoutes.Filter(id);
             return true;
         }
 
-        uint resultingActionID = Invoke(actionID);
+        uint resultingActionID = Engine.ActionRoutes.Filter(Invoke(actionID));
 
         var presetException = _presetsAllowedToReturnUnchanged
             .TryGetValue(Preset, out var actionException);

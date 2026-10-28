@@ -123,8 +123,8 @@ internal sealed class ActionReplacer : IDisposable
 
             // Only refresh every so often
             if (!EzThrottler.Throttle("Actions" + actionID,
-                    Service.Configuration.Throttle))
-                return LastActionInvokeFor[actionID];
+                    Service.Configuration.Throttle) && LastActionInvokeFor.TryGetValue(actionID, out var cached))
+                return cached;
 
             // Actually get the action
             LastActionInvokeFor[actionID] = GetAdjustedAction(actionID);
@@ -155,11 +155,14 @@ internal sealed class ActionReplacer : IDisposable
                 (DisabledJobsPVP.Any(x => x == Player.Job) && Svc.ClientState.IsPvP))
                 return OriginalHook(actionID);
 
+            var route = Engine.ActionRoutes.For(actionID);
+            if (route?.Direct == true) return OriginalHook(route.Target == 0 ? actionID : route.Target);
+            using var actionRoute = new WrathFork.Contract.ActionRouteContext(route);
             using var intent = Engine.PvPIntentRouting.Enter(actionID);
             var release=Engine.PvPIntentRouting.ReleaseAction(actionID);
             if(release!=0)return Service.Configuration.PenaltyPause>0 && CustomComboFunctions.PlayerHasActionPenalty(false) ? All.Cease:release;
             var protection = Engine.IntentRouting.Protection(actionID);
-            if (protection != 0 &&
+            if (protection != 0 && Engine.ActionRoutes.Allowed(protection) &&
                 !(Service.Configuration.BlockSpellOnMove && ActionManager.GetAdjustedCastTime(ActionType.Action, protection) > 0 && CustomComboFunctions.TimeMoving.Ticks > 0) &&
                 !(Service.Configuration.PenaltyPause > 0 && CustomComboFunctions.PlayerHasActionPenalty(false)))
                 return protection;
@@ -175,11 +178,11 @@ internal sealed class ActionReplacer : IDisposable
                         return All.Cease;
                     }
 
-                    return Engine.PvPIntentRouting.Filter(newActionID);
+                    return Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(newActionID));
                 }
             }
 
-            return OriginalHook(actionID);
+            return Engine.ActionRoutes.Filter(OriginalHook(actionID));
         }
 
         catch (Exception ex)
