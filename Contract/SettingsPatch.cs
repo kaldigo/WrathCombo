@@ -16,7 +16,7 @@ public static class SettingsPatch
         "DancerDanceCompatActionIDs", "ForkFeatures", "BlockSpellOnMove", "ActionChanging",
         "QueueAdjust", "QueueAdjustThreshold", "OverwriteQueue", "Throttle", "PenaltyPause", "MovementLeeway",
         "OpenerTimeout", "MeleeOffset", "InterruptDelay", "MaximumWeavesPerWindow", "UseExperimentalHP",
-        "AddOutOfPartyNPCsToRetargeting", "CustomActionSettings", "ActiveBLUSpells", "IgnoredNPCs", "ActionRoutes"];
+        "AddOutOfPartyNPCsToRetargeting", "CustomActionSettings", "ActiveBLUSpells", "IgnoredNPCs", "ActionRoutes", "PvPActionRoutes"];
 
     public static void NormalizePresetMaps(JObject settings, JObject presetIds)
     {
@@ -49,7 +49,7 @@ public static class SettingsPatch
         foreach (var p in changes.Properties())
         {
             if (!Fields.Contains(p.Name)) throw new ArgumentException("Unsupported setting: " + p.Name);
-            if (p.Name == "ActionRoutes")
+            if (p.Name is "ActionRoutes" or "PvPActionRoutes")
             {
                 if (p.Value is not JObject jobs || jobs.Count > 42) throw new ArgumentException("Invalid action route map.");
                 foreach (var job in jobs.Properties())
@@ -130,8 +130,9 @@ public static class SettingsPatch
         else result.Merge(changes, new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace });
         // Each supplied job is a complete route set; deleted exclusions must not
         // survive JObject's recursive merge. Other jobs remain untouched.
-        if (changes["ActionRoutes"] is JObject routeChanges)
-            foreach (var job in routeChanges.Properties()) result["ActionRoutes"]![job.Name] = job.Value.DeepClone();
+        foreach (var field in new[] { "ActionRoutes", "PvPActionRoutes" })
+            if (changes[field] is JObject routeChanges)
+                foreach (var job in routeChanges.Properties()) result[field]![job.Name] = job.Value.DeepClone();
         // Normalise to the engine's float storage before computing a transaction revision.
         foreach (var field in current.Properties())
         {

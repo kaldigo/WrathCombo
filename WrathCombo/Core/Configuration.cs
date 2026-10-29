@@ -36,6 +36,7 @@ public partial class Configuration : IPluginConfiguration
 {
     public Dictionary<uint, Dictionary<WrathFork.Contract.Feature, bool>> ForkFeatures { get; set; } = new();
     public Dictionary<uint, Dictionary<uint, WrathFork.Contract.ActionRoutePolicy>> ActionRoutes { get; set; } = new();
+    public Dictionary<uint, Dictionary<uint, WrathFork.Contract.ActionRoutePolicy>> PvPActionRoutes { get; set; } = new();
     // Retain direct input identities used by saved bars/backups, even after the
     // originating layout stops managing that bar. No automation choices live here.
     public HashSet<uint> RegisteredDirectActions { get; set; } = new();

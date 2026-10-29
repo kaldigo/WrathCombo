@@ -19,6 +19,8 @@ public enum Feature
     PvPAstGravityInitiation,
     PvPIntentRoutes,
     PvPBrdAllyCleanse, PvPVprScalesProtection,
+    PvPNinAutomaticArea,
+    PvPCommonHealing, PvPCommonGuard, PvPCommonPurify,
 }
 
 public static class FeatureDefaults
@@ -67,6 +69,8 @@ public static class FeatureScope
         Feature.PvPIntentRoutes => job is >=19 and <=42 && job is not 26 and not 29 and not 36,
         Feature.PvPBrdAllyCleanse => job==23,
         Feature.PvPVprScalesProtection => job==41,
+        Feature.PvPNinAutomaticArea => job==30,
+        Feature.PvPCommonHealing or Feature.PvPCommonGuard or Feature.PvPCommonPurify => job is >=19 and <=42 && job is not 26 and not 29 and not 36,
         _ => false,
     };
 }

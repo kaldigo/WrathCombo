@@ -155,10 +155,10 @@ internal sealed class ActionReplacer : IDisposable
                 (DisabledJobsPVP.Any(x => x == Player.Job) && Svc.ClientState.IsPvP))
                 return OriginalHook(actionID);
 
+            using var intent = Engine.PvPIntentRouting.Enter(actionID);
             var route = Engine.ActionRoutes.For(actionID);
             if (route?.Direct == true) return OriginalHook(route.Target == 0 ? actionID : route.Target);
             using var actionRoute = new WrathFork.Contract.ActionRouteContext(route);
-            using var intent = Engine.PvPIntentRouting.Enter(actionID);
             var release=Engine.PvPIntentRouting.ReleaseAction(actionID);
             if(release!=0)return Service.Configuration.PenaltyPause>0 && CustomComboFunctions.PlayerHasActionPenalty(false) ? All.Cease:release;
             var protection = Engine.IntentRouting.Protection(actionID);
