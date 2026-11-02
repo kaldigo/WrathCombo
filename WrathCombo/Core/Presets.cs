@@ -1,4 +1,4 @@
-﻿using ECommons;
+using ECommons;
 using ECommons.Logging;
 using System;
 using System.Collections.Frozen;
@@ -268,7 +268,7 @@ internal static class PresetStorage
     /// <summary> Gets a value indicating whether a preset is enabled. </summary>
     /// <param name="preset"> Preset to check. </param>
     /// <returns> The boolean representation. </returns>
-    public static bool IsEnabled(Preset preset) => Engine.ActivityAutomation.PresetOverride(preset) ??
+    public static bool IsEnabled(Preset preset) => Engine.RotationBehaviour.PresetOverride(preset) ?? Engine.ActivityAutomation.PresetOverride(preset) ??
         (Service.Configuration.EnabledActions.Contains(preset) && !ShouldBeHidden(preset));
 
     /// <summary>

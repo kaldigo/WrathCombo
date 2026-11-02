@@ -177,6 +177,7 @@ public abstract class WrathOpener
 
     public unsafe bool FullOpener(ref uint actionID)
     {
+        if (Engine.RotationBehaviour.Preferences?.Openers == false) { ResetOpener(); return false; }
         if (IsOccupied())
             return false;
 
@@ -272,7 +273,7 @@ public abstract class WrathOpener
             {
                 actionID = CurrentOpenerAction = AllowUpgradeSteps.Any(x => x == OpenerStep) ? OriginalHook(OpenerActions[OpenerStep - 1].Invoke()) : OpenerActions[OpenerStep - 1].Invoke();
 
-                if (CurrentOpenerAction >= All.Items && (CurrentOpenerAction == All.Items || (!IncludePot & CurrentOpenerAction >= All.Items) || !Items.ItemReady(CurrentOpenerAction - All.Items)))
+                if (CurrentOpenerAction >= All.Items && (CurrentOpenerAction == All.Items || (!(Engine.RotationBehaviour.Preferences?.OpenerPotions ?? IncludePot) & CurrentOpenerAction >= All.Items) || !Items.ItemReady(CurrentOpenerAction - All.Items)))
                 {
                     Svc.Log.Debug($"Skipping item {CurrentOpenerAction.ActionName()} at step {OpenerStep}");
                     OpenerStep++;

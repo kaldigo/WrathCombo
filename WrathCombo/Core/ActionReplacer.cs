@@ -114,6 +114,8 @@ internal sealed class ActionReplacer : IDisposable
     {
         try
         {
+            // A validated targetless result must bypass the icon cache as well as rotation replacement.
+            if (Engine.RotationBehaviour.CheckedAction == actionID) return OriginalHook(actionID);
             if (FilteredCombos is null)
                 UpdateFilteredCombos();
 

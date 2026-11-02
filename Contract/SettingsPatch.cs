@@ -16,7 +16,7 @@ public static class SettingsPatch
         "DancerDanceCompatActionIDs", "ForkFeatures", "BlockSpellOnMove", "ActionChanging",
         "QueueAdjust", "QueueAdjustThreshold", "OverwriteQueue", "Throttle", "PenaltyPause", "MovementLeeway",
         "OpenerTimeout", "MeleeOffset", "InterruptDelay", "MaximumWeavesPerWindow", "UseExperimentalHP",
-        "AddOutOfPartyNPCsToRetargeting", "CustomActionSettings", "ActiveBLUSpells", "IgnoredNPCs", "ActionRoutes", "PvPActionRoutes"];
+        "AddOutOfPartyNPCsToRetargeting", "CustomActionSettings", "ActiveBLUSpells", "IgnoredNPCs", "ActionRoutes", "PvPActionRoutes", "RotationPreferences"];
 
     public static void NormalizePresetMaps(JObject settings, JObject presetIds)
     {
@@ -66,6 +66,27 @@ public static class SettingsPatch
                         if (policy["Target"] is { } target && (target.Type != JTokenType.Integer || target.Value<long>() is < 0 or >= 1000000 ||
                             (target.Value<uint>() != 0 && (!policy.Value<bool>("Direct") || input != DirectAction.Id(target.Value<uint>())))))
                             throw new ArgumentException("Invalid direct-action target.");
+                    }
+                }
+            }
+            else if (p.Name == "RotationPreferences")
+            {
+                if (p.Value is not JObject jobs || jobs.Count > 42) throw new ArgumentException("Invalid rotation preferences.");
+                foreach (var job in jobs.Properties())
+                {
+                    if (!uint.TryParse(job.Name, out var id) || !FeatureScope.Supports(id, Feature.RunnerAutomation) || job.Value is not JObject values)
+                        throw new ArgumentException("Invalid rotation preference job.");
+                    foreach (var value in values.Properties())
+                    {
+                        if (value.Name is not ("Targeting" or "TargetRange" or "AoeTargets" or "ActivityUntargetedAoe" or "CombatOnly" or "Openers" or "OpenerPotions")) throw new ArgumentException("Unknown rotation preference.");
+                        if (value.Value.Type == JTokenType.Null) continue;
+                        if (value.Name is "Targeting" or "TargetRange" or "AoeTargets")
+                        {
+                            int min = value.Name == "Targeting" ? 0 : 1;
+                            int max = value.Name == "Targeting" ? 2 : value.Name == "TargetRange" ? 30 : 10;
+                            if (value.Value.Type != JTokenType.Integer || value.Value.Value<long>() < min || value.Value.Value<long>() > max) throw new ArgumentException("Rotation preference out of range.");
+                        }
+                        else if (value.Value.Type != JTokenType.Boolean) throw new ArgumentException("Invalid rotation switch.");
                     }
                 }
             }
@@ -130,7 +151,7 @@ public static class SettingsPatch
         else result.Merge(changes, new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Replace });
         // Each supplied job is a complete route set; deleted exclusions must not
         // survive JObject's recursive merge. Other jobs remain untouched.
-        foreach (var field in new[] { "ActionRoutes", "PvPActionRoutes" })
+        foreach (var field in new[] { "ActionRoutes", "PvPActionRoutes", "RotationPreferences" })
             if (changes[field] is JObject routeChanges)
                 foreach (var job in routeChanges.Properties()) result[field]![job.Name] = job.Value.DeepClone();
         // Normalise to the engine's float storage before computing a transaction revision.

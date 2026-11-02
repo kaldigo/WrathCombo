@@ -128,6 +128,8 @@ internal sealed class SettingsApi : IDisposable
         if (WrathCombo.P?.CustomActions?.Manager is { } manager) ActionRoutes.RegisterDirectActions(manager);
         if (Player.Available)
         {
+            if (RotationBehaviour.Preferences?.Openers == false) global::WrathCombo.CustomComboNS.WrathOpener.CurrentOpener?.ResetOpener();
+
             Service.ActionReplacer.LastActionInvokeFor.Clear();
             Service.ActionReplacer.UpdateFilteredCombos();
         }
