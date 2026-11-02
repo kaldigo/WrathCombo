@@ -268,7 +268,8 @@ internal static class PresetStorage
     /// <summary> Gets a value indicating whether a preset is enabled. </summary>
     /// <param name="preset"> Preset to check. </param>
     /// <returns> The boolean representation. </returns>
-    public static bool IsEnabled(Preset preset) => Service.Configuration.EnabledActions.Contains(preset) && !ShouldBeHidden(preset);
+    public static bool IsEnabled(Preset preset) => Engine.ActivityAutomation.PresetOverride(preset) ??
+        (Service.Configuration.EnabledActions.Contains(preset) && !ShouldBeHidden(preset));
 
     /// <summary>
     /// Gets a value indicating whether a preset is marked as hidden.

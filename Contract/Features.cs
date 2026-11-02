@@ -21,6 +21,7 @@ public enum Feature
     PvPBrdAllyCleanse, PvPVprScalesProtection,
     PvPNinAutomaticArea,
     PvPCommonHealing, PvPCommonGuard, PvPCommonPurify,
+    ActivityAutomation, ActivityOffense, ActivityDefense, ActivityRecovery, ActivityUtility,
 }
 
 public static class FeatureDefaults
@@ -36,6 +37,7 @@ public static class FeatureScope
     public static bool Supports(uint job, Feature feature) => feature switch
     {
         Feature.BurstContinuation => job is >= 19 and <= 42 && job is not 26 and not 29,
+        Feature.ActivityAutomation or Feature.ActivityOffense or Feature.ActivityDefense or Feature.ActivityRecovery or Feature.ActivityUtility => job is >=19 and <=42 && job is not 26 and not 29 and not 36,
         Feature.BlmManawardOnAoe => job == 25,
         Feature.WhmDivineCaressOnDamage => job == 24,
         Feature.MnkMantraOnAoe or Feature.MnkEarthOnAoe or Feature.MnkEarthReplyOnDamage => job == 20,

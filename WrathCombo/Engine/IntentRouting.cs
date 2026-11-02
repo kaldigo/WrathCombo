@@ -121,6 +121,7 @@ internal static class IntentRouting
 
     internal static bool? PresetOverride(Preset preset)
     {
+        if(ActivityAutomation.PresetOverride(preset) is {} activity)return activity;
         if(PvPIntentRouting.PresetOverride(preset) is {} pvp)return pvp;
         // Meisui consumes the result of an accepted TCJ, not a new mechanic.
         if (preset is Preset.NIN_ST_AdvancedMode_Meisui or Preset.NIN_AoE_AdvancedMode_Meisui &&
