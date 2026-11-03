@@ -1,4 +1,4 @@
-﻿using Dalamud.Game.Config;
+using Dalamud.Game.Config;
 using Dalamud.Interface;
 using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
@@ -93,6 +93,11 @@ internal class Presets : ConfigWindow
         var comboType = presetData.ComboType;
 
         ImGui.Spacing();
+
+        if (Engine.RotationBehaviour.PresetOverride(preset) is not null)
+            ImGui.TextWrapped("Accord controls this opener through Rotation behaviour. Detailed opener choices below retain your settings.");
+        if (Engine.ActivityAutomation.PresetOverride(preset) is not null)
+            ImGui.TextWrapped("Accord manages this option for this class. Direct attacks stay included; other actions follow automation toggles. Detailed options below retain your settings.");
 
         if (parent?.Attributes().ComboType is ComboType.AdvancedDPS)
             DrawBurstAttribute(presetData);

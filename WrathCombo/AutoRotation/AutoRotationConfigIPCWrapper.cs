@@ -1,6 +1,8 @@
 ﻿#region
 
 using System;
+using WrathCombo.Engine;
+using WrathFork.Contract;
 using WrathCombo.API.Enum;
 
 #endregion
@@ -18,6 +20,7 @@ public class AutoRotationConfigIPCWrapper(AutoRotationConfig? config)
     {
         get
         {
+            if ((RotationBehaviour.Preferences?.CombatOnly) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("InCombatOnly");
             return checkControlled is not null
@@ -30,6 +33,7 @@ public class AutoRotationConfigIPCWrapper(AutoRotationConfig? config)
     {
         get
         {
+            if ((RotationBehaviour.Preferences?.Targeting is { } selection ? (selection == EnemySelection.Manual ? DPSRotationMode.Manual : DPSRotationMode.Nearest) : (DPSRotationMode?)null) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("DPSRotationMode");
             return checkControlled is not null
@@ -136,6 +140,7 @@ public class DPSSettingsIPCWrapper(DPSSettings settings)
     {
         get
         {
+            if ((RotationBehaviour.Preferences?.Targeting is { } selection ? selection == EnemySelection.PartyCombat : (bool?)null) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("OnlyAttackInCombat");
             return checkControlled is not null
@@ -148,6 +153,7 @@ public class DPSSettingsIPCWrapper(DPSSettings settings)
     {
         get
         {
+            if ((RotationBehaviour.Preferences?.AoeTargets) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("DPSAoETargets");
             return checkControlled?.state ?? settings.DPSAoETargets;
@@ -185,6 +191,7 @@ public class DPSSettingsIPCWrapper(DPSSettings settings)
         {
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("IgnoreRangeInBoss");
+            if (RotationBehaviour.Preferences?.TargetRange is not null) return false;
             return checkControlled is not null
                 ? checkControlled.Value.state == 1
                 : settings.IgnoreRangeInBoss;
@@ -197,9 +204,9 @@ public class DPSSettingsIPCWrapper(DPSSettings settings)
 
     public bool TreasureHuntPriority => settings.TreasureHuntPriority;
 
-    public float MaxDistance => settings.MaxDistance;
+    public float MaxDistance => RotationBehaviour.Preferences?.TargetRange ?? settings.MaxDistance;
 
-    public bool AoEIgnoreManual => settings.AoEIgnoreManual;
+    public bool AoEIgnoreManual => RotationBehaviour.Preferences?.Targeting == EnemySelection.Manual ? false : settings.AoEIgnoreManual;
 
     public bool AoEOnlyWhenTargeting => settings.AoEOnlyWhenTargeting;
 
@@ -228,6 +235,7 @@ public class HealerSettingsIPCWrapper(HealerSettings settings)
     {
         get
         {
+            if ((RotationBehaviour.Support) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("ManageKardia");
             return checkControlled is not null
@@ -240,6 +248,7 @@ public class HealerSettingsIPCWrapper(HealerSettings settings)
     {
         get
         {
+            if ((RotationBehaviour.Support) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("AutoRez");
             return checkControlled is not null
@@ -252,6 +261,7 @@ public class HealerSettingsIPCWrapper(HealerSettings settings)
     {
         get
         {
+            if ((RotationBehaviour.Support) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("AutoRezDPSJobs");
             return checkControlled is not null
@@ -276,6 +286,7 @@ public class HealerSettingsIPCWrapper(HealerSettings settings)
     {
         get
         {
+            if ((RotationBehaviour.Support) is { } managed) return managed;
             var checkControlled =
                 P.UIHelper.AutoRotationConfigControlled("AutoCleanse");
             return checkControlled is not null
@@ -318,13 +329,14 @@ public class HealerSettingsIPCWrapper(HealerSettings settings)
 
     public bool KardiaTanksOnly => settings.KardiaTanksOnly;
 
-    public bool PreEmptiveHoT => settings.PreEmptiveHoT;
+    public bool PreEmptiveHoT => RotationBehaviour.Support ?? settings.PreEmptiveHoT;
+    public bool PreEmptiveShield => RotationBehaviour.Protection ?? settings.PreEmptiveHoT;
 
     public bool AutoRezDPSJobsHealersOnly => settings.AutoRezDPSJobsHealersOnly;
 
-    public bool HandleRaidwides => settings.HandleRaidwides;
+    public bool HandleRaidwides => RotationBehaviour.Responses ?? settings.HandleRaidwides;
 
-    public bool HandleTankbusters => settings.HandleTankbusters;
+    public bool HandleTankbusters => RotationBehaviour.Protection ?? settings.HandleTankbusters;
 
     public bool IncludeShields => settings.IncludeShields;
     #endregion

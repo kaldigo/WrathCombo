@@ -172,7 +172,7 @@ internal abstract partial class CustomComboFunctions
     internal static unsafe bool ActionReadyForTarget(uint actionId, ulong targetId,
         bool recastCheck = false, bool castCheck = false)
     {
-        if (actionId == 0)
+        if (actionId == 0 || !Engine.ActionRoutes.Allowed(actionId))
             return false;
 
         if (actionId >= All.SingleTargetDPS)

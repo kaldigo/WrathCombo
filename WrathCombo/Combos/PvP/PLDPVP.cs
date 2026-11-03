@@ -84,7 +84,8 @@ internal static class PLDPvP
             if (IsEnabled(Preset.PLDPvP_Rampart) && PvPTank.CanRampart(PLDPvP_RampartThreshold))
                 return PvPTank.Rampart;
 
-            if (IsEnabled(Preset.PLDPvP_Intervene) && !InMeleeRange() && IsOffCooldown(Intervene) || IsEnabled(Preset.PLDPvP_Intervene_Melee) && InMeleeRange() && IsOffCooldown(Intervene))
+            if (IsEnabled(Preset.PLDPvP_Intervene) && !InMeleeRange() && IsOffCooldown(Intervene) ||
+                (!Engine.PvPIntentRouting.Active || IsEnabled(Preset.PLDPvP_Intervene)) && IsEnabled(Preset.PLDPvP_Intervene_Melee) && InMeleeRange() && IsOffCooldown(Intervene))
                 return Intervene;
 
             // Check conditions for Holy Sheltron

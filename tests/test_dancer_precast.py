@@ -40,6 +40,8 @@ static class PresetStorage {
     public class PresetData { public AutoAction AutoAction = new(); }
 }
 class Config { public Mode DPSRotationMode; }
+class RotationPreferences { public bool? ActivityUntargetedAoe; }
+static class RotationBehaviour { public static RotationPreferences Preferences = new(); public static bool Activity; }
 static class AutoRotationHelper {
     public static int ST, AoE;
     public static Target? OverrideTarget = new() { Hostile = true };
@@ -64,19 +66,22 @@ class Program {
         foreach (var combat in new[] { false, true })
         foreach (var mode in Enum.GetValues<Mode>())
         foreach (var aoe in new[] { false, true })
+        foreach (var activity in new[] { false, true })
+        foreach (var option in new bool?[] { null, false, true })
         foreach (var target in targets) {
             Player.Job = job; Dispatch.Combat = combat; Dispatch.cfg.DPSRotationMode = mode;
             SimpleTarget.HardTarget = target;
+            RotationBehaviour.Activity = activity; RotationBehaviour.Preferences.ActivityUntargetedAoe = option;
             AutoRotationHelper.ST = AutoRotationHelper.AoE = 0;
             var data = new PresetStorage.PresetData(); data.AutoAction.IsAoE = aoe;
             bool result = Dispatch.AutomateDPS(Preset.Rotation, data, 123);
-            bool expected = job != Job.DNC || combat || ReferenceEquals(target, enemy);
+            bool expected = job != Job.DNC || combat || ReferenceEquals(target, enemy) || (aoe && activity && option == true && target is null);
             if (result != expected || AutoRotationHelper.ST != (expected && !aoe ? 1 : 0) ||
                 AutoRotationHelper.AoE != (expected && aoe ? 1 : 0))
                 throw new Exception($"Unexpected dispatch: {job}/{combat}/{mode}/{aoe}/{Array.IndexOf(targets,target)}");
             checks++;
         }
-        Console.WriteLine($"{checks} target/rotation scenarios passed; an automatic enemy override cannot authorize precasting.");
+        Console.WriteLine($"{checks} target/rotation scenarios passed; only an explicit activity AoE option permits targetless dispatch.");
     }
 }
 '''.replace('METHOD', method)
@@ -86,4 +91,4 @@ class Program {
             (path / 'Program.cs').write_text(harness)
             result = subprocess.run(['dotnet', 'run', '--project', str(path / 'Dispatch.csproj'), '-p:UseSharedCompilation=false'], capture_output=True, text=True, timeout=120)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn('80 target/rotation scenarios passed', result.stdout)
+            self.assertIn('480 target/rotation scenarios passed', result.stdout)

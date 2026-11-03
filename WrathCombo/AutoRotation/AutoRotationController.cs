@@ -19,6 +19,8 @@ using WrathCombo.API.Enum;
 using WrathCombo.Combos.PvE;
 using WrathCombo.Combos.PvE.Enums;
 using WrathCombo.Core;
+using WrathCombo.Engine;
+using WrathFork.Contract;
 using WrathCombo.CustomComboNS;
 using WrathCombo.CustomComboNS.Functions;
 using WrathCombo.Data;
@@ -190,13 +192,15 @@ internal unsafe class AutoRotationController
         if (ShouldSkipAutorotation())
             return;
 
+        if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat) return;
+        if (RotationBehaviour.Preferences?.Openers == false) WrathOpener.CurrentOpener?.ResetOpener();
         uint _ = 0;
 
         // Pre-emptive HoT/Shield for healers
         if (cfg.HealerSettings.PreEmptiveHoT && Player.Job is Job.CNJ or Job.WHM or Job.AST)
             PreEmptiveHot();
 
-        if (cfg.HealerSettings.PreEmptiveHoT && Player.Job is Job.SGE or Job.SCH)
+        if (cfg.HealerSettings.PreEmptiveShield && Player.Job is Job.SGE or Job.SCH)
             PreEmptiveShield();
 
         // Bypass buffs logic
@@ -237,6 +241,8 @@ internal unsafe class AutoRotationController
             }
         }
 
+        if (!cfg.HealerSettings.HandleRaidwides) { AutorotRaidwides = 0; AutorotRaidwiding = false; BlacklistedRaidwides.Clear(); }
+        if (!cfg.HealerSettings.HandleTankbusters) TankbusterHandled = false;
         if (cfg.HealerSettings.HandleTankbusters)
         {
             if (isHealer && TryGetTankBusterTarget(out var tbtarget))
@@ -389,6 +395,10 @@ internal unsafe class AutoRotationController
     {
         foreach (var (spell, multihitter) in RaidwideActions)
         {
+            bool recovery = spell == WHM.LiturgyOfTheBell.Retarget(SimpleTarget.Self) || spell == WHM.PlenaryIndulgence ||
+                spell == WHM.Asylum.Retarget(SimpleTarget.Self) || spell is WHM.Medica2 or WHM.Medica3 or SCH.Seraphism or
+                AST.CelestialOpposition or AST.AspectedHelios or AST.HeliosConjuction or SGE.Physis or SGE.Physis2;
+            if ((recovery ? RotationBehaviour.Support : RotationBehaviour.Protection) == false) continue;
             int numberOfCasts = GetPartyAvgHPPercent() switch
             {
                 <= 30 => 3,
@@ -449,7 +459,7 @@ internal unsafe class AutoRotationController
             var action = attributes.AutoAction!;
 
             // Skip if locked
-            if ((action.IsAoE && LockedST) || (!action.IsAoE && LockedAoE))
+            if ((action.IsAoE && LockedST && !(RotationBehaviour.Preferences?.ActivityUntargetedAoe == true && RotationBehaviour.Activity && SimpleTarget.HardTarget is null)) || (!action.IsAoE && LockedAoE))
                 continue;
 
             uint gameAct = attributes.ReplaceSkill!.ActionIDs.First();
@@ -754,6 +764,7 @@ internal unsafe class AutoRotationController
         // cannot reject a friendly selection. Require the player's hard target,
         // not Auto Mode's selected/previous OverrideTarget, before evaluating either rotation.
         if (Player.Job == Job.DNC && !InCombat() &&
+            !(RotationBehaviour.Preferences?.ActivityUntargetedAoe == true && RotationBehaviour.Activity && SimpleTarget.HardTarget is null && attributes.AutoAction!.IsAoE) &&
             (SimpleTarget.HardTarget is not { IsDead: false, IsTargetable: true } selected || !selected.IsHostile()))
             return false;
 
@@ -857,6 +868,36 @@ internal unsafe class AutoRotationController
             return null;
         }
 
+        private static bool ExecuteUntargetedAoe(Preset preset, PresetStorage.PresetData attributes, uint gameAct)
+        {
+            if (Player.Job == Job.NIN && NIN.InMudra) return false;
+            if (Service.Configuration.PenaltyPause > 0 && PlayerHasActionPenalty(false)) return false;
+            OverrideTarget = null; // A previous automatic target must never leak into this path.
+            using var route = new ActionRouteContext(ActionRoutes.For(gameAct));
+            var eligible = DPSTargeting.BaseSelection.Select(e => e.GameObjectId).ToHashSet();
+            bool Suitable(uint action) => ActionSheet.TryGetValue(action, out var sheet) &&
+                UntargetedAoePolicy.Suitable(sheet.CanTargetSelf, sheet.CastType, sheet.TargetArea,
+                    EnemiesInRange(action, Player.Object, true).Count(e => eligible.Contains(e.GameObjectId)));
+            uint baseAction = OriginalHook(gameAct);
+            if (!Suitable(baseAction)) return false;
+            uint outAct = OriginalHook(InvokeCombo(preset, attributes, ref gameAct, Player.Object));
+            if (outAct == All.Cease) return false;
+            // A target-requiring follow-up cannot be used without a target. Keep the
+            // available native AoE instead; never invent an enemy recipient.
+            if (!Suitable(outAct)) outAct = baseAction;
+            if (!ActionRoutes.Allowed(outAct) || !ActionReady(outAct) || !Suitable(outAct) ||
+                !ActionManager.CanUseActionOnTarget(outAct, Player.GameObject)) return false;
+            if (TimeMoving.TotalMilliseconds > 0 && ActionManager.GetAdjustedCastTime(ActionType.Action, outAct) > 0 &&
+                !(cfg.OrbwalkerIntegration && OrbwalkerIPC.CanOrbwalk)) return false;
+            bool canQueue = outAct.ActionAttackType() is { } type &&
+                (type == ActionAttackType.Ability ? AnimationLock <= cfg.QueueWindow : RemainingGCD <= cfg.QueueWindow);
+            if (!canQueue) return false;
+            // Execute the checked result directly: re-running the root hook could
+            // substitute a targeted action after our safety checks.
+            using var checkedAction = new RotationBehaviour.ExecuteChecked(outAct);
+            return ActionManager.Instance()->UseAction(ActionType.Action, outAct, Player.Object.GameObjectId);
+        }
+
         public static bool ExecuteAoE(Enum mode, Preset preset, PresetStorage.PresetData attributes, uint gameAct)
         {
             if (LocalPlayer is not { } player)
@@ -865,6 +906,17 @@ internal unsafe class AutoRotationController
             if (ActionManager.Instance()->QueuedActionId != 0)
                 return true;
 
+            if (!attributes.AutoAction!.IsHeal && SimpleTarget.HardTarget is null && RotationBehaviour.Preferences?.ActivityUntargetedAoe is { } untargeted)
+            {
+                if (UntargetedAoePolicy.Eligible(RotationBehaviour.Managed, untargeted, InPvP(), RotationBehaviour.Activity,
+                    false, cfg.InCombatOnly, InCombat()))
+                {
+                    if (Player.Job == Job.NIN && NIN.InMudra) return false;
+                    LockedST = false;
+                    return ExecuteUntargetedAoe(preset, attributes, gameAct);
+                }
+                if (cfg.DPSRotationMode == DPSRotationMode.Manual) { OverrideTarget = null; return false; }
+            }
             var autoTarget = DPSTargeting.BaseSelection.MaxBy(x => NumberOfEnemiesInRange(OriginalHook(gameAct), x, true));
             var manualTarget = SimpleTarget.HardTarget;
 
@@ -1027,6 +1079,9 @@ internal unsafe class AutoRotationController
             if (target is null && !canUseSelf)
                 return false;
 
+            if (!attributes.AutoAction!.IsHeal && target is null && RotationBehaviour.Preferences?.ActivityUntargetedAoe is { } targetless &&
+                ActionSheet.TryGetValue(outAct, out var damageShape) && damageShape.CastType == 2 && damageShape.CanTargetSelf &&
+                (!targetless || !RotationBehaviour.Activity)) return false;
             var areaTargeted = ActionSheet.TryGetValue(outAct, out var s) && s.TargetArea;
             var canUseTarget = target is not null && ActionManager.CanUseActionOnTarget(outAct, target.GameObject());
 
@@ -1103,9 +1158,16 @@ internal unsafe class AutoRotationController
             IsInRange(chara, InBossEncounter() && cfg.DPSSettings.IgnoreRangeInBoss ? 50f : cfg.DPSSettings.MaxDistance) &&
             GetTargetHeightDifference(chara) <= (InBossEncounter() && cfg.DPSSettings.IgnoreRangeInBoss ? 100f : cfg.DPSSettings.MaxDistance) &&
             !chara.IsInvincible &&
+            (RotationBehaviour.Preferences?.Targeting != EnemySelection.PartyCombat || FightingParty(chara)) &&
             !Service.Configuration.IgnoredNPCs.ContainsKey(chara.BaseId) &&
             ((cfg.DPSSettings.OnlyAttackInCombat && chara.Struct()->InCombat) || !cfg.DPSSettings.OnlyAttackInCombat) &&
             IsInLineOfSight(chara);
+
+        internal static bool FightingParty(IBattleChara enemy) => enemy.Struct()->InCombat &&
+            (enemy.TargetObjectId == Player.Object.GameObjectId ||
+             GetPartyMembers().Any(member => enemy.TargetObjectId == member.GameObjectId ||
+                 member.BattleChara is { } ally && ally.Struct()->InCombat && ally.TargetObjectId == enemy.GameObjectId) ||
+             Player.Object.Struct()->InCombat && Player.Object.TargetObjectId == enemy.GameObjectId);
 
         public static IEnumerable<IBattleChara> BaseSelection
         {

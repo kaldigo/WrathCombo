@@ -13,8 +13,51 @@ internal static class PvPIntentPolicy
         Jobs[23][2]=Jobs[23][2] with { Features=[Feature.PvPBrdAllyCleanse], Initiators=[29400] };
         Jobs[41][1]=Jobs[41][1] with { Features=[Feature.PvPVprScalesProtection] };
         Jobs[30][1]=Jobs[30][1] with { Initiators=[29507,29508,29512] };
+        Add(19, 0, [Preset.PLDPvP_Intervene, Preset.PLDPvP_ShieldSmite], [29065, 41430]);
+        Add(21, 0, [Preset.WARPvP_BurstMode_Blota], [29081]);
+        Add(32, 0, [Preset.DRKPvP_Plunge], [29092]);
+        Add(24, 0, [Preset.WHMPvP_AfflatusPurgation, Preset.WHMPvP_Mirace_of_Nature], [29230, 29228]);
+        Add(28, 0, [Preset.SCHPvP_DeploymentTactics], [29234]);
+        Add(20, 0, [Preset.MNKPvP_Burst_WindsReply, Preset.MNKPvP_Burst_Thunderclap, Preset.MNKPvP_Burst_Meteodrive], [41509, 29484, 29485]);
+        Add(22, 0, [Preset.DRGPvP_ChaoticSpringExecute], [29490]);
+        Add(30, 0, [Preset.NINPvP_ST_SeitonTenchu, Preset.NINPvP_AoE_SeitonTenchu], [29515]);
+        Add(34, 0, [Preset.SAMPvP_Zantetsuken, Preset.SAMPvP_Mineuchi, Preset.SAMPvP_Soten], [29537, 29535, 29532]);
+        Add(41, 0, [Preset.VPRPvP_Slither], [39184]);
+        Add(23, 0, [Preset.BRDPvP_SilentNocturne], [29395]);
+        Add(31, 0, [Preset.MCHPvP_BurstMode_MarksmanSpite], [29415]);
+        Add(38, 3, [Preset.DNCPvP_BurstMode_Dash], [29430]);
+        Add(25, 0, [Preset.BLMPvP_Lethargy], [41510]);
+        Add(35, 0, [Preset.RDMPvP_Corps, Preset.RDMPvP_Displacement, Preset.RDMPvP_Resolution], [29699, 29700, 41492]);
+        foreach(var job in Jobs.Keys)
+        {
+            Add(job, 1, [], [29054, 29056]);
+            Add(job, 2, [], [29711]);
+        }
+    }
+    private static void Add(uint job, int index, Preset[] presets, uint[] actions)
+    {
+        var family = Jobs[job][index];
+        Jobs[job][index] = family with { Presets = [..family.Presets, ..presets], Initiators = [..family.Initiators, ..actions] };
     }
     internal sealed record Family(CombatRequest Kind, Preset[] Presets, Feature[] Features, uint[] Initiators);
+    // These restored branches include direct cooldown/status checks rather than
+    // ActionReady. Apply exclusions before entering them so damage can continue.
+    internal static readonly Dictionary<Preset,uint> Actions = new()
+    {
+        [Preset.PLDPvP_Intervene]=29065, [Preset.PLDPvP_Intervene_Melee]=29065, [Preset.PLDPvP_ShieldSmite]=41430,
+        [Preset.WARPvP_BurstMode_Blota]=29081, [Preset.DRKPvP_Plunge]=29092,
+        [Preset.WHMPvP_AfflatusPurgation]=29230, [Preset.WHMPvP_Mirace_of_Nature]=29228,
+        [Preset.SCHPvP_DeploymentTactics]=29234,
+        [Preset.MNKPvP_Burst_WindsReply]=41509, [Preset.MNKPvP_Burst_Thunderclap]=29484, [Preset.MNKPvP_Burst_Meteodrive]=29485,
+        [Preset.DRGPvP_ChaoticSpringExecute]=29490,
+        [Preset.NINPvP_ST_SeitonTenchu]=29515, [Preset.NINPvP_AoE_SeitonTenchu]=29515,
+        [Preset.SAMPvP_Zantetsuken]=29537, [Preset.SAMPvP_Mineuchi]=29535, [Preset.SAMPvP_Soten]=29532,
+        [Preset.VPRPvP_Slither]=39184, [Preset.BRDPvP_SilentNocturne]=29395,
+        [Preset.MCHPvP_BurstMode_MarksmanSpite]=29415, [Preset.DNCPvP_BurstMode_Dash]=29430,
+        [Preset.BLMPvP_Lethargy]=41510, [Preset.RDMPvP_Corps]=29699,
+        [Preset.RDMPvP_Displacement]=29700, [Preset.RDMPvP_Resolution]=41492,
+        [Preset.PvP_EmergencyHeals]=29711, [Preset.PvP_EmergencyGuard]=29054, [Preset.PvP_QuickPurify]=29056,
+    };
     internal static readonly Dictionary<uint, Family[]> Jobs = new()
     {
         [19] = [new(CombatRequest.Offense, [Preset.PLDPvP_Imperator], [], [41431]), new(CombatRequest.Defense, [Preset.PLDPvP_Sheltron, Preset.PLDPvP_HolySpirit, Preset.PLDPvP_Rampart], [], [29067, 29062, 43244]), new(CombatRequest.Support, [], [], []), new(CombatRequest.Mechanic, [], [], [])],

@@ -36,7 +36,7 @@ internal abstract partial class CustomComboFunctions
     /// <summary> Gets a value indicating whether an action is off cooldown. </summary>
     /// <param name="actionID"> Action ID to check. </param>
     /// <returns> True or false. </returns>
-    public static bool IsOffCooldown(uint actionID) => !GetCooldown(actionID).IsCooldown;
+    public static bool IsOffCooldown(uint actionID) => Engine.ActionRoutes.Allowed(actionID) && !GetCooldown(actionID).IsCooldown;
 
     /// <summary> Check if an action was just used. </summary>
     /// <param name="actionID"> Action ID to check. </param>
@@ -69,12 +69,12 @@ internal abstract partial class CustomComboFunctions
     /// <summary> Gets a value indicating whether an action has any available charges. </summary>
     /// <param name="actionID"> Action ID to check. </param>
     /// <returns> True or false. </returns>
-    public static bool HasCharges(uint actionID) => GetCooldown(actionID).RemainingCharges > 0;
+    public static bool HasCharges(uint actionID) => Engine.ActionRoutes.Allowed(actionID) && GetCooldown(actionID).RemainingCharges > 0;
 
     /// <summary> Get the current number of charges remaining for an action. </summary>
     /// <param name="actionID"> Action ID to check. </param>
     /// <returns> Number of charges. </returns>
-    public static uint GetRemainingCharges(uint actionID) => GetCooldown(actionID).RemainingCharges;
+    public static uint GetRemainingCharges(uint actionID) => Engine.ActionRoutes.Allowed(actionID) ? GetCooldown(actionID).RemainingCharges : 0;
 
     /// <summary> Get the maximum number of charges for an action. </summary>
     /// <param name="actionID"> Action ID to check. </param>

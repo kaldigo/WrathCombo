@@ -281,7 +281,7 @@ internal static class NINPvP
 
         protected override uint Invoke(uint actionID)
         {
-            if (actionID is not FumaShuriken && !(Engine.PvPIntentRouting.Area && actionID==PvE.All.AoEDPS))
+            if (actionID is not FumaShuriken && !(Engine.PvPIntentRouting.Area && actionID is PvE.All.AoEDPS or Engine.PvPIntentRouting.FullRotation))
                 return actionID;
             if(Engine.PvPIntentRouting.Area)actionID=FumaShuriken;
 

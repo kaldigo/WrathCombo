@@ -4,6 +4,8 @@ Identity decision (2026-10-18): the engine replaces stock Wrath using InternalNa
 
 # Accord: premise and direction
 
+Local PvP implementation (2026-10-29, not published): the companion client now resolves explicit PvP Global/role/class layers above normal settings and offers one or two keyboard rotation buttons. The engine restores reviewed supported delegation, exposes job-scoped existing emergency healing/Guard/Purify capabilities, preserves saved detailed policies, and isolates PvP exclusions from PvE. Ninja's distinct full-rotation input chooses its existing ST/AoE path by enemy count and holds the choice during mudras; ordinary controller ST/AoE inputs remain explicit. Client source review, acceptance plan and automated evidence are in `FFXIVAccord/docs/pvp-automation-plan.md` and `pvp-rotation-review.md` at the pinned client revision. Native UI and PvP combat acceptance remain pending; local builds do not establish combat quality.
+
 Current 0.2.14 local preview: compact PvE/PvP layouts no longer require Hotbar Bridge. Accord uses its own regular/controller layouts directly; Sprint adapts across all active regular/cross bars, including utility bars, in static and live modes. See [Bridge retirement and validation](bridge-retirement.md). Earlier Bridge requirements below are historical. Native acceptance remains pending.
 
 Current implementation (2026-10-18): PvE choices are shared across PvE/PvP, with intent selectors, per-bar keyboard compaction and mode-aware shared Sprint. See [implementation and verification](job-research/pvp-implementation.md). Historical separate-PvP preference and layout descriptions below are superseded. Native acceptance remains pending.

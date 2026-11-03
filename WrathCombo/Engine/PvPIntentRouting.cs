@@ -16,12 +16,16 @@ internal static class PvPIntentRouting
 {
     internal const uint Offense=1_000_010, Defense=1_000_011, Support=1_000_012, Mechanic=1_000_013;
     internal const uint Release=1_000_014;
+    internal const uint FullRotation=1_000_015;
     private static readonly PvPRequestState Requests=new();
     private static uint evaluating;
+    private static readonly PvPAreaChoice AreaChoice = new();
+    private static bool automaticArea;
+    private static (uint Job, ulong Character) areaContext;
     private static (uint Job,ulong Character,ulong Target,long At) healingRecipient;
     internal static bool Enabled => InPvP() && Options.Enabled(Feature.PvPIntentRoutes);
     internal static bool Active => Enabled && evaluating!=0;
-    internal static bool Area => Active && evaluating==All.AoEDPS;
+    internal static bool Area => Active && (evaluating==All.AoEDPS || evaluating==FullRotation && automaticArea);
     internal static uint ReleaseAction(uint input)
     {
         if(input!=Release || !Enabled)return 0;
@@ -34,7 +38,7 @@ internal static class PvPIntentRouting
         (Kind(evaluating)==kind || Requests.Active(kind,Environment.TickCount64));
     private static CombatRequest? Kind(uint action) => action is >=Offense and <=Mechanic ? (CombatRequest)(action-Offense) : null;
     private static PvPIntentPolicy.Family[] Families => PvPIntentPolicy.Jobs.GetValueOrDefault(Options.Job) ?? [];
-    internal static void Reset() { Requests.Reset(); evaluating=0; healingRecipient=default; }
+    internal static void Reset() { Requests.Reset(); evaluating=0; healingRecipient=default; AreaChoice.Reset(); automaticArea=false; areaContext=default; }
     internal static void Tick() => CheckContext();
     internal static void ConfirmRecipient(uint action,ulong target)
     {
@@ -49,8 +53,16 @@ internal static class PvPIntentRouting
     internal static IDisposable Enter(uint action)
     {
         CheckContext();
+        var context=(Options.Job,Svc.PlayerState.ContentId);
+        bool automatic=Enabled && Options.Job==30 && Player.Available && !Player.IsDead &&
+            Options.Enabled(Feature.PvPNinAutomaticArea);
+        if(areaContext!=context) { AreaChoice.Reset(); areaContext=context; }
+        if(action==FullRotation)automaticArea=AreaChoice.Select(automatic,
+            automatic && LocalPlayer.HasStatus(Combos.PvP.NINPvP.Buffs.ThreeMudra),
+            automatic && HasBattleTarget() && InActionRange(Combos.PvP.NINPvP.GokaMekkyaku)
+                ? NumberOfEnemiesInRange(Combos.PvP.NINPvP.GokaMekkyaku,CurrentTarget):0);
         var previous=evaluating;
-        evaluating=Enabled && (action is All.SingleTargetDPS or All.AoEDPS || Kind(action)!=null) ? action:0;
+        evaluating=Enabled && (action is All.SingleTargetDPS or All.AoEDPS or FullRotation || Kind(action)!=null) ? action:0;
         return new Scope(()=>evaluating=previous);
     }
     private sealed class Scope(Action exit):IDisposable { public void Dispose()=>exit(); }
@@ -69,7 +81,20 @@ internal static class PvPIntentRouting
         if(family.Kind==CombatRequest.Offense && Options.Job is not (21 or 37 or 24 or 33 or 22 or 30 or 34 or 39 or 31 or 25 or 27 or 35))return null;
         return Requests.Active(family.Kind,Environment.TickCount64) ? true:null;
     }
-    internal static bool? PresetOverride(Preset preset) => !Active ? null : Allows(Families.FirstOrDefault(f=>f.Presets.Contains(preset)));
+    internal static bool? PresetOverride(Preset preset)
+    {
+        if(!Active)return null;
+        if(PvPIntentPolicy.Actions.TryGetValue(preset,out var action) && !ActionRoutes.Allowed(action))return false;
+        (Feature Feature, CombatRequest Kind)? common=preset switch
+        {
+            Preset.PvP_EmergencyHeals => (Feature.PvPCommonHealing, CombatRequest.Support),
+            Preset.PvP_EmergencyGuard => (Feature.PvPCommonGuard, CombatRequest.Defense),
+            Preset.PvP_QuickPurify => (Feature.PvPCommonPurify, CombatRequest.Defense),
+            _ => null,
+        };
+        if(common is {} c)return Kind(evaluating) is {} request ? request==c.Kind : Options.Enabled(c.Feature);
+        return Allows(Families.FirstOrDefault(f=>f.Presets.Contains(preset)));
+    }
     internal static bool? FeatureOverride(Feature feature) => feature==Feature.PvPIntentRoutes || !Active ? null :
         Allows(Families.FirstOrDefault(f=>f.Features.Contains(feature)));
     internal static uint Filter(uint action)
