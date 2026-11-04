@@ -363,7 +363,7 @@ public static class ActionWatching
             {
                 Engine.IntentRouting.ConfirmAction(actionId);
                 Engine.PveIntentRouting.Confirm(actionId);
-                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveHealer) &&
+                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActiveSummoner) &&
                     lastTestingConfirmation != (casterEntityId, header->GlobalSequence))
                 {
                     lastTestingConfirmation = (casterEntityId, header->GlobalSequence);

@@ -568,6 +568,7 @@ internal partial class SMN
     #region GCD Spells
     private static bool TrySummonSpells(Combo flags, ref uint actionID)
     {
+        if (ContinuePreparedSpell(ref actionID)) return true;
         #region Enables
         bool demiSummonEnabled =
             flags.HasFlag(Combo.Simple) ||
@@ -679,8 +680,8 @@ internal partial class SMN
             {
                 if (swiftcastEgiEnabled && swiftcastPhase is 1 or 3 && Role.CanSwiftcast()) // Forced Swiftcast option
                 {
-                    actionID = Role.Swiftcast;
-                    return true;
+                    if (!Engine.ExperimentalSelection.ActiveSummoner) { actionID = Role.Swiftcast; return true; }
+                    if (PrepareDamageSpell(ref actionID, OriginalHook(AstralFlow), egiAstralFlowEnabled && slipstreamEnabled)) return true;
                 }
                 if (!IsMoving() || LocalPlayer.HasStatus(Role.Buffs.Swiftcast))
                 {
@@ -724,8 +725,8 @@ internal partial class SMN
         {
             if (swiftcastEgiEnabled && swiftcastPhase is 2 or 3 && Role.CanSwiftcast())
             {
-                actionID = Role.Swiftcast;
-                return true;
+                if (!Engine.ExperimentalSelection.ActiveSummoner) { actionID = Role.Swiftcast; return true; }
+                if (PrepareDamageSpell(ref actionID, OriginalHook(flags.HasFlag(Combo.AoE) ? PreciousBrilliance : Gemshine), egiSummonAttacksEnabled && GemshineReady)) return true;
             }
 
             if (egiSummonAttacksEnabled && GemshineReady && (!IsMoving() || LocalPlayer.HasStatus(Role.Buffs.Swiftcast)))

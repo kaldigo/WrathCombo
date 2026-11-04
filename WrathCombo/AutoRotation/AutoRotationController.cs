@@ -199,13 +199,13 @@ internal unsafe class AutoRotationController
         uint _ = 0;
 
         // Pre-emptive HoT/Shield for healers
-        if (cfg.HealerSettings.PreEmptiveHoT && Player.Job is Job.CNJ or Job.WHM or Job.AST)
+        if (cfg.HealerSettings.PreEmptiveHoT && !ExperimentalSelection.ActiveHealer && Player.Job is Job.CNJ or Job.WHM or Job.AST)
             PreEmptiveHot();
 
-        if (cfg.HealerSettings.PreEmptiveShield && ExperimentalSelection.ActiveSage && !PartyInCombat() &&
+        if ((cfg.HealerSettings.PreEmptiveShield || cfg.HealerSettings.PreEmptiveHoT) && ExperimentalSelection.ActiveHealer && !PartyInCombat() &&
             SimpleTarget.FocusTarget is { } shieldFocus && (!InDuty() || Svc.DutyState.IsDutyStarted) &&
             Svc.Objects.GetBattleCharas().Any(enemy => !enemy.IsDead && enemy.IsTargetable && enemy.IsHostile() && GetTargetDistance(enemy, shieldFocus) <= QueryRange) &&
-            SGE.PrePullShield(shieldFocus.GameObjectId) is { } preparation)
+            HealerSelection.PrePull(shieldFocus.GameObjectId, cfg.HealerSettings.PreEmptiveHoT, cfg.HealerSettings.PreEmptiveShield) is { } preparation)
         {
             ulong recipient = preparation.Preparation != 0 ? Player.Object!.GameObjectId : preparation.Recipient;
             if (preparation.Action < All.SingleTargetDPS && ActionReadyForTarget(preparation.Action, recipient))
@@ -213,7 +213,7 @@ internal unsafe class AutoRotationController
             return;
         }
 
-        if (cfg.HealerSettings.PreEmptiveShield && !ExperimentalSelection.ActiveSage && Player.Job is Job.SGE or Job.SCH)
+        if (cfg.HealerSettings.PreEmptiveShield && !ExperimentalSelection.ActiveHealer && Player.Job is Job.SGE or Job.SCH)
             PreEmptiveShield();
 
         // Bypass buffs logic

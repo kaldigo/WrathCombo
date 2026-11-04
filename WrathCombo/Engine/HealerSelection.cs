@@ -32,13 +32,45 @@ internal static class HealerSelection
     private static RoleActions.IHealer Role => Healer.Role;
     private static uint Job => (uint)Player.Job;
     private static ulong Self => Player.Object!.GameObjectId;
+    private static uint RaiseSpell => Job switch { 24 => WHM.Raise, 28 => SCH.Resurrection, 33 => AST.Ascend, _ => SGE.Egeiro };
     private static uint BasicHeal => Job switch { 24 => ActionLearned(WHM.Cure2) ? WHM.Cure2 : WHM.Cure, 28 => SCH.Physick, _ => ActionLearned(AST.Benefic2) ? AST.Benefic2 : AST.Benefic };
     private static uint PartyHeal => Job switch { 24 => OriginalHook(WHM.Medica1), 28 => OriginalHook(SCH.Succor), _ => ActionLearned(AST.AspectedHelios) ? OriginalHook(AST.AspectedHelios) : AST.Helios };
+
+    internal static SelectionDecision? PrePull(ulong focus, bool hot, bool shield)
+    {
+        if (ExperimentalSelection.ActiveSage) return shield ? SGE.PrePullShield(focus) : null;
+        uint input = All.SingleTargetHeals;
+        using var route = new ActionRouteContext(ActionRoutes.For(input));
+        SelectionRuntime.BeginPreview(input);
+        if (Continuation(input) is { } continuation) return continuation;
+        var target = Svc.Objects.SearchById(focus);
+        if (target is null || target.IsDead() || !target.IsTargetable) return null;
+        if (Job == 28 && shield && RotationBehaviour.Protection != false &&
+            !target.HasStatus(SCH.Buffs.Galvanize, true) && !target.HasStatus(SGE.Buffs.EukrasianDiagnosis, true) &&
+            !JustUsed(OriginalHook(SCH.Adloquium), 4))
+            return Prepare(input, OriginalHook(SCH.Adloquium), focus, 0, 0, null);
+        if (!hot || RotationBehaviour.Support == false || Job is not (24 or 33)) return null;
+        uint spell = Job == 24 ? WHM.Regen : AST.AspectedBenefic;
+        ushort buff = Job == 24 ? WHM.Buffs.Regen : AST.Buffs.AspectedBenefic;
+        if (JustUsed(spell, 4) || target.HasStatus(buff, true)) return null;
+        return Ready(input, spell, focus, "Prepull regeneration on the explicitly focused ally");
+    }
 
     internal static bool TrySelect(uint input, Preset preset, out uint action)
     {
         action = input;
-        if (!ExperimentalSelection.ActiveHealer || ExperimentalSelection.ActiveSage) return false;
+        if (!ExperimentalSelection.ActiveHealer) return false;
+        if (preset == Preset.ALL_Healer_Raise && input == RaiseSpell)
+        { action = Raise(input)?.Action ?? All.Cease; return true; }
+        bool damageInput = input is All.SingleTargetDPS or All.AoEDPS or PveIntentRouting.FullRotation && IsDamageProvider(preset) &&
+            CustomActionHelper.OneButtonRotationChecker(input, CustomActionHelper.GetTypeByAttribute(preset.Attributes().AutoAction));
+        if (damageInput && SelectionRuntime.Commitment?.PlannedGcd == RaiseSpell && Continuation(input) is { } raising)
+        { action = raising.Action; return true; }
+        if (damageInput && ExperimentalSelection.IncludeRaise && RotationBehaviour.Support != false &&
+            !GetPartyMembers().Any(member => member.BattleChara is { IsDead: false } ally && GetTargetHPPercent(ally) < 30) &&
+            Raise(input) is { } resurrection)
+        { action = resurrection.Action; return true; }
+        if (ExperimentalSelection.ActiveSage) return false;
         if (Job == 28 && preset == Preset.SCH_DeploymentTactics && input == SCH.DeploymentTactics)
         { action = Deployment(input)?.Action ?? All.Cease; return true; }
         bool st = preset is Preset.WHM_STHeals or Preset.SCH_ST_Heal or Preset.AST_ST_Heals &&
@@ -48,8 +80,7 @@ internal static class HealerSelection
                 Job switch { 24 => WHM.Medica1, 28 => SCH.Succor, _ => AST.Config.AST_AoE_SimpleHeals_AltMode > 0 ? AST.Helios : AST.AspectedHelios }, PartyHeal);
         // Custom damage controls have a single shared identity across jobs. Native damage
         // replacements continue through their original provider unless explicitly mapped here.
-        bool damage = input is All.SingleTargetDPS or All.AoEDPS or PveIntentRouting.FullRotation && IsDamageProvider(preset) &&
-            CustomActionHelper.OneButtonRotationChecker(input, CustomActionHelper.GetTypeByAttribute(preset.Attributes().AutoAction));
+        bool damage = damageInput;
         if (!st && !area && !damage) return false;
         if (Continuation(input) is { } continuation) { action = continuation.Action; return true; }
         if (damage && (!ExperimentalSelection.IncludeHealing || RotationBehaviour.Support == false)) return false;
@@ -67,6 +98,8 @@ internal static class HealerSelection
     {
         if (SelectionRuntime.Commitment is not { } decision) return null;
         if (!CommitmentStillNeeded(decision)) return NoAction(decision, "Prepared recipient is no longer eligible");
+        if (decision.PlannedGcd == RaiseSpell)
+            return RaiseOnRecipient(input, decision.Recipient) ?? NoAction(decision, "Wait for resurrection preparation or spell availability");
         uint next = decision.PlannedGcd;
         if (next == SCH.DeploymentTactics && !Svc.Objects.SearchById(decision.Recipient).HasStatus(SCH.Buffs.Galvanize))
             return NoAction(decision, "Wait for the confirmed shield to become visible");
@@ -77,8 +110,14 @@ internal static class HealerSelection
         return followup;
     }
     private static SelectionDecision NoAction(SelectionDecision decision, string reason) => decision with { Action = All.Cease, Reason = reason };
-    internal static bool CommitmentStillNeeded(SelectionDecision decision)
+    internal static unsafe bool CommitmentStillNeeded(SelectionDecision decision)
     {
+        if (decision.PlannedGcd == RaiseSpell)
+        {
+            var dead = Svc.Objects.SearchById(decision.Recipient);
+            return dead is not null && dead.IsTargetable && SelectionRuntime.TargetLifeAllowed(RaiseSpell, dead) &&
+                InActionRange(RaiseSpell, dead) && ActionManager.CanUseActionOnTarget(RaiseSpell, dead.Struct());
+        }
         if (ExperimentalSelection.ActiveSage) return SGE.CommitmentStillNeeded(decision);
         var target = Svc.Objects.SearchById(decision.Recipient);
         return target is not null && target.IsTargetable && !target.IsDead() && InActionRange(decision.PlannedGcd, target);
@@ -147,6 +186,41 @@ internal static class HealerSelection
         return RecipientFor(fallback, targetId, out var fallbackTarget) ? Ready(input, fallback, fallbackTarget, "Healing spell fallback") : null;
     }
 
+    private static SelectionDecision? Raise(uint input)
+    {
+        if (SelectionRuntime.Commitment is { } accepted)
+            return accepted.PlannedGcd == RaiseSpell ? Continuation(input) : null;
+        var selected = SelectionRuntime.SelectAlly(RaiseSpell);
+        if (selected.Recipient is not { } recipient) return null;
+        // Do not race an already observed resurrection cast from another ally.
+        if (GetPartyMembers().Any(member => member.BattleChara is { IsCasting: true } caster &&
+            caster.GameObjectId != Self && caster.CastTargetObjectId == recipient &&
+            caster.CastActionId is WHM.Raise or SCH.Resurrection or AST.Ascend or SGE.Egeiro or RDM.Verraise)) return null;
+        return RaiseOnRecipient(input, recipient);
+    }
+
+    private static unsafe SelectionDecision? RaiseOnRecipient(uint input, ulong recipient)
+    {
+        bool thinAir = Job == 24 && IsEnabled(Preset.WHM_ThinAirRaise) &&
+            !LocalPlayer.HasStatus(WHM.Buffs.ThinAir) && ActionRoutes.Allowed(WHM.ThinAir) &&
+            ActionReadyForTarget(WHM.ThinAir, Self);
+        // A preparation accepted by the server can precede its status update. Keep the
+        // retained recipient, but do not send the same preparation again in that gap.
+        if (Job == 24 && JustUsed(WHM.ThinAir, 2) && !LocalPlayer.HasStatus(WHM.Buffs.ThinAir) ||
+            JustUsed(Role.Swiftcast, 2) && !LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) return null;
+        bool affordable = LocalPlayer.HasStatus(WHM.Buffs.ThinAir) ||
+            LocalPlayer.CurrentMp >= ActionManager.GetActionCost(ActionType.Action, RaiseSpell, 0, 0, 0, 0);
+        if (!affordable && thinAir)
+            return Prepare(input, RaiseSpell, recipient, WHM.ThinAir, 0, null);
+        if (!affordable) return null;
+        if (!LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && ActionReadyForTarget(Role.Swiftcast, Self))
+            return Prepare(input, RaiseSpell, recipient, Role.Swiftcast, 0, null);
+        if (thinAir) return Prepare(input, RaiseSpell, recipient, WHM.ThinAir, 0, null);
+        if (LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) return Ready(input, RaiseSpell, recipient, "Resurrection on retained eligible recipient");
+        return ExperimentalSelection.HardCastRaise && !IsMoving()
+            ? Ready(input, RaiseSpell, recipient, "Permitted hard-cast resurrection") : null;
+    }
+
     private static SelectionDecision? Utility(uint input, bool area, bool gcds)
     {
         if (Job == 28)
@@ -160,10 +234,11 @@ internal static class HealerSelection
                 Ready(input, SCH.Dissipation, Self, "Explicitly permitted fairy sacrifice") is { } sacrifice) return sacrifice;
         }
         bool cleanse = !area && IsEnabled(Job switch { 24 => Preset.WHM_STHeals_Esuna, 28 => Preset.SCH_ST_Heal_Esuna, _ => Preset.AST_ST_Heals_Esuna });
-        if (cleanse && gcds && SelectionRuntime.SelectAlly(Role.Esuna).Recipient is { } recipient &&
+        int minimum = Job switch { 24 => WHM.Config.WHM_STHeals_Esuna, 28 => SCH.Config.SCH_ST_Heal_EsunaOption, _ => AST.Config.AST_ST_SimpleHeals_Esuna };
+        if (cleanse && gcds && SelectionRuntime.SelectAlly(Role.Esuna, eligible: ally =>
+                ally.HasCleansableDebuff && GetTargetHPPercent(ally) >= minimum).Recipient is { } recipient &&
             Svc.Objects.SearchById(recipient) is { HasCleansableDebuff: true } target)
         {
-            int minimum = Job switch { 24 => WHM.Config.WHM_STHeals_Esuna, 28 => SCH.Config.SCH_ST_Heal_EsunaOption, _ => AST.Config.AST_ST_SimpleHeals_Esuna };
             if (GetTargetHPPercent(target) >= minimum && Ready(input, Role.Esuna, recipient, "Cleanse the selected eligible ally") is { } esuna) return esuna;
         }
         bool lucid = Job switch
@@ -227,7 +302,7 @@ internal static class HealerSelection
             completion != 0 && !ActionRoutes.Allowed(completion)) return null;
         bool free = preparation is SCH.Recitation or WHM.ThinAir || LocalPlayer.HasStatus(SCH.Buffs.Recitation) || LocalPlayer.HasStatus(WHM.Buffs.ThinAir);
         if (!free && LocalPlayer.CurrentMp < ActionManager.GetActionCost(ActionType.Action, followup, 0, 0, 0, 0)) return null;
-        float cast = GetActionCastTime(followup);
+        float cast = preparation == Role.Swiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast) ? 0 : GetActionCastTime(followup);
         if (SelectionRuntime.Automatic && IsMoving() && cast > 0 && !LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) return null;
         float duration = Math.Max(IsGcd(followup) ? RemainingGCD : 0, preparation != 0 ? 0.7f : 0) + cast + 0.7f;
         if (completion != 0) duration += 0.7f;
@@ -250,7 +325,7 @@ internal static class HealerSelection
     {
         recipient = intended;
         var target = Svc.Objects.SearchById(intended);
-        if (target is null || target.IsDead() || !target.IsTargetable) return false;
+        if (target is null || !SelectionRuntime.TargetLifeAllowed(action, target) || !target.IsTargetable) return false;
         if (ActionManager.CanUseActionOnTarget(action, target.Struct()) && InActionRange(action, target)) return true;
         if (Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().GetRowOrDefault(action) is { CanTargetSelf: true } row && GetTargetDistance(target) <= row.EffectRange)
         { recipient = Self; return true; }

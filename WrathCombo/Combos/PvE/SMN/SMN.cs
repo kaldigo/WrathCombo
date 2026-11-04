@@ -215,6 +215,8 @@ internal partial class SMN : Caster
             if (actionID != Role.Swiftcast)
                 return actionID;
 
+            if (Engine.ExperimentalSelection.ActiveSummoner) return TestingRaise(actionID);
+
             if (IsOnCooldown(Role.Swiftcast))
                 return IsEnabled(Preset.SMN_Raise_Retarget)
                     ? Resurrection.Retarget(Role.Swiftcast,

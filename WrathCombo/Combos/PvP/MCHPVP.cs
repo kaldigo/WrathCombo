@@ -93,6 +93,7 @@ internal static class MCHPvP
             var analysisStacks = GetRemainingCharges(Analysis);
             var bigDamageStacks = GetRemainingCharges(OriginalHook(Drill));
             var overheated = LocalPlayer.HasStatus(Buffs.Overheated);
+            uint plannedTool = Engine.ExperimentalSelection.ActivePvpMachinist ? PlannedTool() : 0;
             #endregion
 
             if (IsEnabled(Preset.MCHPvP_Eagle) && PvPPhysRanged.CanEagleEyeShot() && (PvPCommon.TargetImmuneToDamage() || GetTargetHPPercent() <= MCHPvP_EagleThreshold))
@@ -100,6 +101,13 @@ internal static class MCHPvP
             if(Engine.PvPIntentRouting.Active && canWeave && CurrentTarget.HasStatus(Debuffs.Wildfire) &&
                 CurrentTarget.Status(Debuffs.Wildfire).RemainingTimeOrZero()<=1 && OriginalHook(Wildfire)!=Wildfire)
                 return OriginalHook(Wildfire);
+
+            // Guard is a damage reduction, not absolute immunity. Drill's reviewed
+            // PvP exception must remain available without bypassing true immunity.
+            if (Engine.ExperimentalSelection.ActivePvpMachinist && plannedTool == Drill &&
+                (CurrentTarget.HasStatus(PvPCommon.Buffs.Guard, true) || CurrentTarget.HasStatus(PvPCommon.Buffs.WeakenedGuard, true)) &&
+                !CurrentTarget.HasStatus(VPRPvP.Buffs.HardenedScales, true) && !PvPCommon.TargetImmuneToDamage(false))
+                return WantsAnalysis(plannedTool, canWeave, overheated) ? Analysis : plannedTool;
 
             if (!PvPCommon.TargetImmuneToDamage() && HasBattleTarget())
             {
@@ -131,7 +139,8 @@ internal static class MCHPvP
 
                 if (IsEnabled(Preset.MCHPvP_BurstMode_Analysis))
                 {
-                    if (hasPrimedBuffs && !LocalPlayer.HasStatus(Buffs.Analysis) && !JustUsed(Analysis, 2f) && analysisStacks > 0 &&
+                    if (Engine.ExperimentalSelection.ActivePvpMachinist ? WantsAnalysis(plannedTool, canWeave, overheated) :
+                        hasPrimedBuffs && !LocalPlayer.HasStatus(Buffs.Analysis) && !JustUsed(Analysis, 2f) && analysisStacks > 0 &&
                         (!IsEnabled(Preset.MCHPvP_BurstMode_AltDrill) || IsOnCooldown(Wildfire)) &&
                         !canWeave && !overheated && bigDamageStacks > 0)
                     {
@@ -139,6 +148,8 @@ internal static class MCHPvP
                     }
                 }
                 // BigDamageStacks logic with checks for primed buffs
+                if (Engine.ExperimentalSelection.ActivePvpMachinist)
+                    return plannedTool != 0 ? plannedTool : BlastCharge;
                 if (bigDamageStacks > 0)
                 {
                     if (IsEnabled(Preset.MCHPvP_BurstMode_Drill) && LocalPlayer.HasStatus(Buffs.DrillPrimed))
@@ -155,6 +166,33 @@ internal static class MCHPvP
                 }
             }
             return BlastCharge;
+        }
+
+        private static uint PlannedTool()
+        {
+            if (!HasBattleTarget()) return 0;
+            (uint Action, ushort Status, Preset Permission)[] tools =
+            [
+                (Drill, Buffs.DrillPrimed, Preset.MCHPvP_BurstMode_Drill),
+                (BioBlaster, Buffs.BioblasterPrimed, Preset.MCHPvP_BurstMode_BioBlaster),
+                (AirAnchor, Buffs.AirAnchorPrimed, Preset.MCHPvP_BurstMode_AirAnchor),
+                (ChainSaw, Buffs.ChainSawPrimed, Preset.MCHPvP_BurstMode_ChainSaw),
+            ];
+            foreach (var tool in tools)
+                if (IsEnabled(tool.Permission) && LocalPlayer.HasStatus(tool.Status) && Engine.ActionRoutes.Allowed(tool.Action) &&
+                    InActionRange(tool.Action, CurrentTarget) && ActionReadyForTarget(tool.Action, CurrentTarget.GameObjectId)) return tool.Action;
+            return 0;
+        }
+
+        private static bool WantsAnalysis(uint plannedTool, bool canWeave, bool overheated)
+        {
+            var snapshot = new Engine.Selection.PvpMchPreparationInput(plannedTool,
+                IsEnabled(Preset.MCHPvP_BurstMode_Analysis) && ActionReady(Analysis) && !JustUsed(Analysis, 2f) &&
+                (!IsEnabled(Preset.MCHPvP_BurstMode_AltDrill) || IsOnCooldown(Wildfire)) && !canWeave,
+                LocalPlayer.HasStatus(Buffs.Analysis), overheated, IsEnabled(Preset.MCHPvP_BurstMode_AltAnalysis));
+            bool result = Engine.Selection.PvpMchPreparation.Analysis(snapshot);
+            Engine.TestingApi.RecordDecision("PvP.MCH.Analysis", snapshot, result);
+            return result;
         }
     }
 }

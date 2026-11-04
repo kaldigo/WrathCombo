@@ -88,7 +88,7 @@ internal abstract partial class CustomCombo : CustomComboFunctions
             return true;
         }
 
-        if (Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
+        if (Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActiveSummoner || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
         using var healerScope = Engine.HealerSelection.Enter(Preset);
         uint resultingActionID = Engine.ActionRoutes.Filter(Engine.HealerSelection.TrySelect(actionID, Preset, out var selection) || SGE.TryTestingSelection(actionID, Preset, out selection) ? selection : Invoke(actionID));
         if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) && resultingActionID != actionID)

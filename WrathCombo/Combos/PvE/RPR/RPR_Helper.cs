@@ -145,6 +145,18 @@ internal partial class RPR
 
     private static bool UseEnshroud(bool onAoE = false)
     {
+        if (Engine.ExperimentalSelection.ActiveReaper)
+        {
+            // Use the native transformed weaponskill recast, not the ordinary Slice
+            // GCD, for the four reaping steps and final spell/weapon step.
+            float phaseGcd = GetCooldown(VoidReaping).CooldownTotal;
+            var window = new Engine.Selection.BurstDurationInput(0, false, phaseGcd, RemainingGCD,
+                5, LocalPlayer.HasStatus(Buffs.Enshrouded), Engine.BossForecastProvider.Downtime,
+                ActionLearned(Communio) ? GetActionCastTime(Communio) : 0);
+            bool canEnter = Engine.Selection.ResourceWindow.CanFinish(window);
+            Engine.TestingApi.RecordDecision("RPR.PhaseDuration", window, canEnter);
+            if (!canEnter || IsComboExpiring((phaseGcd * 4 + RemainingGCD + GetActionCastTime(Communio) + .7f) / GCD)) return false;
+        }
         if (onAoE && IsComboExpiring(6))
             return false;
 

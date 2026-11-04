@@ -648,6 +648,18 @@ internal partial class BRD
         //Raging jaws option dot refresh for snapshot
         bool RagingJawsRefresh()
         {
+            if (Engine.ExperimentalSelection.ActiveBard)
+            {
+                if (!ActionReady(IronJaws) || Purple is null || Blue is null) return false;
+                float buff = new[] { Buffs.RagingStrikes, Buffs.BattleVoice, Buffs.RadiantFinale }
+                    .Select(status => LocalPlayer.Status(status).RemainingTimeOrZero())
+                    .Where(remaining => remaining > 0).DefaultIfEmpty(0).Min();
+                var snapshot = new Engine.Selection.BardRefreshInput(PurpleRemaining, BlueRemaining, buff,
+                    GetCooldown(HeavyShot).CooldownTotal, RemainingGCD, ragingJawsRenewTime, Engine.BossForecastProvider.Downtime);
+                bool refresh = Engine.Selection.BardRefresh.UnderExpiringBuff(snapshot);
+                Engine.TestingApi.RecordDecision("BRD.SnapshotRefresh", snapshot, refresh);
+                return refresh;
+            }
             return ActionReady(IronJaws) && LocalPlayer.HasStatus(Buffs.RagingStrikes) && PurpleRemaining < 35 && BlueRemaining < 35;
         }
         int ComputeHpThreshold(IGameObject? x)
@@ -695,7 +707,7 @@ internal partial class BRD
                 return true;
             }
 
-            if (ragingjawsEnabled && RagingJawsRefresh() && RagingStrikesDuration < ragingJawsRenewTime)
+            if (ragingjawsEnabled && RagingJawsRefresh() && (Engine.ExperimentalSelection.ActiveBard || RagingStrikesDuration < ragingJawsRenewTime))
             {
                 actionID = OriginalHook(IronJaws);
                 return true;

@@ -203,6 +203,16 @@ internal partial class VPR
         int hpThresholdDontSave = 5,
         int hpThresholdUsageAoE = 40)
     {
+        if (Engine.ExperimentalSelection.ActiveViper)
+        {
+            var window = new Engine.Selection.BurstDurationInput(
+                Math.Min(LocalPlayer.Status(Buffs.Swiftscaled).RemainingTimeOrZero(), LocalPlayer.Status(Buffs.HuntersInstinct).RemainingTimeOrZero()),
+                true, GCD, RemainingGCD, ActionLearned(Ouroboros) ? 6 : 5,
+                LocalPlayer.HasStatus(Buffs.Reawakened), Engine.BossForecastProvider.Downtime);
+            bool canEnter = Engine.Selection.ResourceWindow.CanFinish(window) && !IsComboExpiring(ActionLearned(Ouroboros) ? 6 : 5);
+            Engine.TestingApi.RecordDecision("VPR.PhaseDuration", window, Engine.Selection.ResourceWindow.CanFinish(window));
+            if (!canEnter) return false;
+        }
         if (onAoE)
         {
             if (!ActionReady(Reawaken) || GetTargetHPPercent() <= hpThresholdUsageAoE ||

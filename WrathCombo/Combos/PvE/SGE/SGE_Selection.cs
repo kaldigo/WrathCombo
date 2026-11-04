@@ -195,6 +195,7 @@ internal partial class SGE
     }
     internal static bool CommitmentStillNeeded(SelectionDecision decision)
     {
+        if (decision.PlannedGcd == Egeiro) return HealerSelection.CommitmentStillNeeded(decision);
         var target = Svc.Objects.SearchById(decision.Recipient);
         if (target is null || !target.IsTargetable || target.IsDead() || !InActionRange(decision.PlannedGcd, target)) return false;
         if (decision.PlannedGcd == EukrasianDiagnosis &&
@@ -251,6 +252,11 @@ internal partial class SGE
     internal static bool ExperimentalContinuation(ref uint input)
     {
         if (!ExperimentalSelection.ActiveSage || SelectionRuntime.Commitment is not { } commitment) return false;
+        if (commitment.PlannedGcd == Egeiro)
+        {
+            input = HealerSelection.Continuation(input)?.Action ?? All.Cease;
+            return true;
+        }
         if (commitment.PlannedGcd == EukrasianDiagnosis)
         {
             if (SelectionRuntime.SelectAlly(EukrasianDiagnosis, commitment.Recipient).Recipient is null)
