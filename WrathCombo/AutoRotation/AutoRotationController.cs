@@ -183,6 +183,8 @@ internal unsafe class AutoRotationController
 
     internal static void Run()
     {
+        if (!AutomationOwnership.Allowed) return;
+        using var selectionScope = SelectionRuntime.AutomaticScope();
         cfg ??= new AutoRotationConfigIPCWrapper(Service.Configuration.RotationConfig);
 
         if (!cfg.Enabled)
@@ -200,7 +202,18 @@ internal unsafe class AutoRotationController
         if (cfg.HealerSettings.PreEmptiveHoT && Player.Job is Job.CNJ or Job.WHM or Job.AST)
             PreEmptiveHot();
 
-        if (cfg.HealerSettings.PreEmptiveShield && Player.Job is Job.SGE or Job.SCH)
+        if (cfg.HealerSettings.PreEmptiveShield && ExperimentalSelection.ActiveSage && !PartyInCombat() &&
+            SimpleTarget.FocusTarget is { } shieldFocus && (!InDuty() || Svc.DutyState.IsDutyStarted) &&
+            Svc.Objects.GetBattleCharas().Any(enemy => !enemy.IsDead && enemy.IsTargetable && enemy.IsHostile() && GetTargetDistance(enemy, shieldFocus) <= QueryRange) &&
+            SGE.PrePullShield(shieldFocus.GameObjectId) is { } preparation)
+        {
+            ulong recipient = preparation.Preparation != 0 ? Player.Object!.GameObjectId : preparation.Recipient;
+            if (preparation.Action < All.SingleTargetDPS && ActionReadyForTarget(preparation.Action, recipient))
+                ActionManager.Instance()->UseAction(ActionType.Action, preparation.Action, recipient);
+            return;
+        }
+
+        if (cfg.HealerSettings.PreEmptiveShield && !ExperimentalSelection.ActiveSage && Player.Job is Job.SGE or Job.SCH)
             PreEmptiveShield();
 
         // Bypass buffs logic
@@ -222,7 +235,15 @@ internal unsafe class AutoRotationController
         bool isHealer = Player.Object?.Role is CombatRole.Healer ||
                         (Player.Job is Job.BLU && BLU.HasHealerMimicry);
 
-        if (cfg.HealerSettings.HandleRaidwides)
+        if (ExperimentalSelection.ActiveSage && SGE.AutomaticPrevention(cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters) is { } prevention)
+        {
+            if (prevention.Action < All.SingleTargetDPS && ActionReadyForTarget(prevention.Action, prevention.Preparation != 0 ? Player.Object!.GameObjectId : prevention.Recipient))
+                ActionManager.Instance()->UseAction(ActionType.Action, prevention.Action,
+                    prevention.Preparation != 0 ? Player.Object!.GameObjectId : prevention.Recipient);
+            return;
+        }
+
+        if (cfg.HealerSettings.HandleRaidwides && !ExperimentalSelection.ActiveSage)
         {
             if (isHealer && GroupDamageIncoming(out var multi))
             {
@@ -243,7 +264,7 @@ internal unsafe class AutoRotationController
 
         if (!cfg.HealerSettings.HandleRaidwides) { AutorotRaidwides = 0; AutorotRaidwiding = false; BlacklistedRaidwides.Clear(); }
         if (!cfg.HealerSettings.HandleTankbusters) TankbusterHandled = false;
-        if (cfg.HealerSettings.HandleTankbusters)
+        if (cfg.HealerSettings.HandleTankbusters && !ExperimentalSelection.ActiveSage)
         {
             if (isHealer && TryGetTankBusterTarget(out var tbtarget))
             {

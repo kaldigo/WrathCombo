@@ -112,6 +112,7 @@ internal sealed class ActionReplacer : IDisposable
     /// </remarks>
     private uint GetAdjustedActionDetour(IntPtr _, uint actionID)
     {
+        if (Engine.AutomationOwnership.ExternalAction) return OriginalHook(actionID);
         try
         {
             // A validated targetless result must bypass the icon cache as well as rotation replacement.
@@ -124,7 +125,7 @@ internal sealed class ActionReplacer : IDisposable
                 return OriginalHook(actionID);
 
             // Only refresh every so often
-            if (!EzThrottler.Throttle("Actions" + actionID,
+            if (!Engine.SelectionRuntime.ConsumePressRefresh() && !EzThrottler.Throttle("Actions" + actionID,
                     Service.Configuration.Throttle) && LastActionInvokeFor.TryGetValue(actionID, out var cached))
                 return cached;
 

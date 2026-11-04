@@ -21,6 +21,9 @@ public abstract class WrathOpener
     private OpenerState currentState = OpenerState.OpenerNotReady;
     private int openerStep;
     private static WrathOpener? currentOpener;
+    private bool testingObserved;
+    private bool testingHasAction;
+    private uint testingAction;
 
     public void ProgressOpener(uint actionId, bool item = false)
     {
@@ -32,6 +35,7 @@ public abstract class WrathOpener
             if (normalisedAction == normalisedCustom)
             {
                 OpenerStep++;
+                testingObserved = false;
                 if (OpenerStep > OpenerActions.Count)
                 {
                     CurrentState = OpenerState.OpenerFinished;
@@ -47,6 +51,7 @@ public abstract class WrathOpener
             if (actionId == CurrentOpenerAction || (AllowUpgradeSteps.Any(x => x == OpenerStep) && OriginalHook(CurrentOpenerAction) == actionId))
             {
                 OpenerStep++;
+                testingObserved = false;
                 if (OpenerStep > OpenerActions.Count)
                 {
                     CurrentState = OpenerState.OpenerFinished;
@@ -176,6 +181,25 @@ public abstract class WrathOpener
     private bool SilenceOutput = false;
 
     public unsafe bool FullOpener(ref uint actionID)
+    {
+        if (Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveSage)
+        {
+            if (!testingObserved) { actionID = All.Cease; return true; }
+            if (testingHasAction) actionID = testingAction;
+            return testingHasAction;
+        }
+        return ObserveOpener(ref actionID);
+    }
+
+    internal void ObserveForTesting()
+    {
+        uint action = All.SingleTargetDPS;
+        testingHasAction = ObserveOpener(ref action);
+        testingAction = action;
+        testingObserved = true;
+    }
+
+    private unsafe bool ObserveOpener(ref uint actionID)
     {
         if (Engine.RotationBehaviour.Preferences?.Openers == false) { ResetOpener(); return false; }
         if (IsOccupied())
@@ -335,6 +359,7 @@ public abstract class WrathOpener
 
     public void ResetOpener(bool stayReady = false)
     {
+        testingObserved = false;
         Svc.Log.Debug($"Opener Reset");
         DelayedStep = 0;
         DelayedAt = DateTime.MinValue;

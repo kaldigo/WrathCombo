@@ -32,6 +32,7 @@ namespace WrathCombo.Data;
 
 public static class ActionWatching
 {
+    private static (uint Actor, uint Sequence)? lastTestingConfirmation;
     // Dictionaries
     internal static readonly FrozenDictionary<uint, BNpcBase> BNPCSheet =
         Svc.Data.GetExcelSheet<BNpcBase>()!
@@ -353,6 +354,13 @@ public static class ActionWatching
             if (casterEntityId == Player.Object.EntityId && actionType == ActionType.Action)
             {
                 Engine.IntentRouting.ConfirmAction(actionId);
+                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveSage) &&
+                    lastTestingConfirmation != (casterEntityId, header->GlobalSequence))
+                {
+                    lastTestingConfirmation = (casterEntityId, header->GlobalSequence);
+                    WrathOpener.CurrentOpener?.ProgressOpener(actionId);
+                    Engine.SelectionRuntime.Confirm(actionId, ActionSheet.TryGetValue(actionId, out var confirmedRow) && confirmedRow.ActionCategory.Value.RowId is 2 or 3);
+                }
                 if(numTargets>0)Engine.PvPIntentRouting.ConfirmRecipient(actionId,targetEntityIds[0].Id);
             }
 
@@ -417,7 +425,7 @@ public static class ActionWatching
             }
         }
 
-        if (castTime == 0)
+        if (castTime == 0 && !Engine.ExperimentalSelection.ActiveDrg && !Engine.ExperimentalSelection.ActiveSage)
             WrathOpener.CurrentOpener?.ProgressOpener(actionId);
 
         if (Service.Configuration.EnabledOutputLog)
@@ -468,7 +476,8 @@ public static class ActionWatching
                 if (castTime > 0)
                 {
                     TimeLastActionUsed = DateTime.Now;
-                    WrathOpener.CurrentOpener?.ProgressOpener(actionId);
+                    if (!Engine.ExperimentalSelection.ActiveDrg && !Engine.ExperimentalSelection.ActiveSage)
+                        WrathOpener.CurrentOpener?.ProgressOpener(actionId);
                 }
 
 #if DEBUG
@@ -565,9 +574,24 @@ public static class ActionWatching
         UpdatingActions = false;
     }
 
+    private static readonly RotationInterop.ExternalQueue externalQueue = new();
+
     /// <summary> Handles logic when an action is used. </summary>
     private unsafe static bool UseActionDetour(ActionManager* actionManager, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
+        bool queuedExternal = mode == ActionManager.UseActionMode.Queue &&
+            externalQueue.Matches((uint)actionType, actionId, targetId, Environment.TickCount64);
+        if (Engine.AutomationOwnership.ExternalAction || queuedExternal)
+        {
+            using var externalScope = Engine.AutomationOwnership.QueuedExternalScope();
+            bool result = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+            externalQueue.Observe(result, actionManager->ActionQueued, (uint)actionType, actionId, targetId,
+                actionManager->QueuedActionId, actionManager->QueuedTargetId, Environment.TickCount64);
+            return result;
+        }
+        // A changed/cleared native queue no longer belongs to RSR.
+        externalQueue.Validate(actionManager->ActionQueued, actionManager->QueuedActionId, actionManager->QueuedTargetId);
+        using var selectionPress = Engine.SelectionRuntime.BeginPress(mode == ActionManager.UseActionMode.Queue);
         try
         {
             if (actionType is ActionType.Action)
@@ -582,8 +606,12 @@ public static class ActionWatching
                 }
 
                 var replacedWith = actionManager->GetAdjustedActionId(actionId);
+                ulong? testingRecipient = null;
                 if (mode != ActionManager.UseActionMode.Queue)
+                {
                     Engine.IntentRouting.ObserveInput(actionId, replacedWith);
+                    if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient)) return false;
+                }
                 var queuedAct = actionManager->GetAdjustedActionId(actionManager->QueuedActionId);
 
                 if (IsEnabled(Preset.NIN_Anti_Rabbit))
@@ -623,6 +651,12 @@ public static class ActionWatching
                 var changed = CheckForChangedTarget(original, ref changedTargetId,
                     out var _); //Passes the original action to the retargeting framework, outputs a targetId and a replaced action
 
+                if (testingRecipient is { } boundRecipient)
+                {
+                    changed = true;
+                    changedTargetId = boundRecipient;
+                }
+
                 // If retargeting kicks in, update target ID
                 if (changed)
                 {
@@ -638,8 +672,8 @@ public static class ActionWatching
                     actionManager->QueuedTargetId = 0;
 
                 // However, if we have a queued target ID assume that's what we want and not whatever current retargeting is. TODO: Setting?
-                if (actionManager->QueuedTargetId.Id != 0)
-                    targetId = actionManager->QueuedTargetId.Id;
+                targetId = Engine.Selection.RetargetDelivery.Select(targetId, actionManager->QueuedTargetId.Id,
+                    mode == ActionManager.UseActionMode.Queue, Service.Configuration.OverwriteQueue, changed);
 
                 var areaTargeted = replacedWith >= 1_000_000 ? false : ActionSheet.TryGetValue(replacedWith, out var s) && s.TargetArea;
 
@@ -696,7 +730,7 @@ public static class ActionWatching
 
                     // Only sets the queued target once if overwrite is not enabled, otherwise will update each button press
                     if (actionManager->QueuedTargetId.Id == 0 || Service.Configuration.OverwriteQueue)
-                        actionManager->QueuedTargetId = changedTargetId;
+                        actionManager->QueuedTargetId = targetId;
                 }
 
                 Svc.Log.Verbose($"[QueuedTargetUpdate] A:{actionManager->QueuedActionId.ActionName()} Q:{Svc.Objects.SearchById(actionManager->QueuedTargetId)?.Name} T:{Svc.Objects.SearchById(targetId)?.Name} M:{mode} W:{willQueue}");

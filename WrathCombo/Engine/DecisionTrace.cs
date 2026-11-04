@@ -8,7 +8,7 @@ internal sealed class DecisionTrace
 {
     internal sealed record Entry(long Sequence, long ElapsedMs, string Kind, uint Input, uint Output, ulong? Recipient);
     private readonly Queue<Entry> entries = new();
-    private readonly Dictionary<uint, uint> selections = new();
+    private readonly Dictionary<(string Kind, uint Input), (uint Output, ulong? Recipient)> selections = new();
     private long started, deadline, sequence;
     private string context = "";
     internal bool Active { get; private set; }
@@ -31,10 +31,12 @@ internal sealed class DecisionTrace
     internal void Add(long now, string currentContext, string kind, uint input, uint output, ulong? recipient = null)
     {
         if (!Check(now, currentContext)) return;
-        if (kind == "Selection")
+        if (!kind.StartsWith("Send:"))
         {
-            if (selections.TryGetValue(input, out var previous) && previous == output) { RepeatedSelections++; return; }
-            selections[input] = output;
+            var key = (kind, input);
+            if (selections.TryGetValue(key, out var previous) && previous == (output, recipient)) { RepeatedSelections++; return; }
+            if (selections.Count >= 2048 && !selections.ContainsKey(key)) selections.Clear();
+            selections[key] = (output, recipient);
         }
         if (entries.Count == 2048) { entries.Dequeue(); Dropped++; }
         entries.Enqueue(new Entry(++sequence, now - started, kind, input, output, recipient));

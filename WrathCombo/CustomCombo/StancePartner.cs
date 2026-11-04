@@ -132,6 +132,7 @@ public static class StancePartner
     (Job job, uint action, ushort buff, ulong? target, ref bool
         callAgain)
     {
+        if (!global::WrathCombo.Engine.AutomationOwnership.Allowed) return;
         if (WrathCombo.JobID != job || CustomComboFunctions.LocalPlayer.HasStatus(buff))
             return;
         PluginLog.Verbose(

@@ -34,6 +34,8 @@ namespace WrathCombo.Core;
 [Serializable]
 public partial class Configuration : IPluginConfiguration
 {
+    // Opt-in coordination survives reload in the stopped state until Accord reacquires authority.
+    public bool AccordAutomationManaged;
     public Dictionary<uint, WrathFork.Contract.RotationPreferences> RotationPreferences { get; set; } = new();
     public Dictionary<uint, Dictionary<WrathFork.Contract.Feature, bool>> ForkFeatures { get; set; } = new();
     public Dictionary<uint, Dictionary<uint, WrathFork.Contract.ActionRoutePolicy>> ActionRoutes { get; set; } = new();

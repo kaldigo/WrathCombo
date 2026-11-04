@@ -560,6 +560,12 @@ internal partial class SGE : Healer
             if (actionID is not Pneuma)
                 return actionID;
 
+            if (Engine.ExperimentalSelection.ActiveSage)
+            {
+                if (ExperimentalContinuation(ref actionID) || SelectPneuma(ref actionID)) return actionID;
+                return Pneuma;
+            }
+
             return ActionReady(Pneuma) && IsOffCooldown(Zoe)
                 ? Zoe
                 : actionID;

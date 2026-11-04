@@ -105,6 +105,24 @@ internal partial class DRG
 
     private static bool UseLifeSurge(bool onAoE = false)
     {
+        if (!Engine.ExperimentalSelection.ActiveDrg && !Engine.ExperimentalSelection.CompareDrg) return UseLifeSurgeLegacy(onAoE);
+        uint plannedGcd = DoBasicCombo(onAoE: onAoE, includeDisembowel: onAoE);
+        var snapshot = new Engine.Selection.DrgPreparationInput(plannedGcd,
+            OriginalHook(FullThrust), OriginalHook(VorpalThrust), OriginalHook(Disembowel), OriginalHook(ChaosThrust), OriginalHook(DoomSpike),
+            ActionLearned(Drakesbane), ActionLearned(FullThrust), ActionLearned(SonicThrust), ActionLearned(CoerthanTorment), onAoE,
+            InActionRange(onAoE ? DoomSpike : TrueThrust) && Engine.ActionRoutes.Allowed(plannedGcd),
+            LocalPlayer.HasStatus(Buffs.LanceCharge) || LocalPlayer.HasStatus(Buffs.BattleLitany) || IsLoTDActive,
+            ActionReady(LifeSurge), LocalPlayer.HasStatus(Buffs.LifeSurge));
+        bool selected = Engine.Selection.DrgPreparation.LifeSurge(snapshot);
+        Engine.TestingApi.RecordDecision("DRG.LifeSurge", snapshot, selected);
+        Engine.TestingApi.Observe(selected ? "LifeSurge:planned-hit" : "LifeSurge:hold", LifeSurge, plannedGcd);
+        bool legacy = UseLifeSurgeLegacy(onAoE);
+        Engine.TestingApi.Observe("CompareLifeSurge:planned=" + plannedGcd, legacy ? LifeSurge : 0, selected ? LifeSurge : 0);
+        return Engine.ExperimentalSelection.ActiveDrg ? selected : legacy;
+    }
+
+    private static bool UseLifeSurgeLegacy(bool onAoE = false)
+    {
         if (!ActionReady(LifeSurge) || LocalPlayer.HasStatus(Buffs.LifeSurge))
             return false;
 

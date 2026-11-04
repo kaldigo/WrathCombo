@@ -12,9 +12,9 @@ namespace WrathCombo.AutoRotation;
 public class AutoRotationConfigIPCWrapper(AutoRotationConfig? config)
 {
     public bool Enabled =>
-        P?.UIHelper.AutoRotationStateControlled()?.state ??
+        AutomationOwnership.Allowed && (P?.UIHelper.AutoRotationStateControlled()?.state ??
         config?.Enabled ??
-        false;
+        false);
 
     public bool InCombatOnly
     {

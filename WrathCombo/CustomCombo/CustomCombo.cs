@@ -88,7 +88,10 @@ internal abstract partial class CustomCombo : CustomComboFunctions
             return true;
         }
 
-        uint resultingActionID = Engine.ActionRoutes.Filter(Invoke(actionID));
+        if (Engine.ExperimentalSelection.ActiveSage || Engine.ExperimentalSelection.ActiveDrg) Engine.SelectionRuntime.BeginPreview(actionID);
+        uint resultingActionID = Engine.ActionRoutes.Filter(SGE.TryTestingSelection(actionID, Preset, out var selection) ? selection : Invoke(actionID));
+        if (Engine.ExperimentalSelection.ActiveDrg && resultingActionID != actionID)
+            resultingActionID = Engine.SelectionRuntime.RetargetEnemy(actionID, resultingActionID);
 
         var presetException = _presetsAllowedToReturnUnchanged
             .TryGetValue(Preset, out var actionException);
