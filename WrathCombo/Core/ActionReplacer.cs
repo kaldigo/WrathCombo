@@ -147,6 +147,13 @@ internal sealed class ActionReplacer : IDisposable
     /// <returns>The action a combo returns.</returns>
     private unsafe uint GetAdjustedAction(uint actionID)
     {
+        uint result = ResolveAdjustedAction(actionID);
+        Engine.TestingApi.Observe("Selection", actionID, result);
+        return result;
+    }
+
+    private unsafe uint ResolveAdjustedAction(uint actionID)
+    {
         try
         {
             if (ClassLocked() ||

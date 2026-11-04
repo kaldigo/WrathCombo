@@ -60,7 +60,7 @@ internal sealed class SettingsApi : IDisposable
         catch (Exception ex) { return new JObject { ["Success"] = false, ["Error"] = ex.Message }.ToString(Formatting.None); }
     }
 
-    private JObject Snapshot()
+    internal JObject Snapshot()
     {
         var all = JObject.FromObject(Service.Configuration);
         var result = new JObject();

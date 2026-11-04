@@ -50,6 +50,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
     internal readonly ConfigWindow ConfigWindow;
     private readonly MajorChangesWindow _majorChangesWindow;
     internal readonly Engine.SettingsApi SettingsApi;
+    private readonly Engine.TestingApi testingApi;
     private readonly TargetHelper TargetHelper;
     internal static WrathCombo? P;
     private readonly WindowSystem ws;
@@ -232,6 +233,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
         _majorChangesWindow = new MajorChangesWindow();
         ResetFeatures();
         SettingsApi = new Engine.SettingsApi();
+        testingApi = new Engine.TestingApi(SettingsApi.Snapshot);
         TargetHelper = new();
         ws = new();
         ws.AddWindow(ConfigWindow);
@@ -366,6 +368,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
             Configuration.ProcessSaveQueue();
             SettingsApi.Tick();
+            testingApi.Tick();
             Engine.PvPIntentRouting.Tick();
 
             //Hacky workaround to ensure it's always running
@@ -526,6 +529,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
         ws.RemoveAllWindows();
         SettingsApi.Dispose();
+        testingApi.Dispose();
         Svc.DtrBar.Remove("Wrath Combo");
         Svc.DtrBar.Remove("Wrath Combo Opener");
         Configuration.ConfigChanged -= DebugFile.LoggingConfigChanges;

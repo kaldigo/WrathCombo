@@ -437,6 +437,7 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is sent. </summary>
     private unsafe static void SendActionDetour(ulong targetObjectId, ActionType actionType, uint actionId, ushort sequence, long a5, long a6, long a7, long a8, long a9)
     {
+        Engine.TestingApi.Observe("Send:" + actionType, 0, actionId, targetObjectId);
         try
         {
             if (P.IPC.OnActionUsedProvider.SubscriptionCount > 0)
