@@ -20,7 +20,14 @@ class CheckedActionCacheTests(unittest.TestCase):
         harness = r'''
 using System;
 using System.Collections.Generic;
-static class Engine { public static class RotationBehaviour { public static uint CheckedAction; } }
+static class Engine {
+    public static class RotationBehaviour { public static uint CheckedAction; }
+    public static class AutomationOwnership { public static bool ExternalAction; }
+    public static class SelectionRuntime {
+        public static bool Refresh;
+        public static bool ConsumePressRefresh() { bool refresh = Refresh; Refresh = false; return refresh; }
+    }
+}
 static class Player { public static bool Available = true; }
 static class Service { public static class Configuration { public static int Throttle = 50; } }
 static class EzThrottler { public static bool Throttle(string key, int interval) => false; }
@@ -43,6 +50,13 @@ class Program {
         if (hook.LastActionInvokeFor[100] != 200) throw new Exception("Checked execution mutated the hotbar cache");
         Engine.RotationBehaviour.CheckedAction = 0;
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 200) throw new Exception("Normal behaviour did not resume");
+        Engine.AutomationOwnership.ExternalAction = true;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 100 || hook.LastActionInvokeFor[100] != 200)
+            throw new Exception("External execution reused or mutated a Wrath replacement");
+        Engine.AutomationOwnership.ExternalAction = false;
+        Engine.SelectionRuntime.Refresh = true;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 999 || Engine.SelectionRuntime.Refresh)
+            throw new Exception("Real press did not refresh the selected action exactly once");
         Console.WriteLine("Checked-action cache boundary passed");
     }
 }
