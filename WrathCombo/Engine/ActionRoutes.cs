@@ -17,6 +17,7 @@ internal static class ActionRoutes
     {
         if (directInputs.TryGetValue(input, out var direct)) return direct;
         if (CustomComboFunctions.InPvP()) input = PvPAreaChoice.RouteInput(input, PvPIntentRouting.Area);
+        else input = PveIntentRouting.RouteInput(input);
         var map = CustomComboFunctions.InPvP() ? Service.Configuration.PvPActionRoutes : Service.Configuration.ActionRoutes;
         if (!map.TryGetValue(Options.Job, out var routes)) return null;
         if (routes.TryGetValue(input, out var policy)) return policy;

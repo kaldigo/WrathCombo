@@ -586,8 +586,9 @@ internal partial class GNB : Tank
 
                 //with SKS, we want Zone first because it can drift really bad while Bow usually remains static
                 //without SKS, we don't really care since both usually remain static
-                var useZone = CanUseOGCD(OriginalHook(DangerZone), Preset.GNB_NM_Zone) && NMcd is < 57.5f and > 17f;
-                var useBow = CanUseOGCD(BowShock, Preset.GNB_NM_BowShock) && NMcd is < 57.5f and >= 40;
+                var useZone = CanUseOGCD(OriginalHook(DangerZone), Preset.GNB_NM_Zone) &&
+                    (Engine.ExperimentalSelection.ActiveGunbreaker ? ZoneWindow : NMcd is < 57.5f and > 17f);
+                var useBow = CanUseOGCD(BowShock, Preset.GNB_NM_BowShock) && BowWindow;
                 if (Slow ? useBow : useZone)
                     return Slow ? BowShock : OriginalHook(DangerZone);
                 if (Slow ? useZone : useBow)

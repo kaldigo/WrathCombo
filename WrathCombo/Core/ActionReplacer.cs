@@ -166,6 +166,7 @@ internal sealed class ActionReplacer : IDisposable
                 return OriginalHook(actionID);
 
             using var intent = Engine.PvPIntentRouting.Enter(actionID);
+            using var adaptive = Engine.PveIntentRouting.Enter(actionID);
             var route = Engine.ActionRoutes.For(actionID);
             if (route?.Direct == true) return OriginalHook(route.Target == 0 ? actionID : route.Target);
             using var actionRoute = new WrathFork.Contract.ActionRouteContext(route);
@@ -192,7 +193,7 @@ internal sealed class ActionReplacer : IDisposable
                 }
             }
 
-            return Engine.ActionRoutes.Filter(OriginalHook(actionID));
+            return actionID == Engine.PveIntentRouting.FullRotation ? All.Cease : Engine.ActionRoutes.Filter(OriginalHook(actionID));
         }
 
         catch (Exception ex)

@@ -235,7 +235,9 @@ internal unsafe class AutoRotationController
         bool isHealer = Player.Object?.Role is CombatRole.Healer ||
                         (Player.Job is Job.BLU && BLU.HasHealerMimicry);
 
-        if (ExperimentalSelection.ActiveSage && SGE.AutomaticPrevention(cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters) is { } prevention)
+        if (ExperimentalSelection.ActiveHealer && (ExperimentalSelection.ActiveSage
+                ? SGE.AutomaticPrevention(cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters)
+                : HealerSelection.Prevention(All.AoeHeals, cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters)) is { } prevention)
         {
             if (prevention.Action < All.SingleTargetDPS && ActionReadyForTarget(prevention.Action, prevention.Preparation != 0 ? Player.Object!.GameObjectId : prevention.Recipient))
                 ActionManager.Instance()->UseAction(ActionType.Action, prevention.Action,
@@ -243,7 +245,7 @@ internal unsafe class AutoRotationController
             return;
         }
 
-        if (cfg.HealerSettings.HandleRaidwides && !ExperimentalSelection.ActiveSage)
+        if (cfg.HealerSettings.HandleRaidwides && !ExperimentalSelection.ActiveHealer)
         {
             if (isHealer && GroupDamageIncoming(out var multi))
             {
@@ -264,7 +266,7 @@ internal unsafe class AutoRotationController
 
         if (!cfg.HealerSettings.HandleRaidwides) { AutorotRaidwides = 0; AutorotRaidwiding = false; BlacklistedRaidwides.Clear(); }
         if (!cfg.HealerSettings.HandleTankbusters) TankbusterHandled = false;
-        if (cfg.HealerSettings.HandleTankbusters && !ExperimentalSelection.ActiveSage)
+        if (cfg.HealerSettings.HandleTankbusters && !ExperimentalSelection.ActiveHealer)
         {
             if (isHealer && TryGetTankBusterTarget(out var tbtarget))
             {

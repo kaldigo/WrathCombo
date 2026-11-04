@@ -1,4 +1,4 @@
-#region Dependencies
+﻿#region Dependencies
 using Dalamud.Game.ClientState.JobGauge.Types;
 using Dalamud.Game.ClientState.Objects.Types;
 using ECommons.DalamudServices;
@@ -63,14 +63,17 @@ internal partial class SCH
     
     internal static bool RaidwideSacredSoil()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.SCH_Raidwide_SacredSoil) && ActionReady(SacredSoil) && CanWeave() && GroupDamageIncoming();
     }
     internal static bool RaidwideExpedient()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.SCH_Raidwide_Expedient) && ActionReady(Expedient) && CanWeave() && GroupDamageIncoming();
     }
     internal static bool RaidwideSuccor()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.SCH_Raidwide_Succor) && ActionReady(OriginalHook(Succor)) && ShieldCheck && GroupDamageIncoming();
     }
     internal static bool RaidwideRecitation()

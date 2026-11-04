@@ -329,11 +329,43 @@ internal partial class MCH
         ActionLearned(Scattergun) && InActionRange(OriginalHook(SpreadShot)) ||
         !ActionLearned(Drill) && InActionRange(OriginalHook(SpreadShot));
 
-    private static bool UseReassemble(bool onAoE, int reassembleChoice = 1, int chargePool = 0, int hpThreshold = 25) =>
-        ActionReady(Reassemble) &&
-        (onAoE
+    private static bool UseReassemble(bool onAoE, int reassembleChoice = 1, int chargePool = 0, int hpThreshold = 25)
+    {
+        if (!Engine.ExperimentalSelection.ActiveMachinist) return ActionReady(Reassemble) && (onAoE
             ? UseReassembleAoE(chargePool, hpThreshold)
             : UseReassembleST(reassembleChoice, chargePool, hpThreshold));
+        uint planned = PlannedReassembleGcd(onAoE);
+        var snapshot = new Engine.Selection.MchPreparationInput(planned,
+            UseReassembleCharges(chargePool, hpThreshold) && (onAoE || reassembleChoice != 0 || ShouldReassemble()),
+            Engine.ActionRoutes.Allowed(planned) && Engine.ActionRoutes.Allowed(Reassemble), InActionRange(planned),
+            LocalPlayer.HasStatus(Buffs.Reassembled), IsOverheated, ActionLearned(Drill), ActionLearned(CleanShot));
+        bool selected = Engine.Selection.MchPreparation.Reassemble(snapshot);
+        Engine.TestingApi.RecordDecision("MCH.Reassemble", snapshot, selected);
+        return selected;
+    }
+
+    // Compute only the GCD branch, with preparation disabled. Never invoke the
+    // rotation speculatively: doing so can advance openers or consume requests.
+    private static uint PlannedReassembleGcd(bool aoe)
+    {
+        bool advanced = IsEnabled(aoe ? Preset.MCH_AoE_AdvancedMode : Preset.MCH_ST_AdvancedMode);
+        if ((!advanced || IsEnabled(aoe ? Preset.MCH_AoE_Adv_Stabilizer_FullMetalField : Preset.MCH_ST_Adv_Stabilizer_FullMetalField)) && UseFullMetalField())
+            return FullMetalField;
+        if (!advanced && aoe && ActionReady(Flamethrower) && !LocalPlayer.HasStatus(Buffs.Reassembled) &&
+            !IsMoving() && TimeStoodStill > TimeSpan.FromSeconds(3)) return Flamethrower;
+        if (advanced && aoe && IsEnabled(Preset.MCH_AoE_Adv_FlameThrower) && ActionReady(Flamethrower) &&
+            !LocalPlayer.HasStatus(Buffs.Reassembled) && (MCH_AoE_FlamethrowerMovement == 1 ||
+            MCH_AoE_FlamethrowerMovement == 0 && !IsMoving() && TimeStoodStill > TimeSpan.FromSeconds(MCH_AoE_FlamethrowerTimeStill)) &&
+            GetTargetHPPercent() > MCH_AoE_FlamethrowerHPOption) return Flamethrower;
+        uint planned = 0;
+        bool tools = !advanced || IsEnabled(aoe ? Preset.MCH_AoE_Adv_Tools : Preset.MCH_ST_Adv_Tools) &&
+            GetTargetHPPercent() > (aoe ? MCH_AoE_ToolsHPThreshold : ToolsHPThreshold);
+        bool holdExcavator = advanced && !aoe && IsEnabled(Preset.MCH_ST_Adv_Tools_AllowExcavatorPostWildfire) &&
+            IsEnabled(Preset.MCH_ST_Adv_WildFire) && IsWildfireAboutToBeUsed(WildfireHPThreshold, MCH_ST_WildfireBossOnlyOption);
+        if (tools && UseTools(ref planned, aoe, !advanced || MCH_AoE_AirAnchor,
+            holdExcavatorForWildfire: holdExcavator, reassembleEnabled: false)) return planned;
+        return DoBasicCombo(onAoE: aoe, allowReassembleOnClean: false);
+    }
 
     private static bool UseReassembleST(int reassembleChoice = 1, int chargePool = 0, int hpThreshold = 25)
     {

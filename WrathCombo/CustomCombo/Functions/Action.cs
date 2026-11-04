@@ -404,6 +404,20 @@ internal abstract partial class CustomComboFunctions
     }
 
     private static bool _raidwideInc;
+    internal static (float? Seconds, string SourceKey) ObservedRaidwide()
+    {
+        IBattleChara? first = null;
+        float remaining = float.MaxValue;
+        foreach (var actor in Svc.Objects)
+        {
+            if (actor is not IBattleChara caster || !caster.IsHostile() || !caster.IsCasting || BattleData.IgnoreRaidwide(caster.CastActionId)) continue;
+            if (!ActionSheet.TryGetValue(caster.CastActionId, out var row) ||
+                !(row.CastType is 2 or 5 && row.EffectRange >= 30 || BattleData.IsRaidwide(caster.CastActionId))) continue;
+            float seconds = caster.TotalCastTime - caster.CurrentCastTime;
+            if (seconds >= 0 && seconds < remaining) { first = caster; remaining = seconds; }
+        }
+        return first is null ? (null, "") : (remaining, $"cast:{first.GameObjectId}:{first.CastActionId}");
+    }
     public static bool RaidwideCasting(float? maxTimeRemaining = null)
     {
         if (!EzThrottler.Throttle("RaidWideCheck", 100))

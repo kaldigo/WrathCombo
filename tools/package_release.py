@@ -12,7 +12,7 @@ def package(root,tag,changelog='Validated source update. Development preview; na
         if not (build/dll).is_file():raise ValueError('Missing runtime dependency: '+dll)
     icon=root/'assets/icon.png';raw=icon.read_bytes()
     if raw[:8]!=b'\x89PNG\r\n\x1a\n' or any(n<1 or n>512 for n in struct.unpack('>II',raw[16:24])):raise ValueError('Invalid plugin icon')
-    manifest.update(RepoUrl='https://github.com/'+cfg['repository'],IconUrl='https://raw.githubusercontent.com/'+cfg['repository']+'/main/assets/icon.png',Changelog=changelog)
+    manifest.update(RepoUrl='https://github.com/'+cfg['repository'],IconUrl='https://raw.githubusercontent.com/'+cfg['repository']+'/'+(tag if testing else 'main')+'/assets/icon.png',Changelog=changelog)
     url='https://github.com/'+cfg['repository']+'/releases/download/'+tag+'/'+name+'.zip'
     manifest.update(DownloadLinkInstall=url,DownloadLinkUpdate=url,DownloadLinkTesting=url)
     out=root/'artifacts'/('testing' if testing else '');out.mkdir(parents=True,exist_ok=True);archive=out/(name+'.zip')

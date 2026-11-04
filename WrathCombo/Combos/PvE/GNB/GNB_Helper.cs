@@ -22,7 +22,14 @@ internal partial class GNB : Tank
     private static byte GunStep => GetJobGauge<GNBGauge>().AmmoComboStep; //GF & Reign combo steps
     private static float NMcd => GetCooldownRemainingTime(NoMercy); //No Mercy cooldown
     private static float StatusTime(uint status) => LocalPlayer.Status(status).RemainingTimeOrZero();
-    private static bool HasNM => NMcd is > 39.5f and <= 60; //under No Mercy buff, using its cooldown instead of buff timer (for snappier reaction) with a small 0.4s leeway
+    private static bool HasNM => Engine.ExperimentalSelection.ActiveGunbreaker
+        ? LocalPlayer.HasStatus(Buffs.NoMercy)
+        : NMcd is > 39.5f and <= 60;
+    private static bool BowWindow => Engine.ExperimentalSelection.ActiveGunbreaker
+        ? HasNM && StatusTime(Buffs.NoMercy) <= 17.5f : NMcd is < 57.5f and >= 40;
+    private static bool ZoneWindow => Engine.ExperimentalSelection.ActiveGunbreaker
+        ? HasNM && StatusTime(Buffs.NoMercy) <= 17.5f || !HasNM && NMcd > 15
+        : NMcd is < 57.5f and > 15f;
     private static float BFstatus => StatusTime(Buffs.Bloodfest); //Bloodfest buff timer
     private static float GCDLength => ActionManager.GetAdjustedRecastTime(ActionType.Action, KeenEdge) / 1000f; //current GCD length in seconds
     private static bool Slow => GCDLength >= 2.5f; //base GCD ("slowGNB")
@@ -697,6 +704,9 @@ internal partial class GNB : Tank
             ;
     private static bool ShouldUseNoMercy(Preset preset, int stop)
     {
+        if (Engine.ExperimentalSelection.ActiveGunbreaker && (HasNM ||
+            !Engine.Selection.ResourceWindow.CanFinish(new(0, false, GCDLength, RemainingGCD, 3, false, Engine.BossForecastProvider.Downtime))))
+            return false;
         var condition =
             IsEnabled(preset) && //option enabled
             NMcd < 0.5f && //off cooldown
@@ -717,17 +727,17 @@ internal partial class GNB : Tank
             ;
     private static bool ShouldUseZone(Preset preset)
         => CanUseOGCD(OriginalHook(DangerZone), preset) && //option enabled
-            NMcd is < 57.5f and > 15f //use in No Mercy but not directly after it's used and off cooldown in filler - if desynced, try to hold for NM window
+            ZoneWindow
             ;
     private static bool ShouldUseBowShock(Preset preset)
         => CanUseOGCD(BowShock, preset) && //option enabled
-            NMcd is < 57.5f and >= 40 //use in No Mercy window but not directly after it's used
+            BowWindow
             ;
     private static bool ShouldUseInBurst(uint action, Preset preset, bool ready, bool overcap)
         => IsEnabled(preset) && //option enabled
             InActionRange(action) && //in range
             ready && //can use
-            (JustUsed(NoMercy, 20f) || overcap) //under NM or we're close to overcapping/dropping
+            ((Engine.ExperimentalSelection.ActiveGunbreaker ? HasNM : JustUsed(NoMercy, 20f)) || overcap)
             ;
     private static bool ShouldUseReignOfBeasts(Preset preset)
         => ShouldUseInBurst( //in burst

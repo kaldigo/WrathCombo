@@ -221,7 +221,16 @@ internal partial class WAR : Tank
                 return true;
             }
 
-            if (innerReleaseEnabled &&
+            bool canFinishBurst = true;
+            if (Engine.ExperimentalSelection.ActiveWarrior)
+            {
+                var snapshot = new Engine.Selection.BurstDurationInput(LocalPlayer.Status(Buffs.SurgingTempest).RemainingTimeOrZero(),
+                    ActionLearned(StormsEye), GetCooldown(HeavySwing).CooldownTotal, RemainingGCD, 3,
+                    HasIR.Stacks || HasNascentChaos, Engine.BossForecastProvider.Downtime);
+                canFinishBurst = Engine.Selection.ResourceWindow.CanFinish(snapshot);
+                Engine.TestingApi.RecordDecision("WAR.BurstDuration", snapshot, canFinishBurst);
+            }
+            if (innerReleaseEnabled && canFinishBurst &&
                 ActionReady(OriginalHook(Berserk)) && HasSurgingTempest && !HasWrathful &&
                 GetTargetHPPercent() >= innerReleaseStopThreshold) //Health Threshold Check, boss check built into config
             {

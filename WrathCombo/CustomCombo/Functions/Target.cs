@@ -279,6 +279,7 @@ internal abstract partial class CustomComboFunctions
         uint currentHp = chara.CurrentHp;
         if ((Service.Configuration.UseExperimentalHP || forceUsePending) && SimpleTargetState.TargetStates.TryGetFirst(x => x.GameObjectID == chara.GameObjectId, out var p))
             currentHp = p.CurrentHP;
+        if (Engine.ExperimentalSelection.ActiveHealer) currentHp = Engine.SelectionRuntime.ExpectedHealth(chara);
 
         float charaHPPercent = currentHp * 100f / chara.MaxHp;
 
@@ -296,6 +297,7 @@ internal abstract partial class CustomComboFunctions
         optionalTarget ??= CurrentTarget;
         if (optionalTarget is IBattleChara chara) 
         {
+            if (Engine.ExperimentalSelection.ActiveHealer) return Engine.SelectionRuntime.ExpectedHealth(chara);
             if ((Service.Configuration.UseExperimentalHP || forceUsePending) && SimpleTargetState.TargetStates.TryGetFirst(x => x.GameObjectID == chara.GameObjectId, out var p))
                 return p.CurrentHP;
             else

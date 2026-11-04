@@ -551,7 +551,20 @@ internal partial class PLD
                 return true;
             }
             
-            if (fightOrFlightEnabled && !HasWeaved() && CombatEngageDuration().TotalSeconds >= 8 && //Time to hold buffing for non opener pulls.
+            bool burstWindow = CombatEngageDuration().TotalSeconds >= 8;
+            if (Engine.ExperimentalSelection.ActivePaladin)
+            {
+                uint planned = flags.HasFlag(Combo.AoE) ? AoECombo : STCombo;
+                TryGCDAttacks(flags, ref planned);
+                bool proc = HasDivineMight || LocalPlayer.HasStatus(Buffs.AtonementReady) ||
+                    LocalPlayer.HasStatus(Buffs.SupplicationReady) || LocalPlayer.HasStatus(Buffs.SepulchreReady);
+                var snapshot = new Engine.Selection.PldBurstInput(planned,
+                    Engine.ActionRoutes.Allowed(planned) && ActionReady(planned), LocalPlayer.HasStatus(Buffs.FightOrFlight), proc,
+                    flags.HasFlag(Combo.AoE), ActionLearned(RiotBlade), ActionLearned(RageOfHalone), ActionLearned(Prominence), ActionLearned(Atonement));
+                burstWindow = Engine.Selection.PldBurst.Start(snapshot);
+                Engine.TestingApi.RecordDecision("PLD.Burst", snapshot, burstWindow);
+            }
+            if (fightOrFlightEnabled && !HasWeaved() && burstWindow &&
                 OriginalHook(FightOrFlight) is FightOrFlight && ActionReady(FightOrFlight) && //To make sure it doesnt try to weave gcd Goring Blade
                 (!ActionLearned(Requiescat) || hasRequiescatMp) && //Must Have Enough Mana to combo
                 (InMeleeRange() || ActionLearned(Imperator) && InActionRange(Imperator) && IsOffCooldown(Imperator)) && // in melee or ready to start ranged combo with imperator
@@ -561,7 +574,10 @@ internal partial class PLD
                 return true;
             }
             
-            if ((requiescatEnabled && ActionReady(OriginalHook(Requiescat)) && GetCooldownRemainingTime(FightOrFlight) > 50 && InActionRange(OriginalHook(Requiescat))) || //Requiescat Logic, in action range because Imperator gets 25y range
+            bool acceptedBurst = Engine.ExperimentalSelection.ActivePaladin
+                ? LocalPlayer.HasStatus(Buffs.FightOrFlight) || JustUsed(FightOrFlight, 2f)
+                : GetCooldownRemainingTime(FightOrFlight) > 50;
+            if ((requiescatEnabled && ActionReady(OriginalHook(Requiescat)) && acceptedBurst && InActionRange(OriginalHook(Requiescat))) || //Requiescat Logic, in action range because Imperator gets 25y range
                 (bladeOfHonorEnabled && ActionLearned(BladeOfHonor) && OriginalHook(Requiescat) == BladeOfHonor && ActionReady(BladeOfHonor)))
             {
                 actionID = OriginalHook(Requiescat);

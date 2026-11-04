@@ -892,6 +892,17 @@ internal partial class DRK
             if (!ActionLearned(BlackestNight))
                 manaPool = 0;
 
+            if (Engine.ExperimentalSelection.ActiveDarkKnight)
+            {
+                // A boss timeline without a victim is not proof the player will take
+                // a tankbuster. Reserve for a known self marker or party-wide damage.
+                bool selfBuster = TryGetTankBusterTarget(out var victim) && victim?.GameObjectId == LocalPlayer.GameObjectId;
+                bool incoming = selfBuster || ObservedRaidwide().Seconds is >= 0 and <= 6 ||
+                    Engine.BossForecastProvider.Raidwide is >= 0 and <= 6;
+                manaPool = Engine.Selection.ResourceWindow.ShieldReserve(manaPool, ActionLearned(BlackestNight),
+                    GetCooldownRemainingTime(BlackestNight) <= 6, HasAnyTBN, incoming);
+            }
+
             var hasEnoughMana = mana >= (manaPool + 3000) || Gauge.HasDarkArts;
             var secondsBeforeBurst =
                 flags.HasFlag(Combo.Adv) && flags.HasFlag(Combo.ST)

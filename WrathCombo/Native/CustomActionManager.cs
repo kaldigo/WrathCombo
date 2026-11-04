@@ -437,7 +437,8 @@ public sealed unsafe class CustomActionSetup : IDisposable
             new CustomAction(Engine.PvPIntentRouting.Support,"Allied support","Select eligible allied support.",1510),
             new CustomAction(Engine.PvPIntentRouting.Mechanic,"Job mechanic","Begin an eligible job mechanic; damage presses carry it through.",1505),
             new CustomAction(Engine.PvPIntentRouting.Release,"Release early","Release an already active effect; never starts a new one.",1505),
-            new CustomAction(Engine.PvPIntentRouting.FullRotation,"PvP full rotation","Use the supported rotation; Ninja chooses by enemy count.",1504));
+            new CustomAction(Engine.PvPIntentRouting.FullRotation,"PvP full rotation","Use the supported rotation; Ninja chooses by enemy count.",1504),
+            new CustomAction(Engine.PveIntentRouting.FullRotation,"Adaptive rotation","Choose the enabled single-target or area rotation using action coverage.",1504));
         Engine.ActionRoutes.RegisterDirectActions(Manager);
     }
     public void Dispose()
@@ -513,6 +514,7 @@ public class CustomActionHelper()
     public static bool OneButtonRotationChecker(uint actionId, CustomActionType type, params uint[] originals)
     {
         if(Engine.PvPIntentRouting.Matches(actionId,type) is {} routed)return routed;
+        if(Engine.PveIntentRouting.Matches(actionId,type) is {} adaptive)return adaptive;
         bool enabled = CustomActionEnabled(type);
 
         if (enabled)

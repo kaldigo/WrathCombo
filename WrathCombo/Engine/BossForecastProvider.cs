@@ -9,6 +9,10 @@ internal static class BossForecastProvider
 {
     internal static EncounterForecast? Current { get; private set; }
     internal static long Generation { get; private set; }
+    internal static float? Downtime => ExperimentalSelection.Forecasts && Current is { } forecast
+        ? forecast.Remaining(forecast.Downtime, Environment.TickCount64, Generation) : null;
+    internal static float? Raidwide => ExperimentalSelection.Forecasts && Current is { } forecast
+        ? forecast.Remaining(forecast.Raidwide, Environment.TickCount64, Generation) : null;
     private static long nextPoll;
     private static string context = "";
     internal static void Reset() { Current = null; context = ""; nextPoll = 0; Generation++; }

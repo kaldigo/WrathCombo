@@ -135,6 +135,7 @@ public static class ActionWatching
                 var val = *(uint*)(packet + 16);
                 Svc.Log.Verbose($"[OpCode] Effect Resolved on {tar?.Name} with GS {globalSequence}.");
                 PendingHPChanges.RemoveAll(x => x.globalSequence == globalSequence);
+                Engine.SelectionRuntime.PendingHealth.Acknowledge(globalSequence, targetId);
                 SimpleTargetState.UpdateNaturalRegenTick(targetId, newHealth);
             }
 
@@ -256,8 +257,10 @@ public static class ActionWatching
                 var debugTargetName = debugObjectTable.SearchById(targetId)?.Name ?? "Unknown";
 #endif
 
+                int effectIndex = 0;
                 foreach (var eff in target.effects)
                 {
+                    int observedEffect = effectIndex++;
                     // Cache Data
                     var effType = eff.Type;
                     var effValue = eff.Value;
@@ -293,7 +296,12 @@ public static class ActionWatching
                         }
 
                         if (Service.Configuration.OpCodes is { } codes && codes.GameVersion == Framework.Instance()->GameVersionString)
+                        {
                             PendingHPChanges.Add(new PendingHPChange(effObjectId, eff.DamageHealValue, effType == ActionEffectType.Heal, header->GlobalSequence));
+                            if (Engine.ExperimentalSelection.ActiveHealer)
+                                Engine.SelectionRuntime.PendingHealth.Observe(header->GlobalSequence, effObjectId, observedEffect,
+                                    effType == ActionEffectType.Heal ? eff.DamageHealValue : -eff.DamageHealValue, currentTick);
+                        }
                     }
 
                     // Event: MP Gain or MP Loss
@@ -354,12 +362,13 @@ public static class ActionWatching
             if (casterEntityId == Player.Object.EntityId && actionType == ActionType.Action)
             {
                 Engine.IntentRouting.ConfirmAction(actionId);
-                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveSage) &&
+                Engine.PveIntentRouting.Confirm(actionId);
+                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveHealer) &&
                     lastTestingConfirmation != (casterEntityId, header->GlobalSequence))
                 {
                     lastTestingConfirmation = (casterEntityId, header->GlobalSequence);
-                    WrathOpener.CurrentOpener?.ProgressOpener(actionId);
-                    Engine.SelectionRuntime.Confirm(actionId, ActionSheet.TryGetValue(actionId, out var confirmedRow) && confirmedRow.ActionCategory.Value.RowId is 2 or 3);
+                    if (Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveSage) WrathOpener.CurrentOpener?.ProgressOpener(actionId);
+                    Engine.SelectionRuntime.Confirm(actionId, ActionSheet.TryGetValue(actionId, out var confirmedRow) && confirmedRow.ActionCategory.Value.RowId is 2 or 3, targets.Select(target => target.id).ToArray());
                 }
                 if(numTargets>0)Engine.PvPIntentRouting.ConfirmRecipient(actionId,targetEntityIds[0].Id);
             }
@@ -591,7 +600,7 @@ public static class ActionWatching
         }
         // A changed/cleared native queue no longer belongs to RSR.
         externalQueue.Validate(actionManager->ActionQueued, actionManager->QueuedActionId, actionManager->QueuedTargetId);
-        using var selectionPress = Engine.SelectionRuntime.BeginPress(mode == ActionManager.UseActionMode.Queue);
+        using var selectionPress = Engine.SelectionRuntime.BeginPress(mode == ActionManager.UseActionMode.Queue, actionId);
         try
         {
             if (actionType is ActionType.Action)
@@ -611,6 +620,7 @@ public static class ActionWatching
                 {
                     Engine.IntentRouting.ObserveInput(actionId, replacedWith);
                     if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient)) return false;
+                    Engine.PveIntentRouting.Press(actionId, replacedWith);
                 }
                 var queuedAct = actionManager->GetAdjustedActionId(actionManager->QueuedActionId);
 

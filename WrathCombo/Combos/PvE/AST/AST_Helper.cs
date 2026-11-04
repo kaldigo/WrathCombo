@@ -1,4 +1,4 @@
-using Dalamud.Game.ClientState.Conditions;
+﻿using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.JobGauge.Enums;
 using Dalamud.Game.ClientState.JobGauge.Types;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -87,14 +87,17 @@ internal partial class AST
     
     internal static bool RaidwideCollectiveUnconscious()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.AST_Raidwide_CollectiveUnconscious) && ActionReady(CollectiveUnconscious) && CanWeave() && GroupDamageIncoming();
     }
     internal static bool RaidwideNeutralSect()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.AST_Raidwide_NeutralSect) && ActionReady(OriginalHook(NeutralSect)) && CanWeave() && GroupDamageIncoming();
     }
     internal static bool RaidwideAspectedHelios()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.AST_Raidwide_AspectedHelios) && LocalPlayer.HasStatus(Buffs.NeutralSect) && GroupDamageIncoming() && 
                !LocalPlayer.HasStatus(Buffs.NeutralSectShield);
     }
