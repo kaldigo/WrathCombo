@@ -603,6 +603,7 @@ public static class ActionWatching
         // A changed/cleared native queue no longer belongs to RSR.
         externalQueue.Validate(actionManager->ActionQueued, actionManager->QueuedActionId, actionManager->QueuedTargetId);
         using var selectionPress = Engine.SelectionRuntime.BeginPress(mode == ActionManager.UseActionMode.Queue, actionId);
+        bool strictDecision = false, submitted = false, trackedPress = false;
         try
         {
             if (actionType is ActionType.Action)
@@ -622,7 +623,10 @@ public static class ActionWatching
                 if (mode != ActionManager.UseActionMode.Queue)
                 {
                     Engine.IntentRouting.ObserveInput(actionId, replacedWith);
-                    if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient, out testingGround)) return false;
+                    if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient, out testingGround))
+                    { Engine.SelectionRuntime.RejectPress(); return false; }
+                    trackedPress = true;
+                    strictDecision = testingRecipient is not null;
                     Engine.PveIntentRouting.Press(actionId, replacedWith);
                     NIN.PressTestingMudra(actionId, replacedWith);
                 }
@@ -675,10 +679,10 @@ public static class ActionWatching
                 if (changed)
                 {
                     var targObj = changedTargetId.GetObject();
-                    if (targObj == null || !targObj.IsTargetable || (targObj.IsHostile() && targObj.IsDead))
-                        targetId = originalTargetId;
-                    else
-                        targetId = changedTargetId;
+                    var delivered = Engine.Selection.RetargetDelivery.Validate(originalTargetId, changedTargetId,
+                        targObj != null && targObj.IsTargetable && !(targObj.IsHostile() && targObj.IsDead), strictDecision);
+                    if (delivered is not { } validRecipient) return false;
+                    targetId = validRecipient;
                 }
 
                 // Clear any dodgy leftover targets
@@ -686,6 +690,8 @@ public static class ActionWatching
                     actionManager->QueuedTargetId = 0;
 
                 // However, if we have a queued target ID assume that's what we want and not whatever current retargeting is. TODO: Setting?
+                if (strictDecision && actionManager->ActionQueued && Engine.Selection.RetargetDelivery.ConflictsWithBoundRecipient(
+                        testingRecipient!.Value, actionManager->QueuedTargetId.Id, Service.Configuration.OverwriteQueue)) return false;
                 targetId = Engine.Selection.RetargetDelivery.Select(targetId, actionManager->QueuedTargetId.Id,
                     mode == ActionManager.UseActionMode.Queue, Service.Configuration.OverwriteQueue, changed);
 
@@ -698,13 +704,17 @@ public static class ActionWatching
                 if (targetObject is null && targetId != 0xE000_0000)
                 {
                     Service.ActionReplacer.EnableActionReplacingIfRequired();
-                    return UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+                    if (strictDecision) return false;
+                    return submitted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
                 }
 
                 if (changed && !areaTargeted) //Check if the action can be used on the target, and if not revert to original
                     if (!ActionManager.CanUseActionOnTarget(replacedWith,
                             targetObject.Struct()))
+                    {
+                        if (strictDecision) return false;
                         targetId = originalTargetId;
+                    }
 
                 // Support Retargeted ground actions
                 if (areaTargeted && testingGround is { } retainedGround)
@@ -712,6 +722,7 @@ public static class ActionWatching
                     // The selected point is revalidated at press time. A rejected native
                     // placement must not silently become a different location at our feet.
                     bool placed = ActionManager.Instance()->UseActionLocation(actionType, replacedWith, location: &retainedGround);
+                    submitted = placed;
                     Service.ActionReplacer.EnableActionReplacingIfRequired();
                     return placed;
                 }
@@ -735,6 +746,7 @@ public static class ActionWatching
 
                         Service.ActionReplacer.EnableActionReplacingIfRequired();
 
+                        submitted = ret;
                         return ret;
                     }
                 }
@@ -760,6 +772,7 @@ public static class ActionWatching
                 Svc.Log.Verbose($"[FinalUse] Target changed is {changed}. Using {actionId.ActionName()} ({actionId}) -> {replacedWith.ActionName()} ({replacedWith}) on {(changed ? targetId.GetObject()?.Name : originalTargetId.GetObject()?.Name)} ({(changed ? targetId : originalTargetId):X})");
                 var hookResult = changed ? UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted) :
                     UseActionHook.Original(actionManager, actionType, actionId, originalTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+                submitted = hookResult;
 
                 Service.ActionReplacer.EnableActionReplacingIfRequired();
 
@@ -772,14 +785,25 @@ public static class ActionWatching
             }
             else
             {
-                return UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+                return submitted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
             }
         }
         catch (Exception ex)
         {
             Svc.Log.Error(ex, "UseActionDetour");
             Service.ActionReplacer.EnableActionReplacingIfRequired();
-            return UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+            if (strictDecision) return false;
+            return submitted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+        }
+        finally
+        {
+            if (trackedPress && !submitted)
+            {
+                Engine.SelectionRuntime.RejectPress();
+                Engine.PveIntentRouting.RejectPress(actionId);
+                NIN.RejectTestingMudra();
+            }
+            Service.ActionReplacer.EnableActionReplacingIfRequired();
         }
     }
 

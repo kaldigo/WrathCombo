@@ -69,6 +69,8 @@ internal partial class NIN
             mudraPress.Press(action, proposal, Environment.TickCount64, mudraGeneration);
     }
 
+    internal static void RejectTestingMudra() => mudraPress.Reset();
+
     internal static void ConfirmTestingMudra(uint action)
     {
         if (!ExperimentalSelection.ActiveNinja) return;

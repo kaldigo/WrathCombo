@@ -19,8 +19,8 @@ internal partial class BLU
     private static bool _surpanakhaReady;
 
     private static IGameObject? Target =>
-        SimpleTarget.HardTarget.IfHostile() ??
-        SimpleTarget.LastHostileHardTarget;
+        Engine.SelectionRuntime.HasEvaluationTarget ? CurrentTarget :
+        SimpleTarget.HardTarget.IfHostile() ?? SimpleTarget.LastHostileHardTarget;
 
     private static bool WantDoT(uint spell, ushort debuff)
     {

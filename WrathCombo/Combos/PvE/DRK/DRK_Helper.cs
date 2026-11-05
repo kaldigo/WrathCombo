@@ -135,6 +135,11 @@ internal partial class DRK
     /// </returns>
     private static IGameObject? Target(Combo flags, bool restrictToHostile = true)
     {
+        if (Engine.SelectionRuntime.HasEvaluationTarget)
+        {
+            var evaluated = CurrentTarget;
+            return !restrictToHostile || evaluated?.IsHostile() == true ? evaluated : null;
+        }
         var target = SimpleTarget.HardTarget ?? SimpleTarget.LastHostileHardTarget;
         if (target is not null)
             switch (restrictToHostile)

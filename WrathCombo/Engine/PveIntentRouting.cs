@@ -60,6 +60,10 @@ internal static class PveIntentRouting
         Context();
         if (input == FullRotation && !InPvP()) pending = (action, previewArea, Environment.TickCount64);
     }
+    internal static void RejectPress(uint input)
+    {
+        if (input == FullRotation) pending = default;
+    }
     internal static void Confirm(uint action)
     {
         Context();

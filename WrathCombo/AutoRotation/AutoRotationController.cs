@@ -207,9 +207,7 @@ internal unsafe class AutoRotationController
             Svc.Objects.GetBattleCharas().Any(enemy => !enemy.IsDead && enemy.IsTargetable && enemy.IsHostile() && GetTargetDistance(enemy, shieldFocus) <= QueryRange) &&
             HealerSelection.PrePull(shieldFocus.GameObjectId, cfg.HealerSettings.PreEmptiveHoT, cfg.HealerSettings.PreEmptiveShield) is { } preparation)
         {
-            ulong recipient = preparation.Preparation != 0 ? Player.Object!.GameObjectId : preparation.Recipient;
-            if (preparation.Action < All.SingleTargetDPS && ActionReadyForTarget(preparation.Action, recipient))
-                ActionManager.Instance()->UseAction(ActionType.Action, preparation.Action, recipient);
+            SelectionRuntime.ExecuteAutomatic(preparation);
             return;
         }
 
@@ -239,9 +237,7 @@ internal unsafe class AutoRotationController
                 ? SGE.AutomaticPrevention(cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters)
                 : HealerSelection.Prevention(All.AoeHeals, cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters)) is { } prevention)
         {
-            if (prevention.Action < All.SingleTargetDPS && ActionReadyForTarget(prevention.Action, prevention.Preparation != 0 ? Player.Object!.GameObjectId : prevention.Recipient))
-                ActionManager.Instance()->UseAction(ActionType.Action, prevention.Action,
-                    prevention.Preparation != 0 ? Player.Object!.GameObjectId : prevention.Recipient);
+            SelectionRuntime.ExecuteAutomatic(prevention);
             return;
         }
 

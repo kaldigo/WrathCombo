@@ -83,6 +83,7 @@ internal static class SelectionRuntime
     private static readonly Dictionary<uint, SelectionDecision> previews = new();
     private static readonly PreparationSequence sequence = new();
     private static SelectionDecision? automaticDecision;
+    private static uint automaticInput;
     private static SelectionDecision? pendingConfirmation;
     internal static readonly PreventionBudget Prevention = new();
     internal static readonly PendingHealth PendingHealth = new();
@@ -138,6 +139,7 @@ internal static class SelectionRuntime
         }
     }
     internal static void BeginPreview(uint input) { UpdateContext(); previews.Remove(input); if (automatic) automaticDecision = null; }
+    internal static void RejectPress() { sequence.CancelPress(); pendingConfirmation = null; }
     internal static IBattleChara? AutomaticRecipient(uint action) => automaticDecision is { } decision &&
         decision.Action == action && decision.Generation == Generation && Environment.TickCount64 - decision.ObservedAt is >= 0 and < 500
         ? decision.Preparation != 0 ? Player.Object : Svc.Objects.SearchById(decision.Recipient) as IBattleChara : null;
@@ -149,18 +151,38 @@ internal static class SelectionRuntime
     internal static uint Publish(uint input, SelectionDecision decision)
     {
         previews[input] = decision;
-        if (automatic) automaticDecision = decision;
+        if (automatic) { automaticDecision = decision; automaticInput = input; }
         TestingApi.Observe("PlannedGcd:" + decision.Reason, decision.Action, decision.PlannedGcd, decision.Recipient);
         var recipient = Svc.Objects.SearchById(decision.Action == decision.Preparation ? Player.Object!.GameObjectId : decision.Recipient);
         return decision.Action.Retarget(input, recipient);
     }
+    // Keep the chosen proposal through the native adjusted-action hook. Re-running
+    // an arbitrary native-action combo here can discard its recipient or preparation.
+    internal static unsafe bool ExecuteAutomatic(SelectionDecision decision)
+    {
+        if (!automatic || automaticDecision != decision || decision.Generation != Generation) return false;
+        uint input = automaticInput;
+        using var route = ActionRoutes.For(input) is { } policy ? new WrathFork.Contract.ActionRouteContext(policy) : null;
+        uint action = HealingGroundSelection.Select(input, decision.Action);
+        if (action != decision.Action || action >= Combos.PvE.All.SingleTargetDPS) return false;
+        var current = automaticDecision!;
+        ulong recipient = current.Preparation != 0 ? Player.Object!.GameObjectId : current.Recipient;
+        if (!ActionReadyForTarget(action, recipient)) return false;
+        using var checkedAction = new RotationBehaviour.ExecuteChecked(action);
+        return ActionManager.Instance()->UseAction(ActionType.Action, action, recipient);
+    }
+
     internal static unsafe bool Press(uint input, uint result, out ulong? boundRecipient, out System.Numerics.Vector3? boundGround)
     {
         boundRecipient = null;
         boundGround = null;
         if (!PvPIntentRouting.Enabled && !ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return true;
         UpdateContext();
-        var decision = previews.GetValueOrDefault(input) ?? (automatic && automaticDecision?.Action == result ? automaticDecision : null);
+        // Checked automatic dispatch owns this proposal; a cached native-button
+        // preview must not override its freshly selected recipient.
+        var decision = automatic && RotationBehaviour.CheckedAction == result && automaticDecision?.Action == result
+            ? automaticDecision
+            : previews.GetValueOrDefault(input) ?? (automatic && automaticDecision?.Action == result ? automaticDecision : null);
         if (decision is null || decision.Action != result) { sequence.CancelPress(); return true; }
         if (decision.EvaluatedEnemy is { } evaluated && SelectEnemy(result, fixedRecipient: evaluated).Recipient != evaluated)
         { sequence.CancelPress(); return false; }
