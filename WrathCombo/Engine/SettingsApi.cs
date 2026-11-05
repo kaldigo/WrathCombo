@@ -97,7 +97,9 @@ internal sealed class SettingsApi : IDisposable
 
     private JObject Apply(JObject request)
     {
-        if (WrathCombo.P!.IPC.Leasing.Registrations.Count != 0)
+        // Accord owns the persistent baseline while coordinated. External leases remain
+        // runtime overlays and must not block an idempotent settings transaction.
+        if (!AutomationOwnership.Managed && WrathCombo.P!.IPC.Leasing.Registrations.Count != 0)
             throw new InvalidOperationException("Release existing engine leases before applying persistent settings.");
         var receipt = SettingsTransaction.Execute(request, instance, Service.Configuration.ForkConfigurationId, Snapshot(),
             Service.Configuration.ForkOperationReceipts, patch => ValidatePatch(Snapshot(), patch), Persist);

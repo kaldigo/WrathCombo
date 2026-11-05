@@ -24,6 +24,7 @@ internal sealed class AutomationOwnership : IDisposable
     private readonly ICallGateProvider<Guid, bool> begin = Svc.PluginInterface.GetIpcProvider<Guid, bool>("WrathCombo.AutomationExternal.Begin.v1");
     private readonly ICallGateProvider<Guid, bool> end = Svc.PluginInterface.GetIpcProvider<Guid, bool>("WrathCombo.AutomationExternal.End.v1");
     private readonly ICallGateProvider<uint, uint> nativeAction = Svc.PluginInterface.GetIpcProvider<uint, uint>("WrathCombo.AutomationNativeAction.v1");
+    internal static bool Managed => Lease.Managed;
     internal static bool Allowed => (Service.Configuration?.AccordAutomationManaged != true || Lease.Managed) && Lease.Allowed(Environment.TickCount64);
     internal static unsafe bool Busy => ActionManager.Instance() is var am && am != null &&
         (am->ActionQueued || am->CastActionId != 0 || am->AnimationLock > 0);
