@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
@@ -99,7 +98,7 @@ internal static class DiagnosticLog
                 Pending = s?.Queue.Reader.Count ?? 0, Written = s?.Written ?? 0, Bytes = s?.Bytes ?? 0, Error = s?.Error ?? "", StopReason = s?.StopReason ?? "", Flushing = s is not null && !s.Writer.IsCompleted && !Active };
         }
     }
-    internal static void Checkpoint() => Event("Coverage", () => { lock (Gate) return new { Counts = current?.Counts.ToDictionary(x => x.Key, x => x.Value), Status = Status() }; });
+    internal static void Checkpoint() => Event("Coverage", () => { lock (Gate) return new { Counts = current is { } active ? new Dictionary<string, long>(active.Counts) : null, Status = Status() }; });
     internal static void Stop(string reason)
     {
         lock (Gate)

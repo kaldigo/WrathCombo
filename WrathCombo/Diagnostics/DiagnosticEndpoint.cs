@@ -1,5 +1,5 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using Dalamud.Plugin.Ipc;
 using Dalamud.Plugin.Services;
 using Dalamud.Game.ClientState.Objects.Types;
@@ -72,18 +72,27 @@ internal sealed class DiagnosticEndpoint : IDisposable
         }
         if (now >= nextCheckpoint) { nextCheckpoint = now + 10000; DiagnosticLog.Checkpoint(); }
     }
-    private static object World() => new {
-        LoggedIn = Player.Available, PlayerId = Player.Object?.GameObjectId, PlayerEntityId = Player.Object?.EntityId, Job = (int)Player.Job, Player.Level, Territory = Svc.ClientState.TerritoryType, PvP = Svc.ClientState.IsPvP,
-        Conditions = Svc.Condition.AsReadOnlySet().Select(x => x.ToString()).ToArray(),
-        Selected = Svc.Targets.Target?.GameObjectId, Focus = Svc.Targets.FocusTarget?.GameObjectId,
-        Soft = Svc.Targets.SoftTarget?.GameObjectId, Mouseover = Svc.Targets.MouseOverTarget?.GameObjectId,
-        Party = Svc.Party.Select(x => new { x.ObjectId, x.ClassJob.RowId }).ToArray(),
-        Gauge = Gauge(), Cooldowns = Cooldowns(),
-        Actors = Svc.Objects.OfType<IBattleChara>().Where(x => Player.Object == null || System.Numerics.Vector3.Distance(x.Position, Player.Position) <= 60)
-            .Select(x => new { Id = x.GameObjectId, x.DataId, Job = x.ClassJob.RowId, x.Level, x.CurrentHp, x.MaxHp, x.CurrentMp, x.MaxMp,
-                x.IsDead, x.IsTargetable, x.Position, x.Rotation, x.HitboxRadius, x.TargetObjectId, x.IsCasting, x.CastActionId, x.TotalCastTime, x.CurrentCastTime,
-                Statuses = x.StatusList.Select(s => new { s.StatusId, s.SourceId, s.RemainingTime, s.Param }).ToArray() }).ToArray()
-    };
+    private static object World()
+    {
+        var conditions = new List<string>();
+        foreach (var flag in Svc.Condition.AsReadOnlySet()) conditions.Add(flag.ToString());
+        var party = new List<object>();
+        foreach (var member in Svc.Party) party.Add(new { member.ObjectId, Job = member.ClassJob.RowId });
+        var actors = new List<object>();
+        foreach (var candidate in Svc.Objects)
+        {
+            if (candidate is not IBattleChara actor || Player.Object != null && System.Numerics.Vector3.Distance(actor.Position, Player.Position) > 60) continue;
+            var statuses = new List<object>();
+            foreach (var status in actor.StatusList) statuses.Add(new { status.StatusId, status.SourceId, status.RemainingTime, status.Param });
+            actors.Add(new { Id = actor.GameObjectId, actor.DataId, Job = actor.ClassJob.RowId, actor.Level, actor.CurrentHp, actor.MaxHp, actor.CurrentMp, actor.MaxMp,
+                actor.IsDead, actor.IsTargetable, actor.Position, actor.Rotation, actor.HitboxRadius, actor.TargetObjectId, actor.IsCasting, actor.CastActionId, actor.TotalCastTime, actor.CurrentCastTime,
+                Statuses = statuses });
+        }
+        return new { LoggedIn = Player.Available, PlayerId = Player.Object?.GameObjectId, PlayerEntityId = Player.Object?.EntityId,
+            Job = (int)Player.Job, Player.Level, Territory = Svc.ClientState.TerritoryType, PvP = Svc.ClientState.IsPvP, Conditions = conditions,
+            Selected = Svc.Targets.Target?.GameObjectId, Focus = Svc.Targets.FocusTarget?.GameObjectId, Soft = Svc.Targets.SoftTarget?.GameObjectId,
+            Mouseover = Svc.Targets.MouseOverTarget?.GameObjectId, Party = party, Gauge = Gauge(), Cooldowns = Cooldowns(), Actors = actors };
+    }
     private static object? Gauge()
     {
         if (!Player.Available) return null;
