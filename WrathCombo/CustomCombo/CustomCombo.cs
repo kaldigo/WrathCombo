@@ -88,7 +88,7 @@ internal abstract partial class CustomCombo : CustomComboFunctions
             return true;
         }
 
-        if (Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
+        if (Engine.PvPIntentRouting.Enabled || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
         using var healerScope = Engine.HealerSelection.Enter(Preset);
         using var enemyScope = Engine.SelectionRuntime.EnterEnemyEvaluation(actionID);
         using var mudraScope = NIN.BeginTestingMudra(actionID);
