@@ -10,6 +10,7 @@ namespace WrathCombo.Engine;
 internal sealed class TestingApi : IDisposable
 {
     private readonly AutomationOwnership ownership = new();
+    private readonly RotationSettingsApi rotationSettings = new();
     private readonly AccordDiagnostics.DiagnosticEndpoint diagnostics;
     private static readonly object Gate = new();
     private static readonly DecisionTrace Trace = new();
@@ -42,7 +43,7 @@ internal sealed class TestingApi : IDisposable
                         Decisions.Clear(); droppedDecisions = 0;
                     }
                     else if (command == "stop") Trace.Stop("Stopped by user");
-                    else if (command.StartsWith("configure:")) ExperimentalSelection.Apply(JObject.Parse(command[10..]));
+                    else if (command.StartsWith("configure:")) RotationSettingsApi.ApplySaved(JObject.Parse(command[10..]));
                     else if (command != "read") throw new InvalidOperationException("Unknown trace command.");
                     Trace.Check(Environment.TickCount64, Context);
                     return new JObject { ["Success"] = true, ["Schema"] = 1, ["Active"] = Trace.Active,
@@ -94,5 +95,5 @@ internal sealed class TestingApi : IDisposable
         SelectionRuntime.Tick();
         lock (Gate) { if (Trace.Active) Trace.Check(Environment.TickCount64, Context); }
     }
-    public void Dispose() { diagnostics.Dispose(); ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
+    public void Dispose() { diagnostics.Dispose(); rotationSettings.Dispose(); ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
 }

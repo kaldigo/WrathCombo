@@ -8,7 +8,7 @@ using WrathCombo.CustomComboNS.Functions;
 
 namespace WrathCombo.Engine;
 
-// Session-only during testing. No stable configuration migration or automatic enablement.
+// Runtime view of persistent rotation settings. Accord owns the desired configuration.
 internal static class ExperimentalSelection
 {
     internal static bool Drg { get; private set; }
@@ -109,10 +109,10 @@ internal static class ExperimentalSelection
         ["EnemyMouseover"] = EnemyMouseover, ["EnemyFocus"] = EnemyFocus, ["PvpTargeting"] = PvpTargeting,
         ["AllyOverrideOrder"] = new JArray(AllyOverrideOrder), ["EnemyOverrideOrder"] = new JArray(EnemyOverrideOrder),
         ["SwitchEnemyTarget"] = SwitchEnemyTarget, ["SwitchAllyTarget"] = SwitchAllyTarget };
-    internal static void Apply(JObject request)
+    internal static void Apply(JObject request, bool restoring = false)
     {
-        if (CustomComboFunctions.InCombat() || AutomationOwnership.Busy || SelectionRuntime.Commitment is not null)
-            throw new InvalidOperationException("Change testing providers outside combat after the current preparation finishes.");
+        if (!restoring && (CustomComboFunctions.InCombat() || AutomationOwnership.Busy || SelectionRuntime.Commitment is not null))
+            throw new InvalidOperationException("Saved changes will apply outside combat after the current action finishes.");
         var current = Read();
         foreach (var property in request.Properties())
         {
