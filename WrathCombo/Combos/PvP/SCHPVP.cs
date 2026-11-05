@@ -1,5 +1,6 @@
 ﻿using Dalamud.Game.ClientState.Objects.Types;
 using WrathCombo.Core;
+using All = WrathCombo.Combos.PvE.All;
 using WrathCombo.Engine;
 using WrathCombo.CustomComboNS;
 using WrathCombo.CustomComboNS.Functions;
@@ -74,16 +75,27 @@ internal static class SCHPvP
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, Broil))
                 return actionID;
 
+            if (PvpAllySelection.Active && IsEnabled(Preset.SCHPvP_Adlo))
+            {
+                var recipient = PvpAllySelection.Resolve(Adloquium, ally => !ally.HasStatus(Buffs.Catalyze) &&
+                    GetTargetHPPercent(ally) <= SCHPvP_AdloThreshold);
+                if (recipient is not null && ActionReadyForTarget(Adloquium, recipient.GameObjectId))
+                    return PvpAllySelection.Publish(actionID, Adloquium, recipient, "Scholar recovery on an eligible unshielded ally");
+            }
+
             // Uses Chain Stratagem when available
-            if (IsEnabled(Preset.SCHPvP_ChainStratagem) && IsOffCooldown(ChainStratagem))
+            if (IsEnabled(Preset.SCHPvP_ChainStratagem) && IsOffCooldown(ChainStratagem) &&
+                (!PvpAllySelection.Active || CurrentTarget is { } chainTarget && PvpTargetEligibility.CanDamage(ChainStratagem, chainTarget)))
                 return ChainStratagem;                    
 
             // Uses Expedient when available and target isn't affected with Biolysis
-            if (IsEnabled(Preset.SCHPvP_Expedient) && IsOffCooldown(Expedient) && GetCooldownRemainingTime(Biolysis) < 3)
+            if (IsEnabled(Preset.SCHPvP_Expedient) && IsOffCooldown(Expedient) && GetCooldownRemainingTime(Biolysis) < 3 &&
+                (!PvpAllySelection.Active || ActionRoutes.Allowed(Biolysis) && CurrentTarget is { } dotTarget && PvpTargetEligibility.CanDamage(Biolysis, dotTarget)))
                 return Expedient;
 
             // Uses Biolysis on cooldown or with Recitation when Expedient is enabled with safety for too long of an expedient cooldown. 
-            if (IsEnabled(Preset.SCHPvP_Biolysis) && IsOffCooldown(Biolysis))
+            if (IsEnabled(Preset.SCHPvP_Biolysis) && IsOffCooldown(Biolysis) &&
+                (!PvpAllySelection.Active || CurrentTarget is { } bioTarget && PvpTargetEligibility.CanDamage(Biolysis, bioTarget)))
             {
                 if (IsNotEnabled(Preset.SCHPvP_Expedient) ||(LocalPlayer.HasStatus(Buffs.Recitation) || GetCooldownRemainingTime(Expedient) > 5))
                     return Biolysis;
@@ -99,7 +111,7 @@ internal static class SCHPvP
                 return DeploymentTactics;
 
             // Adds Adloquium when at or below threshold, will not Overwrite the 10% damage reduction buff to prevent waste
-            if (IsEnabled(Preset.SCHPvP_Adlo))
+            if (!PvpAllySelection.Active && IsEnabled(Preset.SCHPvP_Adlo))
             {
                 IGameObject? healTarget = SCHPvP_Adlo_Retarget ? SimpleTarget.Stack.AllyToHealPVP : SimpleTarget.Stack.Allies;
                 
@@ -119,6 +131,15 @@ internal static class SCHPvP
 
         protected override uint Invoke(uint actionID)
         {
+            if (PvpAllySelection.Active && actionID == Adloquium)
+            {
+                var recipient = PvpAllySelection.Resolve(Adloquium);
+                if (recipient is null) return All.Cease;
+                if (PvPIntentRouting.Enabled && recipient.HasStatus(Buffs.Catalyze) && GetRemainingCharges(DeploymentTactics) > 1 &&
+                    ActionRoutes.Allowed(DeploymentTactics) && recipient.CanUseOn(DeploymentTactics) && NumberOfAlliesInRange(DeploymentTactics, recipient) > 1)
+                    return PvpAllySelection.Publish(actionID, DeploymentTactics, recipient, "Spread the selected ally's shield");
+                return PvpAllySelection.Publish(actionID, Adloquium, recipient, "Explicit Scholar healing recipient");
+            }
             if(PvPIntentRouting.Enabled && actionID==Adloquium)
             {
                 var ally=SimpleTarget.Stack.AllyToHealPVP;

@@ -102,10 +102,16 @@ internal partial class MCH
         bool skipHyperchargeHold = false,
         float wildfireHyperchargeCutoff = 9f,
         int wildfireBossOnlyOption = 1) =>
-        onAoE
+        (!Engine.ExperimentalSelection.ActiveMachinist ||
+         !LocalPlayer.HasStatus(Buffs.Reassembled) && Engine.SelectionRuntime.Commitment is null &&
+         Engine.Selection.ResourceWindow.CanFinish(new(0, false,
+             FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(
+                 FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, OriginalHook(Heatblast)) / 1000f,
+             RemainingGCD, 5, false, Engine.BossForecastProvider.Downtime))) &&
+        (onAoE
             ? UseHyperchargeAoE(useAirAnchor, toolHoldThreshold, hpThreshold)
             : UseHyperchargeST(hpThreshold, skipExcavatorHold, skipHyperchargeHold, wildfireHyperchargeCutoff,
-                wildfireBossOnlyOption);
+                wildfireBossOnlyOption));
 
     private static bool IsHyperchargeReady() =>
         (ActionReady(Hypercharge) || LocalPlayer.HasStatus(Buffs.Hypercharged)) && !IsOverheated;
@@ -341,6 +347,7 @@ internal partial class MCH
             LocalPlayer.HasStatus(Buffs.Reassembled), IsOverheated, ActionLearned(Drill), ActionLearned(CleanShot));
         bool selected = Engine.Selection.MchPreparation.Reassemble(snapshot);
         Engine.TestingApi.RecordDecision("MCH.Reassemble", snapshot, selected);
+        if (selected) testingPlannedGcd = planned;
         return selected;
     }
 

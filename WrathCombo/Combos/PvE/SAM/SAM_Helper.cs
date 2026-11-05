@@ -12,6 +12,8 @@ using static WrathCombo.Combos.PvE.SAM.Config;
 using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
 using ActionType = FFXIVClientStructs.FFXIV.Client.Game.ActionType;
 using WrathCombo.Extensions;
+using WrathCombo.Engine;
+using WrathCombo.Engine.Selection;
 namespace WrathCombo.Combos.PvE;
 
 internal partial class SAM
@@ -62,6 +64,12 @@ internal partial class SAM
             return actionID;
         }
 
+        if (ExperimentalSelection.ActiveSamurai && SamuraiTransition.PreferFlank(
+                !HasGetsu, !HasKa, useGekko && ActionLearned(Gekko), useKasha && ActionLearned(Kasha),
+                LocalPlayer.Status(Buffs.Fugetsu).RemainingTimeOrZero(),
+                LocalPlayer.Status(Buffs.Fuka).RemainingTimeOrZero(), GCD, OnTargetsFlank(), OnTargetsRear()))
+            return Kasha;
+
         if (useGekko && ActionLearned(Gekko) && (!HasGetsu || !LocalPlayer.HasStatus(Buffs.Fugetsu)))
             return WithTrueNorth(Gekko, OnTargetsRear(), useTrueNorth, trueNorthCharges);
 
@@ -83,6 +91,12 @@ internal partial class SAM
         if (!ActionReady(OriginalHook(TsubameGaeshi)) ||
             !InActionRange(OriginalHook(TsubameGaeshi)))
             return false;
+
+        if (ExperimentalSelection.ActiveSamurai && SamuraiTransition.Choose(new(
+                onAoE, LocalPlayer.HasStatus(Buffs.TendoKaeshiSetsugekkaReady) || LocalPlayer.HasStatus(Buffs.TsubameReady),
+                LocalPlayer.HasStatus(Buffs.KaeshiGokenReady) || LocalPlayer.HasStatus(Buffs.TendoKaeshiGokenReady),
+                SenCount, false, true, true, IsMoving())) == SamuraiTransitionChoice.RepeatAcceptedAttack)
+            return true;
 
         if (onAoE)
             return LocalPlayer.HasStatus(Buffs.TsubameReady) ||
@@ -120,6 +134,11 @@ internal partial class SAM
 
         bool haveBuffs =
             HasStatusEffect(Buffs.Fuka) && HasStatusEffect(Buffs.Fugetsu);
+
+        if (ExperimentalSelection.ActiveSamurai && SamuraiTransition.Choose(new(
+                onAoE, false, false, SenCount, useMidare, true, true, onlyWhenStationary && IsMoving())) ==
+            SamuraiTransitionChoice.SpendThreeSen)
+            return OriginalHook(Iaijutsu) is MidareSetsugekka or TendoSetsugekka;
 
         // After downtime, Meikyo → Gekko/Kasha reapplies buffs then Tendo.
         // If Meikyo is unavailable, spend 3 Sen anyway so Hakaze doesn't overwrite them.

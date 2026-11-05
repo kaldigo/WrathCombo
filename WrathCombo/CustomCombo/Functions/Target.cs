@@ -665,7 +665,7 @@ internal abstract partial class CustomComboFunctions
     ///     Checks if a point is over the ground.<br/>
     ///     (and gives the ground point if it is)
     /// </summary>
-    private static unsafe bool IsOverGround
+    internal static unsafe bool IsOverGround
         (Vector3 pointToCheck, out Vector3 groundPoint)
     {
         var down = new Vector3(0, -1, 0);

@@ -10,6 +10,7 @@ using static ECommons.DalamudServices.Svc;
 using static WrathCombo.Combos.PvE.MNK.Config;
 using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
 using WrathCombo.Extensions;
+using WrathCombo.Engine.Selection;
 namespace WrathCombo.Combos.PvE;
 
 using static MNKExtensions;
@@ -22,6 +23,29 @@ internal partial class MNK
     {
         if (!LocalPlayer.HasStatus(Buffs.PerfectBalance))
             return false;
+
+        if (Engine.ExperimentalSelection.ActiveMonk)
+        {
+            static MonkForm Form(BeastChakra chakra) => chakra switch
+            { BeastChakra.OpoOpo => MonkForm.Opo, BeastChakra.Raptor => MonkForm.Raptor,
+              BeastChakra.Coeurl => MonkForm.Coeurl, _ => MonkForm.None };
+            var snapshot = new MonkPhaseInput(true, LunarNadi || BothNadisOpen, SolarNadi || BothNadisOpen,
+                onAoE, Form(Gauge.BeastChakra[0]), Form(Gauge.BeastChakra[1]), Form(Gauge.BeastChakra[2]),
+                ActionLearned(onAoE ? FourPointFury : TrueStrike), ActionLearned(onAoE ? Rockbreaker : SnapPunch));
+            var next = MonkPhase.Next(snapshot);
+            Engine.TestingApi.RecordDecision("MNK.AcceptedPhase", snapshot, next);
+            actionID = (next, onAoE) switch
+            {
+                (MonkForm.Opo, true) => OriginalHook(ArmOfTheDestroyer),
+                (MonkForm.Raptor, true) => FourPointFury,
+                (MonkForm.Coeurl, true) => Rockbreaker,
+                (MonkForm.Opo, false) => OpoFormGCD(),
+                (MonkForm.Raptor, false) => RaptorFormGCD(),
+                (MonkForm.Coeurl, false) => CoeurlFormGCD(),
+                _ => actionID,
+            };
+            return next != MonkForm.None;
+        }
 
         if (onAoE)
         {

@@ -1,5 +1,6 @@
 ﻿using WrathCombo.Engine;
 using WrathFork.Contract;
+using All = WrathCombo.Combos.PvE.All;
 using Dalamud.Game.ClientState.Objects.Types;
 using WrathCombo.Core;
 using WrathCombo.CustomComboNS;
@@ -100,6 +101,9 @@ internal static class ASTPvP
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, Malefic))
                 return actionID;
 
+            if (PvpAllySelection.Active && IsEnabled(Preset.ASTPvP_Burst_Heal) &&
+                TryTestingHealing(actionID, ASTPvP_BurstHeal_DoubleCast, true, out uint healing)) return healing;
+
             // Card Draw
             if (IsEnabled(Preset.ASTPvP_Burst_DrawCard) && IsOffCooldown(MinorArcana) &&
                 (!LocalPlayer.HasStatus(Buffs.LadyOfCrowns) && !LocalPlayer.HasStatus(Buffs.LordOfCrowns)))
@@ -146,7 +150,7 @@ internal static class ASTPvP
                     (GetRemainingCharges(DoubleCast) > 1 || GetCooldownRemainingTime(Gravity) > 7.5f) && CanWeave())
                     return DoubleMalefic;
                 
-                if (!PvPIntentRouting.Active && IsEnabled(Preset.ASTPvP_Burst_Heal))
+                if (!PvpAllySelection.Active && !PvPIntentRouting.Active && IsEnabled(Preset.ASTPvP_Burst_Heal))
                 {
                     IGameObject? healTarget = ASTPvP_BurstHealRetarget ? SimpleTarget.Stack.AllyToHealPVP : SimpleTarget.Stack.Allies;
                     
@@ -162,7 +166,7 @@ internal static class ASTPvP
                             : AspectedBenefic;
                 }
             }
-            if(PvPIntentRouting.Active && IsEnabled(Preset.ASTPvP_Burst_Heal))
+            if(!PvpAllySelection.Active && PvPIntentRouting.Active && IsEnabled(Preset.ASTPvP_Burst_Heal))
             {
                 var ally=ASTPvP_BurstHealRetarget ? SimpleTarget.Stack.AllyToHealPVP : SimpleTarget.Stack.Allies;
                 if(ASTPvP_BurstHeal_DoubleCast && CanWeave() && ComboAction==AspectedBenefic && HasCharges(DoubleCast))
@@ -209,6 +213,8 @@ internal static class ASTPvP
         {
             if (actionID is not AspectedBenefic) 
                 return actionID;
+            if (PvpAllySelection.Active)
+                return TryTestingHealing(actionID, ASTPvP_Heal_DoubleCast, false, out uint healing) ? healing : All.Cease;
             if(PvPIntentRouting.Enabled && ASTPvP_Heal_DoubleCast && CanWeave() && ComboAction==AspectedBenefic && HasCharges(DoubleCast))
             {
                 var recipient=PvPIntentRouting.HealingRecipient;
@@ -225,5 +231,22 @@ internal static class ASTPvP
                 ? actionID.Retarget(SimpleTarget.Stack.AllyToHealPVP)
                 : actionID;
         }
+    }
+
+    private static bool TryTestingHealing(uint input, bool doubleCast, bool threshold, out uint result)
+    {
+        result = 0;
+        if (doubleCast && CustomComboFunctions.CanWeave() && CustomComboFunctions.ComboAction == AspectedBenefic && CustomComboFunctions.HasCharges(DoubleCast))
+        {
+            var retained = PvPIntentRouting.HealingRecipient;
+            var recipient = retained is null ? null : PvpAllySelection.Resolve(DoubleBenefic, retained: retained.GameObjectId);
+            if (recipient is not null && CustomComboFunctions.ActionReadyForTarget(DoubleBenefic, recipient.GameObjectId))
+            { result = PvpAllySelection.Publish(input, DoubleBenefic, recipient, "Double Benefic retains the confirmed healing recipient"); return true; }
+        }
+        var ally = PvpAllySelection.Resolve(AspectedBenefic, target => !threshold ||
+            !target.HasStatus(Buffs.DiurnalBenefic) && CustomComboFunctions.GetTargetHPPercent(target) <= ASTPvP_Burst_HealThreshold);
+        if (ally is null || !CustomComboFunctions.ActionReadyForTarget(AspectedBenefic, ally.GameObjectId)) return false;
+        result = PvpAllySelection.Publish(input, AspectedBenefic, ally, "Astrologian recovery uses the resolved ally");
+        return true;
     }
 }

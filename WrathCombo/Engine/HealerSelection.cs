@@ -16,7 +16,7 @@ namespace WrathCombo.Engine;
 
 // The same selection path serves healing controls, optional damage inclusion and the runner.
 // Job priority/threshold configuration is retained; recipient and preparation ownership is shared.
-internal static class HealerSelection
+internal static partial class HealerSelection
 {
     [ThreadStatic] private static bool ownsPrevention;
     internal static bool ReplacesLegacyPrevention => ExperimentalSelection.ActiveHealer && ownsPrevention;
@@ -66,11 +66,16 @@ internal static class HealerSelection
             CustomActionHelper.OneButtonRotationChecker(input, CustomActionHelper.GetTypeByAttribute(preset.Attributes().AutoAction));
         if (damageInput && SelectionRuntime.Commitment?.PlannedGcd == RaiseSpell && Continuation(input) is { } raising)
         { action = raising.Action; return true; }
+        if (damageInput && ExperimentalSelection.IncludeCleanse && RotationBehaviour.Support != false &&
+            SelectionRuntime.SelectAlly(Role.Esuna, eligible: ally => ally.HasCleansableDebuff).Recipient is { } cleanse &&
+            Ready(input, Role.Esuna, cleanse, "Explicit cleanse inclusion on a cleansable ally") is { } cleansing)
+        { action = cleansing.Action; return true; }
         if (damageInput && ExperimentalSelection.IncludeRaise && RotationBehaviour.Support != false &&
             !GetPartyMembers().Any(member => member.BattleChara is { IsDead: false } ally && GetTargetHPPercent(ally) < 30) &&
             Raise(input) is { } resurrection)
         { action = resurrection.Action; return true; }
         if (ExperimentalSelection.ActiveSage) return false;
+        if (TrySimple(input, preset, out action)) return true;
         if (Job == 28 && preset == Preset.SCH_DeploymentTactics && input == SCH.DeploymentTactics)
         { action = Deployment(input)?.Action ?? All.Cease; return true; }
         bool st = preset is Preset.WHM_STHeals or Preset.SCH_ST_Heal or Preset.AST_ST_Heals &&
@@ -83,6 +88,8 @@ internal static class HealerSelection
         bool damage = damageInput;
         if (!st && !area && !damage) return false;
         if (Continuation(input) is { } continuation) { action = continuation.Action; return true; }
+        if (st && Job == 24 && ContentSpecificActions.TryGet(ref action, out var content, healing: true))
+        { action = content; return true; }
         if (damage && (!ExperimentalSelection.IncludeHealing || RotationBehaviour.Support == false)) return false;
         bool gcds = !damage || ExperimentalSelection.HealingGcds;
         if (Prevention(input, true, true, gcds) is { } prevention) { action = prevention.Action; return true; }
@@ -100,6 +107,15 @@ internal static class HealerSelection
         if (!CommitmentStillNeeded(decision)) return NoAction(decision, "Prepared recipient is no longer eligible");
         if (decision.PlannedGcd == RaiseSpell)
             return RaiseOnRecipient(input, decision.Recipient) ?? NoAction(decision, "Wait for resurrection preparation or spell availability");
+        bool preparationVisible = decision.Preparation switch
+        {
+            SCH.Recitation => LocalPlayer.HasStatus(SCH.Buffs.Recitation),
+            SCH.EmergencyTactics => LocalPlayer.HasStatus(SCH.Buffs.EmergencyTactics),
+            WHM.ThinAir => LocalPlayer.HasStatus(WHM.Buffs.ThinAir),
+            AST.NeutralSect => LocalPlayer.HasStatus(AST.Buffs.NeutralSect),
+            _ => true,
+        };
+        if (!preparationVisible) return NoAction(decision, "Wait for the confirmed preparation status");
         uint next = decision.PlannedGcd;
         if (next == SCH.DeploymentTactics && !Svc.Objects.SearchById(decision.Recipient).HasStatus(SCH.Buffs.Galvanize))
             return NoAction(decision, "Wait for the confirmed shield to become visible");
@@ -123,7 +139,7 @@ internal static class HealerSelection
         return target is not null && target.IsTargetable && !target.IsDead() && InActionRange(decision.PlannedGcd, target);
     }
 
-    internal static SelectionDecision? Recovery(uint input, bool area, bool gcds, bool explicitHeal)
+    internal static unsafe SelectionDecision? Recovery(uint input, bool area, bool gcds, bool explicitHeal)
     {
         var selected = SelectionRuntime.SelectAlly(BasicHeal);
         if (selected.Recipient is not { } targetId) return null;
@@ -157,12 +173,16 @@ internal static class HealerSelection
             if (Job == 33 && spell is AST.NeutralSect or AST.Horoscope)
             {
                 if (!gcds) continue;
-                if (Prepare(input, PartyHeal, Self, spell, 0, null) is { } preparation) return preparation;
+                uint followup = area || spell == AST.Horoscope ? PartyHeal : AST.AspectedBenefic;
+                ulong intended = area || spell == AST.Horoscope ? Self : targetId;
+                if (Prepare(input, followup, intended, spell, 0, null) is { } preparation) return preparation;
                 continue;
             }
             if (Job == 24 && spell == WHM.PlenaryIndulgence)
             {
-                if (gcds && Prepare(input, PartyHeal, Self, spell, 0, null) is { } plenary) return plenary;
+                uint followup = PlannedWhiteMagePartyHeal(hp, target);
+                if (gcds && followup != 0 && RecipientFor(followup, targetId, out var intended) &&
+                    Prepare(input, followup, intended, spell, 0, null) is { } plenary) return plenary;
                 continue;
             }
             if (IsGcd(spell) && !gcds || !IsGcd(spell) && !CanWeave() && !explicitHeal && InCombat()) continue;
@@ -174,6 +194,7 @@ internal static class HealerSelection
                 if (Prepare(input, spell, recipient, SCH.Recitation, 0, null) is { } preparation) return preparation;
             }
             if (Job == 24 && IsGcd(spell) && !LocalPlayer.HasStatus(WHM.Buffs.ThinAir) &&
+                ActionManager.GetActionCost(ActionType.Action, spell, 0, 0, 0, 0) > 0 &&
                 IsEnabled(area ? Preset.WHM_AoEHeals_ThinAir : Preset.WHM_STHeals_ThinAir) &&
                 GetRemainingCharges(WHM.ThinAir) > (area ? WHM.Config.WHM_AoEHeals_ThinAir : WHM.Config.WHM_STHeals_ThinAir))
             {
@@ -184,6 +205,17 @@ internal static class HealerSelection
         if (!gcds || !explicitHeal && hp >= 80) return null;
         uint fallback = area ? PartyHeal : BasicHeal;
         return RecipientFor(fallback, targetId, out var fallbackTarget) ? Ready(input, fallback, fallbackTarget, "Healing spell fallback") : null;
+    }
+
+    private static uint PlannedWhiteMagePartyHeal(float hp, IGameObject? target)
+    {
+        var order = WHM.Config.WHM_AoE_Heals_Priority;
+        for (int priority = 1; priority <= order.Count; priority++)
+        {
+            int threshold = WHM.GetMatchingConfigAoE(order.IndexOf(priority), target, out var spell, out var enabled);
+            if (enabled && hp <= threshold && IsGcd(spell) && ActionRoutes.Allowed(spell) && ActionReady(spell)) return spell;
+        }
+        return ActionRoutes.Allowed(PartyHeal) && ActionReady(PartyHeal) ? PartyHeal : 0;
     }
 
     private static SelectionDecision? Raise(uint input)
@@ -264,6 +296,7 @@ internal static class HealerSelection
 
     internal static SelectionDecision? Prevention(uint input, bool raidwide, bool tankbuster, bool gcds = true)
     {
+        if (!ExperimentalSelection.PreventiveHealing) return null;
         if (ExperimentalSelection.ActiveSage) return SGE.AutomaticPrevention(raidwide, tankbuster, input, gcds);
         if (!ExperimentalSelection.ActiveHealer) return null;
         if (Continuation(input) is { } continuation) return continuation;
@@ -278,15 +311,16 @@ internal static class HealerSelection
             if (permitted && CanWeave() && Ready(input, action, buster.Recipient, "Known tankbuster recipient", buster.Id) is { } defense) return defense;
         }
         if (!raidwide || SelectionRuntime.Prevention.Available("raidwide") is not { } window) return null;
+        bool mitigationCovered = PartyMitigationCoverage.Covers(window);
         float? deadline = window.DueAt is { } due ? Math.Max(0, (due - Environment.TickCount64) / 1000f) : null;
         if (CanWeave())
         {
             if (Job == 24 && RotationBehaviour.Support != false && GroupDamageIncoming(out bool multihit) && multihit &&
                 IsEnabled(Preset.WHM_Raidwide_LiturgyOfTheBell) && !LocalPlayer.HasStatus(WHM.Buffs.LiturgyOfTheBell) && !IsMoving() &&
                 Ready(input, WHM.LiturgyOfTheBell, Self, "Bell for an observed multihit raidwide", window.Id) is { } bell) return bell;
-            if (Job == 24 && IsEnabled(Preset.WHM_Raidwide_Temperance) && Ready(input, WHM.Temperance, Self, "One mitigation for incoming raidwide", window.Id) is { } temperance) return temperance;
-            if (Job == 28 && IsEnabled(Preset.SCH_Raidwide_Expedient) && Ready(input, SCH.Expedient, Self, "One mitigation for incoming raidwide", window.Id) is { } expedient) return expedient;
-            if (Job == 33 && IsEnabled(Preset.AST_Raidwide_CollectiveUnconscious) && Ready(input, AST.CollectiveUnconscious, Self, "One mitigation for incoming raidwide", window.Id) is { } collective) return collective;
+            if (!mitigationCovered && Job == 24 && IsEnabled(Preset.WHM_Raidwide_Temperance) && Ready(input, WHM.Temperance, Self, "One mitigation for incoming raidwide", window.Id) is { } temperance) return temperance;
+            if (!mitigationCovered && Job == 28 && IsEnabled(Preset.SCH_Raidwide_Expedient) && Ready(input, SCH.Expedient, Self, "One mitigation for incoming raidwide", window.Id) is { } expedient) return expedient;
+            if (!mitigationCovered && Job == 33 && IsEnabled(Preset.AST_Raidwide_CollectiveUnconscious) && Ready(input, AST.CollectiveUnconscious, Self, "One mitigation for incoming raidwide", window.Id) is { } collective) return collective;
         }
         if (!gcds) return null;
         if (Job == 28 && IsEnabled(Preset.SCH_Raidwide_Succor) && SCH.ShieldCheck)
@@ -315,7 +349,15 @@ internal static class HealerSelection
     }
     private static SelectionDecision? Ready(uint input, uint action, ulong recipient, string reason, long eventId = 0)
     {
-        if (!ActionRoutes.Allowed(action) || !ActionReadyForTarget(action, recipient) || !RecipientFor(action, recipient, out var actual)) return null;
+        if (ExperimentalSelection.GroundTargets && HealingGroundSelection.Supported(action))
+        {
+            if (!ActionRoutes.Allowed(action) || !ActionReady(action)) return null;
+            if (HealingGroundSelection.Select(input, action) == All.Cease || SelectionRuntime.Preview(input) is not { } ground) return null;
+            ground = ground with { PreventionEvent = eventId, Reason = reason };
+            SelectionRuntime.Publish(input, ground);
+            return ground;
+        }
+        if (!ActionRoutes.Allowed(action) || !RecipientFor(action, recipient, out var actual) || !ActionReadyForTarget(action, actual)) return null;
         var decision = new SelectionDecision(action, IsGcd(action) ? action : 0, actual, 0, reason, Environment.TickCount64, SelectionRuntime.Generation, eventId);
         SelectionRuntime.Publish(input, decision);
         return decision;

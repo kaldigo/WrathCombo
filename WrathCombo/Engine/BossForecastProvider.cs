@@ -13,6 +13,10 @@ internal static class BossForecastProvider
         ? forecast.Remaining(forecast.Downtime, Environment.TickCount64, Generation) : null;
     internal static float? Raidwide => ExperimentalSelection.Forecasts && Current is { } forecast
         ? forecast.Remaining(forecast.Raidwide, Environment.TickCount64, Generation) : null;
+    internal static float? DowntimeEnd => ExperimentalSelection.Forecasts && Current is { } forecast
+        ? forecast.Remaining(forecast.DowntimeEnd, Environment.TickCount64, Generation) : null;
+    internal static float? MaxCastTime => ExperimentalSelection.Forecasts && Current is { } forecast
+        ? forecast.RemainingLimit(forecast.MaxCastTime, Environment.TickCount64, Generation) : null;
     private static long nextPoll;
     private static string context = "";
     internal static void Reset() { Current = null; context = ""; nextPoll = 0; Generation++; }
@@ -36,6 +40,6 @@ internal static class BossForecastProvider
         Current = new(now, Generation, module,
             EncounterForecast.Earliest(Seconds("Timeline.NextRaidwideIn"), Seconds("Hints.NextRaidwideDamageIn")),
             EncounterForecast.Earliest(Seconds("Timeline.NextTankbusterIn"), Seconds("Hints.NextTankbusterDamageIn")),
-            Seconds("Timeline.NextDowntimeIn"), Seconds("Timeline.NextKnockbackIn"));
+            Seconds("Timeline.NextDowntimeIn"), Seconds("Timeline.NextKnockbackIn"), Seconds("Timeline.NextDowntimeEndIn"), Seconds("Hints.MaxCastTime"));
     }
 }

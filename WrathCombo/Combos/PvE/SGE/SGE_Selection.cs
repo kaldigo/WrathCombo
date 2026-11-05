@@ -35,7 +35,7 @@ internal partial class SGE
 
     internal static SelectionDecision? AutomaticPrevention(bool raidwide, bool tankbuster, uint control = 0, bool gcds = true)
     {
-        if (!ExperimentalSelection.ActiveSage) return null;
+        if (!ExperimentalSelection.ActiveSage || !ExperimentalSelection.PreventiveHealing) return null;
         uint input = control == 0 ? All.AoeHeals : control;
         var pending = SelectionRuntime.Commitment;
         if (control == 0 && pending?.PlannedGcd == EukrasianDiagnosis) input = All.SingleTargetHeals;
@@ -67,7 +67,7 @@ internal partial class SGE
         if (raidwide && SelectionRuntime.Prevention.Available("raidwide") is { } window)
         {
             if (control == 0) input = All.AoeHeals;
-            if (CanWeave())
+            if (CanWeave() && !PartyMitigationCoverage.Covers(window))
             {
                 if (IsEnabled(Preset.SGE_Raidwide_Kerachole) && HasAddersgallAboveHold && !LocalPlayer.HasStatus(Buffs.Kerachole, true) &&
                     EventAbility(input, Kerachole, Player.Object!.GameObjectId, window.Id) is { } kera) return kera;

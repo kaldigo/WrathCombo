@@ -702,8 +702,10 @@ internal partial class GNB : Tank
             InActionRange(action) && //enemy in range of skill
             CanWeave() //can weave
             ;
-    private static bool ShouldUseNoMercy(Preset preset, int stop)
+    private static bool ShouldUseNoMercy(Preset preset, int stop, uint plannedGcd = 0)
     {
+        if (Engine.ExperimentalSelection.ActiveGunbreaker && plannedGcd != 0 &&
+            (plannedGcd == All.Cease || !Engine.ActionRoutes.Allowed(plannedGcd) || !InActionRange(plannedGcd))) return false;
         if (Engine.ExperimentalSelection.ActiveGunbreaker && (HasNM ||
             !Engine.Selection.ResourceWindow.CanFinish(new(0, false, GCDLength, RemainingGCD, 3, false, Engine.BossForecastProvider.Downtime))))
             return false;

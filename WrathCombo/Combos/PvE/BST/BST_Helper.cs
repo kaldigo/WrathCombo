@@ -28,6 +28,13 @@ internal partial class BST
 
     private static void CheckForFinisher(IFramework framework)
     {
+        if (Engine.ExperimentalSelection.Beastmaster)
+        {
+            if (!Engine.ExperimentalSelection.ActiveBeastmaster || !Player.Available || Player.IsDead)
+            { testingFinisher.Reset(); FinisherReady = false; FinisherActions.Clear(); return; }
+            TickTestingFinisher();
+            return;
+        }
         if (!FinisherReady)
         {
             if (JobGauge.MasterInstinct >= 2 && JobGauge.PetInstinct >= 1 && ActionReady(Rally) && ActionReady(RallyingCheer) && JobGauge.PlayerTP >= 100 && JobGauge.BeastTP >= 100)

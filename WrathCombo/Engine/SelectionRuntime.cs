@@ -34,7 +34,7 @@ internal static class SelectionRuntime
         private static bool Set(bool value) { bool previous = refreshOnPress; refreshOnPress = value; return previous; }
         public void Dispose() => refreshOnPress = previous;
     }
-    internal static IDisposable BeginPress(bool queued, uint input = 0) => new PressScope(!queued && (ExperimentalSelection.ActiveHealer || ExperimentalSelection.ActiveDrg || ExperimentalSelection.ActiveTargets || input == PveIntentRouting.FullRotation));
+    internal static IDisposable BeginPress(bool queued, uint input = 0) => new PressScope(!queued && (ExperimentalSelection.ActiveHealer || ExperimentalSelection.ActivePreparedAction || ExperimentalSelection.ActiveNinja || ExperimentalSelection.ActiveDrg || ExperimentalSelection.ActiveTargets || input == PveIntentRouting.FullRotation));
     internal static bool ConsumePressRefresh() { bool refresh = refreshOnPress; refreshOnPress = false; return refresh; }
     private static readonly Dictionary<uint, SelectionDecision> previews = new();
     private static readonly PreparationSequence sequence = new();
@@ -62,7 +62,7 @@ internal static class SelectionRuntime
     internal static SelectionDecision? Preview(uint input) => previews.GetValueOrDefault(input);
     internal static void Tick()
     {
-        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActiveSummoner && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return;
+        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return;
         UpdateContext();
         PendingHealth.Tick(Environment.TickCount64);
         if (encounterGeneration != BossForecastProvider.Generation)
@@ -86,14 +86,22 @@ internal static class SelectionRuntime
             bool buster = TryGetTankBusterTarget(out var victim, out var busterKey);
             Prevention.Observe("tankbuster", buster, Environment.TickCount64, generation, buster ? victim.SafeGameObjectId ?? 0 : 0, null, busterKey);
         }
-        if (Commitment is { } accepted && (!(ExperimentalSelection.ActiveSummoner ? Combos.PvE.SMN.PreparedSpellStillValid(accepted) : HealerSelection.CommitmentStillNeeded(accepted)) ||
+        if (Commitment is { } accepted && (!(ExperimentalSelection.ActiveBlueMage ? Combos.PvE.BLU.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveMachinist ? Combos.PvE.MCH.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveSummoner ? Combos.PvE.SMN.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveRedMage ? Combos.PvE.RDM.PreparedRaiseStillValid(accepted) : HealerSelection.CommitmentStillNeeded(accepted)) ||
             accepted.PreventionEvent != 0 && !Prevention.Contains(accepted.PreventionEvent)))
         {
             TestingApi.Observe("PreparationCanceled:recipient-or-coverage", accepted.Preparation, accepted.PlannedGcd, accepted.Recipient);
             sequence.CancelAccepted();
         }
     }
-    internal static void BeginPreview(uint input) { UpdateContext(); previews.Remove(input); }
+    internal static void BeginPreview(uint input) { UpdateContext(); previews.Remove(input); if (automatic) automaticDecision = null; }
+    internal static IBattleChara? AutomaticRecipient(uint action) => automaticDecision is { } decision &&
+        decision.Action == action && decision.Generation == Generation && Environment.TickCount64 - decision.ObservedAt is >= 0 and < 500
+        ? decision.Preparation != 0 ? Player.Object : Svc.Objects.SearchById(decision.Recipient) as IBattleChara : null;
+    internal static bool MaySwitchVisibleTarget(IGameObject target, bool legacy)
+    {
+        if (target.IsHostile()) return ExperimentalSelection.ActiveTargets ? ExperimentalSelection.SwitchEnemyTarget : legacy;
+        return ExperimentalSelection.ActiveHealer || PvpAllySelection.Active ? ExperimentalSelection.SwitchAllyTarget : legacy;
+    }
     internal static uint Publish(uint input, SelectionDecision decision)
     {
         previews[input] = decision;
@@ -102,13 +110,24 @@ internal static class SelectionRuntime
         var recipient = Svc.Objects.SearchById(decision.Action == decision.Preparation ? Player.Object!.GameObjectId : decision.Recipient);
         return decision.Action.Retarget(input, recipient);
     }
-    internal static unsafe bool Press(uint input, uint result, out ulong? boundRecipient)
+    internal static unsafe bool Press(uint input, uint result, out ulong? boundRecipient, out System.Numerics.Vector3? boundGround)
     {
         boundRecipient = null;
-        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActiveSummoner && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return true;
+        boundGround = null;
+        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return true;
         UpdateContext();
         var decision = previews.GetValueOrDefault(input) ?? (automatic && automaticDecision?.Action == result ? automaticDecision : null);
         if (decision is null || decision.Action != result) { sequence.CancelPress(); return true; }
+        if (decision.GroundPosition is { } position)
+        {
+            if (decision.Generation != Generation || Environment.TickCount64 - decision.ObservedAt >= 500 ||
+                !ActionRoutes.Allowed(result) || !HealingGroundSelection.StillValid(result, position)) return false;
+            sequence.CancelPress();
+            pendingConfirmation = decision;
+            boundRecipient = decision.Recipient;
+            boundGround = position;
+            return true;
+        }
         var recipient = Svc.Objects.SearchById(decision.Recipient);
         uint validateAction = decision.Preparation != 0 ? decision.PlannedGcd : decision.Action;
         if (decision.Generation != Generation || Environment.TickCount64 - decision.ObservedAt >= 500 || recipient is null ||
@@ -124,9 +143,9 @@ internal static class SelectionRuntime
     }
     internal static void Confirm(uint action, bool consumesPreparation, IReadOnlyCollection<ulong>? recipients = null)
     {
-        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActiveSummoner) return;
+        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction) return;
         var expected = pendingConfirmation?.Action == action ? pendingConfirmation : Commitment?.PlannedGcd == action ? Commitment : null;
-        bool confirmedRecipient = expected is null || expected.Preparation == action || expected.Recipient == Player.Object?.GameObjectId ||
+        bool confirmedRecipient = expected is null || expected.GroundPosition is not null || expected.Preparation == action || expected.Recipient == Player.Object?.GameObjectId ||
             recipients is null || recipients.Contains(expected.Recipient);
         sequence.Confirm(action, Environment.TickCount64, Generation, consumesPreparation, confirmedRecipient);
         if (!confirmedRecipient) { pendingConfirmation = null; return; }
@@ -138,6 +157,8 @@ internal static class SelectionRuntime
     }
     internal static unsafe uint RetargetEnemy(uint input, uint action)
     {
+        if (Preview(input) is { } allied && allied.Action == action &&
+            Svc.Objects.SearchById(allied.Recipient) is { } chosen && !chosen.IsHostile()) return action;
         if (Preview(input) is { } retained && retained.Action == action &&
             Commitment is { } accepted && accepted.PlannedGcd == action && accepted.Recipient == retained.Recipient)
             return action;
@@ -169,7 +190,8 @@ internal static class SelectionRuntime
         bool acquire = ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy && selected is null;
         var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,
             new(ActionManager.GetActionRange(action), row.EffectRange, shape, row.CanTargetSelf, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4),
-            new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true), actors, actors, overrides.ToImmutable());
+            new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true), actors, actors,
+            TargetOrder.Apply(overrides, ExperimentalSelection.EnemyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(snapshot);
         TestingApi.RecordDecision("Target", snapshot, result);
         if (result.Recipient is not { } recipient) return Combos.PvE.All.Cease;
@@ -203,7 +225,8 @@ internal static class SelectionRuntime
         var requested = explicitRecipient is { } requestedId ? ImmutableArray.Create(new TargetOverride(TargetSource.Explicit, requestedId))
             : overrides.Where(o => o.Actor is not null && !o.Actor.IsHostile()).Select(o => new TargetOverride(o.Source, o.Actor!.GameObjectId)).ToImmutableArray();
         var input = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius, new(ActionManager.GetActionRange(action), 0),
-            new(ExperimentalSelection.AutomaticAllies, ExperimentalSelection.Fallback, false, true, false), snapshot, snapshot, requested);
+            new(ExperimentalSelection.AutomaticAllies, ExperimentalSelection.Fallback, false, true, false), snapshot, snapshot,
+            TargetOrder.Apply(requested, ExperimentalSelection.AllyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(input);
         TestingApi.RecordDecision("Target", input, result);
         return result;

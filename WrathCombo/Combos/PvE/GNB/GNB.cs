@@ -45,12 +45,14 @@ internal partial class GNB : Tank
             if (ShouldUseLightningShot(Preset.GNB_ST_Simple, 1, 0))
                 return LightningShot;
 
+            uint plannedGcd = PlanTestingGcd(false, false);
+
             //Continuation (MAX PRIORITY): just clip it - it's better than just losing it altogether
             if (ShouldContinue(Preset.GNB_ST_Simple, CanContinue || CanHV, RemainingGCD < 0.6f))
                 return OriginalHook(Continuation);
 
             //No Mercy
-            if (ShouldUseNoMercy(Preset.GNB_ST_Simple, 0))
+            if (ShouldUseNoMercy(Preset.GNB_ST_Simple, 0, plannedGcd))
                 return NoMercy;
 
             //Bloodfest
@@ -81,6 +83,8 @@ internal partial class GNB : Tank
             //Continuation (NORMAL PRIORITY): just send whenever
             if (ShouldContinue(Preset.GNB_ST_Simple, CanContinue, CanWeave()))
                 return OriginalHook(Continuation);
+
+            if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
             //Burst - at Lv100 we want to send Reign as soon as we enter No Mercy (unless we're in opener/reopener with max GF charges), else we send Gnashing Fang (since no Reign)
             var wantGF = GetCooldownRemainingTime(GnashingFang) < 0.5f || !ActionLearned(ReignOfBeasts);
@@ -157,12 +161,14 @@ internal partial class GNB : Tank
             if (ShouldUseLightningShot(Preset.GNB_ST_RangedUptime, GNB_ST_HoldLightningShot, GNB_ST_HoldLightningShotInBurst))
                 return LightningShot;
 
+            uint plannedGcd = PlanTestingGcd(false, true);
+
             //Continuation (MAX PRIORITY): just clip it - it's better than just losing it altogether
             if (ShouldContinue(Preset.GNB_ST_Continuation, CanContinue || CanHV, RemainingGCD < 0.6f))
                 return OriginalHook(Continuation);
 
             //No Mercy
-            if (ShouldUseNoMercy(Preset.GNB_ST_NoMercy, (GNB_ST_NM_BossOption == 1 || !TargetIsBoss()) ? GNB_ST_NM_HPOption : 0))
+            if (ShouldUseNoMercy(Preset.GNB_ST_NoMercy, (GNB_ST_NM_BossOption == 1 || !TargetIsBoss()) ? GNB_ST_NM_HPOption : 0, plannedGcd))
                 return NoMercy;
 
             //Bloodfest
@@ -194,6 +200,8 @@ internal partial class GNB : Tank
             //Continuation (NORMAL PRIORITY): just send whenever
             if (ShouldContinue(Preset.GNB_ST_Continuation, CanContinue, CanWeave()))
                 return OriginalHook(Continuation);
+
+            if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
             //Burst - at Lv100 we want to send Reign as soon as we enter No Mercy (unless we're in opener/reopener with max GF charges), else we send Gnashing Fang (since no Reign)
             var wantGF = GetCooldownRemainingTime(GnashingFang) < 0.5f || !ActionLearned(ReignOfBeasts);
@@ -262,12 +270,14 @@ internal partial class GNB : Tank
             #endregion
 
             #region Rotation
+            uint plannedGcd = PlanTestingGcd(true, false);
+
             if (InCombat())
             {
                 if (ShouldContinue(Preset.GNB_AoE_Simple, CanFB, RemainingGCD < 0.6f))
                     return OriginalHook(Continuation);
 
-                if (ShouldUseNoMercy(Preset.GNB_AoE_Simple, 10))
+                if (ShouldUseNoMercy(Preset.GNB_AoE_Simple, 10, plannedGcd))
                     return NoMercy;
 
                 if (ShouldUseBloodfest(Preset.GNB_AoE_Simple))
@@ -284,6 +294,8 @@ internal partial class GNB : Tank
 
                 if (ShouldContinue(Preset.GNB_AoE_Simple, CanFB, CanWeave()))
                     return OriginalHook(Continuation);
+
+                if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
                 if (ShouldUseReignOfBeasts(Preset.GNB_AoE_Simple))
                     return ReignOfBeasts;
@@ -337,12 +349,14 @@ internal partial class GNB : Tank
 
             #region Rotation
             var aoe = AOECombo(GNB_AoE_Overcap_Choice, GNB_AoE_FatedCircle_BurstStrike);
+            uint plannedGcd = PlanTestingGcd(true, true);
+
             if (InCombat())
             {
                 if (ShouldContinue(Preset.GNB_AoE_FatedBrand, CanFB, RemainingGCD < 0.6f))
                     return OriginalHook(Continuation);
 
-                if (ShouldUseNoMercy(Preset.GNB_AoE_NoMercy, GNB_AoE_NoMercyStop))
+                if (ShouldUseNoMercy(Preset.GNB_AoE_NoMercy, GNB_AoE_NoMercyStop, plannedGcd))
                     return NoMercy;
 
                 if (ShouldUseBloodfest(Preset.GNB_AoE_Bloodfest))
@@ -359,6 +373,8 @@ internal partial class GNB : Tank
 
                 if (ShouldContinue(Preset.GNB_AoE_FatedBrand, CanFB, CanWeave()))
                     return OriginalHook(Continuation);
+
+                if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
                 if (ShouldUseReignOfBeasts(Preset.GNB_AoE_Reign))
                     return ReignOfBeasts;

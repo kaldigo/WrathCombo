@@ -1001,6 +1001,8 @@ internal unsafe class AutoRotationController
 
                 OverrideTarget = target ?? OverrideTarget;
                 uint outAct = OriginalHook(InvokeCombo(preset, attributes, ref gameAct, OverrideTarget));
+                if (SelectionRuntime.AutomaticRecipient(outAct) is { } resolvedRecipient)
+                { target = resolvedRecipient; OverrideTarget = resolvedRecipient; }
                 if (outAct is All.Cease) return true;
                 if (!ActionReady(outAct))
                     return false;
@@ -1018,7 +1020,7 @@ internal unsafe class AutoRotationController
                 if (TimeMoving.TotalMilliseconds > 0 && castTime > 0 && !orbwalking)
                     return false;
 
-                if (cfg.DPSSettings.DPSAlwaysHardTarget && OverrideTarget is not null)
+                if (OverrideTarget is not null && SelectionRuntime.MaySwitchVisibleTarget(OverrideTarget, cfg.DPSSettings.DPSAlwaysHardTarget))
                     Svc.Targets.Target = OverrideTarget;
 
                 var canUseSelf = s && sheet.CanTargetSelf;
@@ -1075,6 +1077,8 @@ internal unsafe class AutoRotationController
 
             OverrideTarget = target ?? OverrideTarget;
             var outAct = OriginalHook(InvokeCombo(preset, attributes, ref gameAct, target));
+            if (SelectionRuntime.AutomaticRecipient(outAct) is { } resolvedRecipient)
+            { target = resolvedRecipient; OverrideTarget = resolvedRecipient; }
             if (outAct >= All.Items)
             {
                 Svc.Log.Debug($"Using item {outAct.ActionName()}");
@@ -1116,7 +1120,8 @@ internal unsafe class AutoRotationController
 
             if (target is not null)
             {
-                if ((!isHeal && cfg.DPSSettings.DPSAlwaysHardTarget && mode is not DPSRotationMode.Manual) || (isHeal && cfg.HealerSettings.HealerAlwaysHardTarget && mode is not HealerRotationMode.Manual))
+                if (SelectionRuntime.MaySwitchVisibleTarget(target,
+                    (!isHeal && cfg.DPSSettings.DPSAlwaysHardTarget && mode is not DPSRotationMode.Manual) || (isHeal && cfg.HealerSettings.HealerAlwaysHardTarget && mode is not HealerRotationMode.Manual)))
                     Svc.Targets.Target = target;
             }
 

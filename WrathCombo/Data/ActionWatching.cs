@@ -1,4 +1,4 @@
-﻿using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
 using ECommons;
@@ -363,7 +363,9 @@ public static class ActionWatching
             {
                 Engine.IntentRouting.ConfirmAction(actionId);
                 Engine.PveIntentRouting.Confirm(actionId);
-                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActiveSummoner) &&
+                NIN.ConfirmTestingMudra(actionId);
+                BST.ConfirmTestingFinisher(actionId);
+                if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction) &&
                     lastTestingConfirmation != (casterEntityId, header->GlobalSequence))
                 {
                     lastTestingConfirmation = (casterEntityId, header->GlobalSequence);
@@ -616,11 +618,13 @@ public static class ActionWatching
 
                 var replacedWith = actionManager->GetAdjustedActionId(actionId);
                 ulong? testingRecipient = null;
+                Vector3? testingGround = null;
                 if (mode != ActionManager.UseActionMode.Queue)
                 {
                     Engine.IntentRouting.ObserveInput(actionId, replacedWith);
-                    if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient)) return false;
+                    if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient, out testingGround)) return false;
                     Engine.PveIntentRouting.Press(actionId, replacedWith);
+                    NIN.PressTestingMudra(actionId, replacedWith);
                 }
                 var queuedAct = actionManager->GetAdjustedActionId(actionManager->QueuedActionId);
 
@@ -703,6 +707,14 @@ public static class ActionWatching
                         targetId = originalTargetId;
 
                 // Support Retargeted ground actions
+                if (areaTargeted && testingGround is { } retainedGround)
+                {
+                    // The selected point is revalidated at press time. A rejected native
+                    // placement must not silently become a different location at our feet.
+                    bool placed = ActionManager.Instance()->UseActionLocation(actionType, replacedWith, location: &retainedGround);
+                    Service.ActionReplacer.EnableActionReplacingIfRequired();
+                    return placed;
+                }
                 if ((areaTargeted && changed) || AutoRotationController.WouldLikeToGroundTarget)
                 {
                     var location = Player.Position;

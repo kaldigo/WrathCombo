@@ -42,7 +42,7 @@ internal static class PvPIntentRouting
     internal static void Tick() => CheckContext();
     internal static void ConfirmRecipient(uint action,ulong target)
     {
-        if(Enabled && action==29243)healingRecipient=(Options.Job,Svc.PlayerState.ContentId,target,Environment.TickCount64);
+        if((Enabled || PvpAllySelection.Active) && action==29243)healingRecipient=(Options.Job,Svc.PlayerState.ContentId,target,Environment.TickCount64);
     }
     internal static Dalamud.Game.ClientState.Objects.Types.IGameObject? HealingRecipient =>
         healingRecipient.Job==Options.Job && healingRecipient.Character==Svc.PlayerState.ContentId &&

@@ -531,6 +531,8 @@ internal partial class RDM : Caster
             if (actionID != Role.Swiftcast)
                 return actionID;
 
+            if (Engine.ExperimentalSelection.ActiveRedMage) return TestingRaise(actionID);
+
             if (ActionLearned(Verraise))
             {
                 bool schwifty = LocalPlayer.HasStatus(Role.Buffs.Swiftcast);

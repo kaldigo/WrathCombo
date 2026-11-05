@@ -1,4 +1,4 @@
-﻿using WrathCombo.Combos.PvE.Enums;
+using WrathCombo.Combos.PvE.Enums;
 using WrathCombo.Core;
 using WrathCombo.CustomComboNS;
 using WrathCombo.Native;
@@ -306,8 +306,10 @@ internal partial class DNC : PhysicalRanged
 
             #region GCD
 
+            if (TryTestingDeadline(false, false, out uint urgentContinuation)) return urgentContinuation;
+
             // ST Technical Step
-            if (needToTech && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
                 return TechnicalStep;
 
             // ST Last Dance
@@ -332,7 +334,7 @@ internal partial class DNC : PhysicalRanged
                 return OriginalHook(FinishingMove);
 
             // ST Standard Step
-            if (needToStandardOrFinish && needToStandard)
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
                 return StandardStep;
 
             // Emergency Starfall usage
@@ -623,8 +625,10 @@ internal partial class DNC : PhysicalRanged
 
             #region GCD
 
+            if (TryTestingDeadline(false, true, out uint urgentContinuation)) return urgentContinuation;
+
             // ST Technical Step
-            if (needToTech && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
                 return TechnicalStep;
 
             // ST Last Dance
@@ -648,7 +652,7 @@ internal partial class DNC : PhysicalRanged
                 return OriginalHook(FinishingMove);
 
             // ST Standard Step
-            if (needToStandardOrFinish && needToStandard)
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
                 return StandardStep;
 
             // Emergency Starfall usage
@@ -914,8 +918,10 @@ internal partial class DNC : PhysicalRanged
 
             #region GCD
 
+            if (TryTestingDeadline(true, false, out uint urgentContinuation)) return urgentContinuation;
+
             // AoE Technical Step
-            if (needToTech && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
                 return TechnicalStep;
 
             // AoE Last Dance
@@ -935,7 +941,7 @@ internal partial class DNC : PhysicalRanged
                 return OriginalHook(FinishingMove);
 
             // AoE Standard Step
-            if (needToStandardOrFinish && needToStandard)
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
                 return StandardStep;
 
             // Emergency Starfall usage
@@ -1166,8 +1172,10 @@ internal partial class DNC : PhysicalRanged
 
             #region GCD
 
+            if (TryTestingDeadline(true, true, out uint urgentContinuation)) return urgentContinuation;
+
             // AoE Technical Step
-            if (needToTech && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
                 return TechnicalStep;
 
             // AoE Last Dance
@@ -1186,7 +1194,7 @@ internal partial class DNC : PhysicalRanged
                 return OriginalHook(FinishingMove);
 
             // AoE Standard Step
-            if (needToStandardOrFinish && needToStandard)
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
                 return StandardStep;
 
             // Emergency Starfall usage

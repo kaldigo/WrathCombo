@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using WrathCombo.Engine.Selection;
 using ECommons.DalamudServices;
 using ECommons.GameHelpers;
 using Newtonsoft.Json.Linq;
@@ -15,6 +17,26 @@ internal static class ExperimentalSelection
     internal static bool Viper { get; private set; }
     internal static bool Reaper { get; private set; }
     internal static bool Summoner { get; private set; }
+    internal static bool RedMage { get; private set; }
+    internal static bool Pictomancer { get; private set; }
+    internal static bool BlackMage { get; private set; }
+    internal static bool Samurai { get; private set; }
+    internal static bool Monk { get; private set; }
+    internal static bool Ninja { get; private set; }
+    internal static bool Dancer { get; private set; }
+    internal static bool BlueMage { get; private set; }
+    internal static bool Beastmaster { get; private set; }
+    internal static bool ActiveBlueMage => BlueMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 36;
+    internal static bool ActiveBeastmaster => Beastmaster && !Svc.ClientState.IsPvP && (uint)Player.Job == 43;
+    internal static bool ActiveDancer => Dancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 38;
+    internal static bool ActiveMonk => Monk && !Svc.ClientState.IsPvP && (uint)Player.Job == 20;
+    internal static bool ActiveNinja => Ninja && !Svc.ClientState.IsPvP && (uint)Player.Job == 30;
+    internal static bool ActiveSamurai => Samurai && !Svc.ClientState.IsPvP && (uint)Player.Job == 34;
+    internal static bool ActiveBlackMage => BlackMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 25;
+    internal static bool ActivePictomancer => Pictomancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 42;
+    internal static bool ActiveRedMage => RedMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 35;
+    internal static bool ActivePreparedCaster => ActiveSummoner || ActiveRedMage;
+    internal static bool ActivePreparedAction => ActivePreparedCaster || ActiveMachinist || ActiveBlueMage;
     internal static bool ActiveSummoner => Summoner && !Svc.ClientState.IsPvP && (uint)Player.Job == 27;
     internal static bool ActiveViper => Viper && !Svc.ClientState.IsPvP && (uint)Player.Job == 41;
     internal static bool ActiveReaper => Reaper && !Svc.ClientState.IsPvP && (uint)Player.Job == 39;
@@ -40,11 +62,15 @@ internal static class ExperimentalSelection
     internal static bool Forecasts { get; private set; }
     internal static bool IncludeHealing { get; private set; }
     internal static bool IncludeRaise { get; private set; }
+    internal static bool IncludeCleanse { get; private set; }
+    internal static bool PreventiveHealing { get; private set; } = true;
     internal static bool HardCastRaise { get; private set; } = true;
     internal static bool HealingGcds { get; private set; }
     internal static bool PartyMouseover { get; private set; } = true;
     internal static bool WorldMouseover { get; private set; } = true;
     internal static bool Focus { get; private set; }
+    internal static bool GroundTargets { get; private set; }
+    internal static bool SpaceMitigation { get; private set; }
     internal static bool Fallback { get; private set; }
     internal static bool AutomaticAllies { get; private set; } = true;
     internal static bool AutomaticEnemies { get; private set; }
@@ -54,32 +80,55 @@ internal static class ExperimentalSelection
     internal static bool EnemyFocus { get; private set; }
     internal static bool AcquireEnemy { get; private set; }
     internal static bool OverridesInAutomation { get; private set; }
+    internal static string[] AllyOverrideOrder { get; private set; } = [.. TargetOrder.AllySources];
+    internal static string[] EnemyOverrideOrder { get; private set; } = [.. TargetOrder.EnemySources];
+    internal static bool SwitchEnemyTarget { get; private set; }
+    internal static bool SwitchAllyTarget { get; private set; }
     internal static bool ActiveTargets => Svc.ClientState.IsPvP ? PvpTargeting : EnemyTargeting;
     internal static bool ActiveDrg => Drg && !Svc.ClientState.IsPvP && (uint)Player.Job == 22;
     internal static bool ActiveSage => Sage && !Svc.ClientState.IsPvP && (uint)Player.Job == 40;
     internal static JObject Read() => new() { ["Drg"] = Drg, ["Machinist"] = Machinist, ["Paladin"] = Paladin, ["CompareDrg"] = CompareDrg, ["Sage"] = Sage,
-        ["Scholar"] = Scholar, ["Astrologian"] = Astrologian, ["WhiteMage"] = WhiteMage, ["Forecasts"] = Forecasts, ["Bard"] = Bard,
-        ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner,
+        ["Scholar"] = Scholar, ["Astrologian"] = Astrologian, ["WhiteMage"] = WhiteMage, ["Forecasts"] = Forecasts, ["Bard"] = Bard, ["Dancer"] = Dancer, ["BlueMage"] = BlueMage, ["Beastmaster"] = Beastmaster,
+        ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner, ["RedMage"] = RedMage, ["Pictomancer"] = Pictomancer, ["BlackMage"] = BlackMage, ["Samurai"] = Samurai, ["Monk"] = Monk, ["Ninja"] = Ninja,
         ["Warrior"] = Warrior, ["DarkKnight"] = DarkKnight, ["Gunbreaker"] = Gunbreaker, ["PvpMachinist"] = PvpMachinist,
         ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["HardCastRaise"] = HardCastRaise,
+        ["IncludeCleanse"] = IncludeCleanse, ["PreventiveHealing"] = PreventiveHealing,
         ["HealingGcds"] = HealingGcds, ["PartyMouseover"] = PartyMouseover, ["WorldMouseover"] = WorldMouseover,
-        ["Focus"] = Focus, ["Fallback"] = Fallback, ["AutomaticAllies"] = AutomaticAllies, ["AutomaticEnemies"] = AutomaticEnemies,
+        ["Focus"] = Focus, ["GroundTargets"] = GroundTargets, ["SpaceMitigation"] = SpaceMitigation, ["Fallback"] = Fallback, ["AutomaticAllies"] = AutomaticAllies, ["AutomaticEnemies"] = AutomaticEnemies,
         ["EnemyTargeting"] = EnemyTargeting, ["AcquireEnemy"] = AcquireEnemy, ["OverridesInAutomation"] = OverridesInAutomation,
-        ["EnemyMouseover"] = EnemyMouseover, ["EnemyFocus"] = EnemyFocus, ["PvpTargeting"] = PvpTargeting };
+        ["EnemyMouseover"] = EnemyMouseover, ["EnemyFocus"] = EnemyFocus, ["PvpTargeting"] = PvpTargeting,
+        ["AllyOverrideOrder"] = new JArray(AllyOverrideOrder), ["EnemyOverrideOrder"] = new JArray(EnemyOverrideOrder),
+        ["SwitchEnemyTarget"] = SwitchEnemyTarget, ["SwitchAllyTarget"] = SwitchAllyTarget };
     internal static void Apply(JObject request)
     {
         if (CustomComboFunctions.InCombat() || AutomationOwnership.Busy || SelectionRuntime.Commitment is not null)
             throw new InvalidOperationException("Change testing providers outside combat after the current preparation finishes.");
         var current = Read();
         foreach (var property in request.Properties())
+        {
+            if (property.Name is "AllyOverrideOrder" or "EnemyOverrideOrder")
+            {
+                if (property.Value is not JArray array || array.Any(item => item.Type != JTokenType.String) ||
+                    !TargetOrder.Valid(array.Values<string>().Select(item => item!).ToArray(), property.Name == "AllyOverrideOrder"))
+                    throw new InvalidOperationException("Target order must contain each supported source exactly once.");
+                continue;
+            }
             if (!current.ContainsKey(property.Name) || property.Value.Type != JTokenType.Boolean)
                 throw new InvalidOperationException("Unknown testing setting or non-boolean value: " + property.Name);
+        }
         foreach (var property in request.Properties()) current[property.Name] = property.Value;
         Drg = current.Value<bool>("Drg"); Sage = current.Value<bool>("Sage"); Forecasts = current.Value<bool>("Forecasts");
         Machinist = current.Value<bool>("Machinist");
         Bard = current.Value<bool>("Bard");
         Viper = current.Value<bool>("Viper"); Reaper = current.Value<bool>("Reaper");
         Summoner = current.Value<bool>("Summoner");
+        RedMage = current.Value<bool>("RedMage");
+        Pictomancer = current.Value<bool>("Pictomancer");
+        BlackMage = current.Value<bool>("BlackMage");
+        Samurai = current.Value<bool>("Samurai");
+        Monk = current.Value<bool>("Monk"); Ninja = current.Value<bool>("Ninja");
+        Dancer = current.Value<bool>("Dancer");
+        BlueMage = current.Value<bool>("BlueMage"); Beastmaster = current.Value<bool>("Beastmaster");
         Paladin = current.Value<bool>("Paladin");
         Warrior = current.Value<bool>("Warrior"); DarkKnight = current.Value<bool>("DarkKnight");
         Gunbreaker = current.Value<bool>("Gunbreaker");
@@ -88,14 +137,20 @@ internal static class ExperimentalSelection
         CompareDrg = current.Value<bool>("CompareDrg");
         IncludeHealing = current.Value<bool>("IncludeHealing"); PartyMouseover = current.Value<bool>("PartyMouseover");
         IncludeRaise = current.Value<bool>("IncludeRaise"); HardCastRaise = current.Value<bool>("HardCastRaise");
+        IncludeCleanse = current.Value<bool>("IncludeCleanse"); PreventiveHealing = current.Value<bool>("PreventiveHealing");
         HealingGcds = current.Value<bool>("HealingGcds");
         WorldMouseover = current.Value<bool>("WorldMouseover"); Focus = current.Value<bool>("Focus");
+        GroundTargets = current.Value<bool>("GroundTargets");
+        SpaceMitigation = current.Value<bool>("SpaceMitigation");
         Fallback = current.Value<bool>("Fallback"); AutomaticAllies = current.Value<bool>("AutomaticAllies");
         AutomaticEnemies = current.Value<bool>("AutomaticEnemies");
         EnemyTargeting = current.Value<bool>("EnemyTargeting"); AcquireEnemy = current.Value<bool>("AcquireEnemy");
         PvpTargeting = current.Value<bool>("PvpTargeting");
         EnemyMouseover = current.Value<bool>("EnemyMouseover"); EnemyFocus = current.Value<bool>("EnemyFocus");
         OverridesInAutomation = current.Value<bool>("OverridesInAutomation");
+        AllyOverrideOrder = current["AllyOverrideOrder"]!.Values<string>().Select(item => item!).ToArray();
+        EnemyOverrideOrder = current["EnemyOverrideOrder"]!.Values<string>().Select(item => item!).ToArray();
+        SwitchEnemyTarget = current.Value<bool>("SwitchEnemyTarget"); SwitchAllyTarget = current.Value<bool>("SwitchAllyTarget");
         SelectionRuntime.Reset();
         BossForecastProvider.Reset();
     }

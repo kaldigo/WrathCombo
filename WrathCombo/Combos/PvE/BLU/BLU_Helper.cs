@@ -48,6 +48,7 @@ internal partial class BLU
             if (IsSpellActive(Bristle) && ActionReady(Bristle) &&
                 !LocalPlayer.HasStatus(Buffs.Bristle) && !JustUsed(Bristle))
             {
+                if (Engine.ExperimentalSelection.ActiveBlueMage) return PrepareTestingDot(ref actionID);
                 actionID = Bristle;
                 return true;
             }

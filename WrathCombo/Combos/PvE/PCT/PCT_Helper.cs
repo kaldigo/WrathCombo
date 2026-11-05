@@ -405,6 +405,18 @@ internal partial class PCT
     #region Motifs
     private static bool TryDrawMotif(Combo flags, ref uint actionID)
     {
+        bool CanFinishMotif(uint root)
+        {
+            if (!Engine.ExperimentalSelection.ActivePictomancer) return true;
+            uint spell = OriginalHook(root);
+            if (!Engine.ActionRoutes.Allowed(spell)) return false;
+            float cast = !InCombat() || LocalPlayer.HasStatus(Role.Buffs.Swiftcast) ? 0 : GetActionCastTime(spell);
+            var snapshot = new Engine.Selection.CastBudgetInput(cast, RemainingGCD, IsMoving(), Engine.BossForecastProvider.MaxCastTime,
+                InCombat() && CurrentTarget is null ? Engine.BossForecastProvider.DowntimeEnd : null);
+            bool fits = Engine.Selection.CastBudget.Fits(snapshot);
+            Engine.TestingApi.RecordDecision("Cast.Budget", snapshot, fits);
+            return fits;
+        }
         #region Enables
         bool motifsEnabled = 
             flags.HasFlag(Combo.Simple) ||
@@ -469,7 +481,7 @@ internal partial class PCT
         
         if (motifsEnabled)
         {
-            if (creatureEnabled && CreatureMotifReady &&
+            if (creatureEnabled && CreatureMotifReady && CanFinishMotif(CreatureMotif) &&
                 (prepullEnabled && !InCombat() || //Prepull Motifs
                  noTargetEnabled && InCombat() && CurrentTarget == null || //Downtime Motifs
                  swiftcastEnabled && LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && creatureHealthCheck || //Swiftcast Motifs
@@ -480,7 +492,7 @@ internal partial class PCT
                 return true;
             }
 
-            if (weaponEnabled && WeaponMotifReady &&
+            if (weaponEnabled && WeaponMotifReady && CanFinishMotif(WeaponMotif) &&
                 (prepullEnabled && !InCombat() || //Prepull Motifs
                  noTargetEnabled && InCombat() && CurrentTarget == null || //Downtime Motifs
                  swiftcastEnabled && LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && weaponHealthCheck || //Swiftcast Motifs
@@ -491,7 +503,7 @@ internal partial class PCT
                 return true;
             }
 
-            if (landscapeEnabled && LandscapeMotifReady &&
+            if (landscapeEnabled && LandscapeMotifReady && CanFinishMotif(LandscapeMotif) &&
                 (prepullEnabled && !InCombat() || //Prepull Motifs
                  noTargetEnabled && InCombat() && CurrentTarget == null || //Downtime Motifs
                  swiftcastEnabled && LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && landscapeHealthCheck || //Swiftcast Motifs

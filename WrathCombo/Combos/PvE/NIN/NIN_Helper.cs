@@ -428,6 +428,7 @@ internal partial class NIN
 
         public MudraCasting()
         {
+            testingMudras.Add(this);
             OnStatusChanged += StatusChanged;
         }
 
