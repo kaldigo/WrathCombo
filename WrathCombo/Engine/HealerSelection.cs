@@ -90,8 +90,8 @@ internal static partial class HealerSelection
         if (Continuation(input) is { } continuation) { action = continuation.Action; return true; }
         if (st && Job == 24 && ContentSpecificActions.TryGet(ref action, out var content, healing: true))
         { action = content; return true; }
-        if (damage && (!ExperimentalSelection.IncludeHealing || RotationBehaviour.Support == false)) return false;
-        bool gcds = !damage || ExperimentalSelection.HealingGcds;
+        if (damage && (!ExperimentalSelection.EffectiveHealing || RotationBehaviour.Support == false)) return false;
+        bool gcds = !damage || ExperimentalSelection.EffectiveHealingGcds;
         if (Prevention(input, true, true, gcds) is { } prevention) { action = prevention.Action; return true; }
         if (!damage && Utility(input, area, gcds) is { } utility) { action = utility.Action; return true; }
         if (Recovery(input, area || input == All.AoEDPS || input == PveIntentRouting.FullRotation && PveIntentRouting.Area, gcds, !damage) is { } recovery)

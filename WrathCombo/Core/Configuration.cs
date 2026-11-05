@@ -76,12 +76,9 @@ public partial class Configuration : IPluginConfiguration
 
     /// If the DTR Bar text should be shortened. Default: false.
     /// <seealso cref="WrathCombo.OnFrameworkUpdate"/>
-    [SettingCategory(Main_UI_Options)]
-    [Setting(Setting.Type.Toggle)]
+    // Retained for config compatibility; Accord owns server-bar controls.
     public bool ShortDTRText = false;
 
-    [SettingCategory(Main_UI_Options)]
-    [Setting(Setting.Type.Toggle)]
     public bool ShowOpenerDtr = false;
 
     /// Hides the message of the day. Default: false.

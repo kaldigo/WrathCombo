@@ -60,7 +60,10 @@ internal static class ExperimentalSelection
     internal static bool Astrologian { get; private set; }
     internal static bool WhiteMage { get; private set; }
     internal static bool ActiveHealer => Observed("ActiveHealer", !Svc.ClientState.IsPvP && ((uint)Player.Job switch
-    { 24 => WhiteMage, 28 => Scholar, 33 => Astrologian, 40 => Sage, _ => false }));
+    { 24 => WhiteMage || ManagedHealing, 28 => Scholar || ManagedHealing, 33 => Astrologian || ManagedHealing, 40 => Sage || ManagedHealing, _ => false }));
+    private static bool ManagedHealing => RotationBehaviour.Preferences?.IncludeHealing == true;
+    internal static bool EffectiveHealing => RotationBehaviour.Preferences?.IncludeHealing ?? IncludeHealing;
+    internal static bool EffectiveHealingGcds => RotationBehaviour.Preferences?.HealingGcds ?? HealingGcds;
     internal static bool Forecasts { get; private set; }
     internal static bool IncludeHealing { get; private set; }
     internal static bool IncludeRaise { get; private set; }
@@ -88,7 +91,7 @@ internal static class ExperimentalSelection
     internal static bool SwitchAllyTarget { get; private set; }
     internal static bool ActiveTargets => Observed("ActiveTargets", Svc.ClientState.IsPvP ? PvpTargeting : EnemyTargeting);
     internal static bool ActiveDrg => Observed("ActiveDrg", Drg && !Svc.ClientState.IsPvP && (uint)Player.Job == 22);
-    internal static bool ActiveSage => Observed("ActiveSage", Sage && !Svc.ClientState.IsPvP && (uint)Player.Job == 40);
+    internal static bool ActiveSage => Observed("ActiveSage", (Sage || ManagedHealing) && !Svc.ClientState.IsPvP && (uint)Player.Job == 40);
     private static bool Observed(string feature, bool active)
     {
         AccordDiagnostics.DiagnosticLog.Event("Feature.Evaluated", () => new { Feature = feature, Active = active, Job = (uint)Player.Job, PvP = Svc.ClientState.IsPvP });

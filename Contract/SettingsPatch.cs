@@ -78,7 +78,7 @@ public static class SettingsPatch
                         throw new ArgumentException("Invalid rotation preference job.");
                     foreach (var value in values.Properties())
                     {
-                        if (value.Name is not ("Targeting" or "TargetRange" or "AoeTargets" or "ActivityUntargetedAoe" or "CombatOnly" or "Openers" or "OpenerPotions")) throw new ArgumentException("Unknown rotation preference.");
+                        if (value.Name is not ("Targeting" or "TargetRange" or "AoeTargets" or "ActivityUntargetedAoe" or "CombatOnly" or "Openers" or "OpenerPotions" or "IncludeHealing" or "HealingGcds")) throw new ArgumentException("Unknown rotation preference.");
                         if (value.Value.Type == JTokenType.Null) continue;
                         if (value.Name is "Targeting" or "TargetRange" or "AoeTargets")
                         {

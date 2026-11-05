@@ -579,7 +579,7 @@ public static class ConflictingPluginsChecks
             if (!ThrottlePassed(forceRefresh: forceRefresh))
                 return;
 
-            OpenerDTRDisabled = P.OpenerDtr.UserHidden && Service.Configuration.ShowOpenerDtr;
+            OpenerDTRDisabled = false; // Accord owns server-bar controls
 
             if (OpenerDTRDisabled)
                 MarkConflict();

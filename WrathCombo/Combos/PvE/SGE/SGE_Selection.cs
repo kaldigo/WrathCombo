@@ -99,8 +99,8 @@ internal partial class SGE
         if (!stHeal && !aoeHeal && !stDamage && !aoeDamage) return false;
         if (ExperimentalContinuation(ref action)) return true;
         bool damage = stDamage || aoeDamage;
-        if (damage && (!ExperimentalSelection.IncludeHealing || RotationBehaviour.Support == false)) return false;
-        bool gcds = !damage || ExperimentalSelection.HealingGcds;
+        if (damage && (!ExperimentalSelection.EffectiveHealing || RotationBehaviour.Support == false)) return false;
+        bool gcds = !damage || ExperimentalSelection.EffectiveHealingGcds;
         if (AutomaticPrevention(aoeHeal || damage, stHeal || damage, input, gcds) is { } prevention)
         { action = prevention.Action; return true; }
         if (!damage && TryTestingUtility(ref action, aoeHeal)) return true;

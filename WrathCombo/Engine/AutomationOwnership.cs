@@ -97,6 +97,7 @@ internal sealed class AutomationOwnership : IDisposable
                 if (!success) Lease.Stop();
             }
             return new JObject { ["Success"] = success, ["Version"] = 1, ["Managed"] = Lease.Managed,
+                ["Running"] = new AutoRotationConfigIPCWrapper(Service.Configuration.RotationConfig).Enabled,
                 ["Allowed"] = Allowed, ["Owned"] = Lease.OwnedBy(token, now), ["Busy"] = Busy,
                 ["Build"] = typeof(AutomationOwnership).Assembly.ManifestModule.ModuleVersionId.ToString() }.ToString();
         }
