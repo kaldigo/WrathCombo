@@ -929,7 +929,10 @@ internal unsafe class AutoRotationController
             if (ActionManager.Instance()->QueuedActionId != 0)
                 return true;
 
-            if (!attributes.AutoAction!.IsHeal && SimpleTarget.HardTarget is null && RotationBehaviour.Preferences?.ActivityUntargetedAoe is { } untargeted)
+            if (!attributes.AutoAction!.IsHeal && SimpleTarget.HardTarget is null &&
+                !(ExperimentalSelection.ActiveTargets && (ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy ||
+                    ExperimentalSelection.OverridesInAutomation && (ExperimentalSelection.EnemyMouseover || ExperimentalSelection.EnemyFocus))) &&
+                RotationBehaviour.Preferences?.ActivityUntargetedAoe is { } untargeted)
             {
                 if (UntargetedAoePolicy.Eligible(RotationBehaviour.Managed, untargeted, InPvP(), RotationBehaviour.Activity,
                     false, cfg.InCombatOnly, InCombat()))
@@ -948,6 +951,8 @@ internal unsafe class AutoRotationController
 
             var useAutoTarget = cfg.DPSRotationMode != DPSRotationMode.Manual || (cfg.DPSRotationMode == DPSRotationMode.Manual && cfg.DPSSettings.AoEIgnoreManual && (!cfg.DPSSettings.AoEOnlyWhenTargeting || manualTarget is not null));
             target = useAutoTarget ? autoTarget : manualTarget;
+
+            if (!attributes.AutoAction.IsHeal) target = SelectionRuntime.ResolveAutomaticEnemy(gameAct, target);
 
             if ((target is not IBattleChara t || (!t.IsHostile() && !t.IsFriendly())) && cfg.PauseWhenNoTarget) return true;
 
@@ -1068,6 +1073,8 @@ internal unsafe class AutoRotationController
                 return true;
 
             var target = GetSingleTarget(mode);
+
+            if (attributes.AutoAction?.IsHeal != true) target = SelectionRuntime.ResolveAutomaticEnemy(gameAct, target);
 
             if ((target is not { } t || (!t.IsHostile() && !t.IsFriendly())) && cfg.PauseWhenNoTarget) return true;
 

@@ -36,7 +36,7 @@ internal static class ExperimentalSelection
     internal static bool ActivePictomancer => Pictomancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 42;
     internal static bool ActiveRedMage => RedMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 35;
     internal static bool ActivePreparedCaster => ActiveSummoner || ActiveRedMage;
-    internal static bool ActivePreparedAction => ActivePreparedCaster || ActiveMachinist || ActiveBlueMage;
+    internal static bool ActivePreparedAction => ActivePreparedCaster || ActiveMachinist || ActiveBlueMage || ActivePvpMachinist;
     internal static bool ActiveSummoner => Summoner && !Svc.ClientState.IsPvP && (uint)Player.Job == 27;
     internal static bool ActiveViper => Viper && !Svc.ClientState.IsPvP && (uint)Player.Job == 41;
     internal static bool ActiveReaper => Reaper && !Svc.ClientState.IsPvP && (uint)Player.Job == 39;
@@ -45,6 +45,8 @@ internal static class ExperimentalSelection
     internal static bool Warrior { get; private set; }
     internal static bool Gunbreaker { get; private set; }
     internal static bool PvpMachinist { get; private set; }
+    internal static bool PvpScheduling { get; private set; }
+    internal static bool ActivePvpScheduling => PvpScheduling && PvPIntentRouting.Active;
     internal static bool ActivePvpMachinist => PvpMachinist && Svc.ClientState.IsPvP && (uint)Player.Job == 31;
     internal static bool ActiveGunbreaker => Gunbreaker && !Svc.ClientState.IsPvP && (uint)Player.Job == 37;
     internal static bool DarkKnight { get; private set; }
@@ -90,7 +92,7 @@ internal static class ExperimentalSelection
     internal static JObject Read() => new() { ["Drg"] = Drg, ["Machinist"] = Machinist, ["Paladin"] = Paladin, ["CompareDrg"] = CompareDrg, ["Sage"] = Sage,
         ["Scholar"] = Scholar, ["Astrologian"] = Astrologian, ["WhiteMage"] = WhiteMage, ["Forecasts"] = Forecasts, ["Bard"] = Bard, ["Dancer"] = Dancer, ["BlueMage"] = BlueMage, ["Beastmaster"] = Beastmaster,
         ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner, ["RedMage"] = RedMage, ["Pictomancer"] = Pictomancer, ["BlackMage"] = BlackMage, ["Samurai"] = Samurai, ["Monk"] = Monk, ["Ninja"] = Ninja,
-        ["Warrior"] = Warrior, ["DarkKnight"] = DarkKnight, ["Gunbreaker"] = Gunbreaker, ["PvpMachinist"] = PvpMachinist,
+        ["Warrior"] = Warrior, ["DarkKnight"] = DarkKnight, ["Gunbreaker"] = Gunbreaker, ["PvpMachinist"] = PvpMachinist, ["PvpScheduling"] = PvpScheduling,
         ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["HardCastRaise"] = HardCastRaise,
         ["IncludeCleanse"] = IncludeCleanse, ["PreventiveHealing"] = PreventiveHealing,
         ["HealingGcds"] = HealingGcds, ["PartyMouseover"] = PartyMouseover, ["WorldMouseover"] = WorldMouseover,
@@ -133,6 +135,7 @@ internal static class ExperimentalSelection
         Warrior = current.Value<bool>("Warrior"); DarkKnight = current.Value<bool>("DarkKnight");
         Gunbreaker = current.Value<bool>("Gunbreaker");
         PvpMachinist = current.Value<bool>("PvpMachinist");
+        PvpScheduling = current.Value<bool>("PvpScheduling");
         Scholar = current.Value<bool>("Scholar"); Astrologian = current.Value<bool>("Astrologian"); WhiteMage = current.Value<bool>("WhiteMage");
         CompareDrg = current.Value<bool>("CompareDrg");
         IncludeHealing = current.Value<bool>("IncludeHealing"); PartyMouseover = current.Value<bool>("PartyMouseover");

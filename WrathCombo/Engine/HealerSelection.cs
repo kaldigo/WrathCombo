@@ -224,10 +224,6 @@ internal static partial class HealerSelection
             return accepted.PlannedGcd == RaiseSpell ? Continuation(input) : null;
         var selected = SelectionRuntime.SelectAlly(RaiseSpell);
         if (selected.Recipient is not { } recipient) return null;
-        // Do not race an already observed resurrection cast from another ally.
-        if (GetPartyMembers().Any(member => member.BattleChara is { IsCasting: true } caster &&
-            caster.GameObjectId != Self && caster.CastTargetObjectId == recipient &&
-            caster.CastActionId is WHM.Raise or SCH.Resurrection or AST.Ascend or SGE.Egeiro or RDM.Verraise)) return null;
         return RaiseOnRecipient(input, recipient);
     }
 

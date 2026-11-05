@@ -32,7 +32,10 @@ internal sealed class TestingApi : IDisposable
                         baseline = new JObject { ["Job"] = (int)Player.Job, ["Level"] = Player.Level,
                             ["Territory"] = Svc.ClientState.TerritoryType, ["PvP"] = Svc.ClientState.IsPvP,
                             ["StartedUtc"] = DateTime.UtcNow, ["EngineBuild"] = typeof(TestingApi).Assembly.ManifestModule.ModuleVersionId.ToString(),
-                            ["Settings"] = settings().DeepClone() };
+                            ["Settings"] = settings().DeepClone(), ["Experimental"] = ExperimentalSelection.Read(),
+                            ["CaptureId"] = Guid.NewGuid().ToString(), ["StartedMonotonicMs"] = Environment.TickCount64,
+                            ["EngineVersion"] = typeof(TestingApi).Assembly.GetName().Version?.ToString(),
+                            ["Encounter"] = BossForecastProvider.Current is { } initialForecast ? JObject.FromObject(initialForecast) : null };
                         Trace.Start(Environment.TickCount64, Context);
                         Decisions.Clear(); droppedDecisions = 0;
                     }

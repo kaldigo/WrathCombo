@@ -18,34 +18,66 @@ internal static class PvPIntentRouting
     internal const uint Release=1_000_014;
     internal const uint FullRotation=1_000_015;
     private static readonly PvPRequestState Requests=new();
+    private static readonly Selection.AcceptedRelease acceptedRelease = new();
     private static uint evaluating;
     private static readonly PvPAreaChoice AreaChoice = new();
     private static bool automaticArea;
     private static (uint Job, ulong Character) areaContext;
-    private static (uint Job,ulong Character,ulong Target,long At) healingRecipient;
+    private static (uint Job,ulong Character,ulong Target,long At,long Generation) healingRecipient;
     internal static bool Enabled => InPvP() && Options.Enabled(Feature.PvPIntentRoutes);
     internal static bool Active => Enabled && evaluating!=0;
     internal static bool Area => Active && (evaluating==All.AoEDPS || evaluating==FullRotation && automaticArea);
     internal static uint ReleaseAction(uint input)
     {
-        if(input!=Release || !Enabled)return 0;
+        if(!Enabled || !Player.Available || Player.IsDead)return 0;
         uint source=Options.Job switch {31=>29409,38=>29422,39=>29549,_=>0};
+        bool combined = ExperimentalSelection.PvpScheduling && input == (Options.Job == 38 ? Mechanic : Offense) && source != 0;
+        if(input!=Release && !combined)return 0;
+        SelectionRuntime.BeginPreview(input);
         if(source==0)return All.Cease;
         uint result=OriginalHook(source);
-        return result!=source ? result:All.Cease;
+        if (!combined) return result != source ? ActionRoutes.Filter(result) : All.Cease;
+        return BoundRelease(input, source, result);
+    }
+    internal static uint BoundRelease(uint input, uint source, uint result)
+    {
+        if (!ExperimentalSelection.PvpScheduling) return result;
+        var recipient = Svc.Objects.SearchById(acceptedRelease.Recipient);
+        bool active = result != source && (Options.Job switch
+        {
+            31 => recipient.HasStatus(Combos.PvP.MCHPvP.Debuffs.Wildfire),
+            39 => recipient.HasStatus(Combos.PvP.RPRPvP.Debuffs.DeathWarrant),
+            38 => LocalPlayer.HasStatus(Combos.PvP.DNCPvP.Buffs.HoningDance) || LocalPlayer.HasStatus(Combos.PvP.DNCPvP.Buffs.HoningOvation),
+            _ => false,
+        });
+        if (!acceptedRelease.Valid(source, Environment.TickCount64, SelectionRuntime.Generation,
+                recipient is not null && !recipient.IsDead() && recipient.IsTargetable, active))
+            return result != source || input is not (Offense or Mechanic) ? All.Cease : 0;
+        if (!ActionRoutes.Allowed(source) || !ActionRoutes.Allowed(result)) return All.Cease;
+        var row = Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().GetRow(result);
+        ulong delivery = row.CanTargetSelf && !row.CanTargetHostile ? LocalPlayer.GameObjectId : acceptedRelease.Recipient;
+        SelectionRuntime.BeginPreview(input);
+        return SelectionRuntime.Publish(input, new(result, result, delivery, 0,
+            "Release own accepted initiation", Environment.TickCount64, SelectionRuntime.Generation));
     }
     internal static bool Requested(CombatRequest kind) => Active &&
         (Kind(evaluating)==kind || Requests.Active(kind,Environment.TickCount64));
     private static CombatRequest? Kind(uint action) => action is >=Offense and <=Mechanic ? (CombatRequest)(action-Offense) : null;
     private static PvPIntentPolicy.Family[] Families => PvPIntentPolicy.Jobs.GetValueOrDefault(Options.Job) ?? [];
-    internal static void Reset() { Requests.Reset(); evaluating=0; healingRecipient=default; AreaChoice.Reset(); automaticArea=false; areaContext=default; }
+    internal static void Reset() { Requests.Reset(); acceptedRelease.Reset(); evaluating=0; healingRecipient=default; AreaChoice.Reset(); automaticArea=false; areaContext=default; }
     internal static void Tick() => CheckContext();
     internal static void ConfirmRecipient(uint action,ulong target)
     {
-        if((Enabled || PvpAllySelection.Active) && action==29243)healingRecipient=(Options.Job,Svc.PlayerState.ContentId,target,Environment.TickCount64);
+        if((Enabled || PvpAllySelection.Active) && action==29243)healingRecipient=(Options.Job,Svc.PlayerState.ContentId,target,Environment.TickCount64,SelectionRuntime.Generation);
+        if (Enabled && action == (Options.Job switch { 31 => 29409u, 38 => 29422u, 39 => 29549u, _ => 0u }))
+            acceptedRelease.Confirm(action, Options.Job == 38 ? LocalPlayer.GameObjectId : target,
+                Environment.TickCount64, SelectionRuntime.Generation);
+        else if (acceptedRelease.Source != 0 && OriginalHook(acceptedRelease.Source) == action)
+            acceptedRelease.Reset();
     }
     internal static Dalamud.Game.ClientState.Objects.Types.IGameObject? HealingRecipient =>
         healingRecipient.Job==Options.Job && healingRecipient.Character==Svc.PlayerState.ContentId &&
+        healingRecipient.Generation==SelectionRuntime.Generation &&
         Environment.TickCount64-healingRecipient.At is >=0 and <15000
             ? Svc.Objects.FirstOrDefault(o=>o.GameObjectId==healingRecipient.Target):null;
     private static void CheckContext() => Requests.Context(Options.Job,Svc.PlayerState.ContentId,

@@ -39,8 +39,8 @@ internal abstract partial class CustomComboFunctions
     }
 
     /// <summary> Gets the current target or null. </summary>
-    public static IBattleChara? CurrentTarget => 
-        OverrideTarget as IBattleChara ?? 
+    public static IBattleChara? CurrentTarget => Engine.SelectionRuntime.HasEvaluationTarget
+        ? Engine.SelectionRuntime.EvaluationTarget : OverrideTarget as IBattleChara ??
         SimpleTarget.HardTarget;
 
     #region Target Checks

@@ -86,6 +86,9 @@ internal static class DRGPvP
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, RaidenThrust, FangAndClaw, WheelingThrust, Drakesbane))
                 return actionID;
 
+            if (IsEnabled(Preset.DRGPvP_Smite) && GetTargetHPPercent() <= DRGPvP_SmiteThreshold &&
+                Engine.PvpTargetEligibility.GuardedBypass(PvPMelee.Smite)) return PvPMelee.Smite;
+
             if (!CurrentTarget.HasStatus(PvPCommon.Buffs.Guard, true))
             {
                 if (IsEnabled(Preset.DRGPvP_Smite) && PvPMelee.CanSmite() && InActionRange(PvPMelee.Smite) && HasTarget() &&

@@ -1,4 +1,4 @@
-﻿using WrathCombo.CustomComboNS;
+using WrathCombo.CustomComboNS;
 using WrathCombo.CustomComboNS.Functions;
 using WrathCombo.Engine;
 using WrathFork.Contract;
@@ -166,7 +166,7 @@ internal static class VPRPvP
                 return OriginalHook(UncoiledFury);
             
             // Smite
-            if (IsEnabled(Preset.VPRPvP_Smite) && PvPMelee.CanSmite() && !PvPCommon.TargetImmuneToDamage() && InActionRange(PvPMelee.Smite) && HasTarget() &&
+            if (IsEnabled(Preset.VPRPvP_Smite) && PvPMelee.CanSmite() && (Engine.ExperimentalSelection.PvpTargeting ? CurrentTarget is { } smiteTarget && Engine.PvpTargetEligibility.CanDamage(PvPMelee.Smite, smiteTarget) : !PvPCommon.TargetImmuneToDamage()) && InActionRange(PvPMelee.Smite) && HasTarget() &&
                 GetTargetHPPercent() <= VPRPvP_SmiteThreshold)
                 return PvPMelee.Smite;
 

@@ -45,7 +45,7 @@ internal static class PveIntentRouting
             };
             bool available = root != 0 && ActionLearned(root) && ActionReplacer.FilteredCombos?.Any(c =>
                 c.Preset.Attributes().AutoAction is { IsAoE: true, IsHeal: false } && IsEnabled(c.Preset)) == true;
-            int hits = available ? NumberOfEnemiesInRange(OriginalHook(root), CurrentTarget, true) : 0;
+            int hits = available ? SelectionRuntime.DamageCoverage(root) ?? NumberOfEnemiesInRange(OriginalHook(root), CurrentTarget, true) : 0;
             int threshold = Service.Configuration.RotationConfig.DPSSettings.DPSAoETargets ?? int.MaxValue;
             area = choice.Select(available, hits, threshold, Options.Job == 30 && NIN.InMudra);
             previewArea = area;

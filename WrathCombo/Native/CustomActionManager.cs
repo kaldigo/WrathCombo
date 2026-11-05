@@ -513,14 +513,11 @@ public class CustomActionHelper()
     /// <returns></returns>
     public static bool OneButtonRotationChecker(uint actionId, CustomActionType type, params uint[] originals)
     {
-        if(Engine.PvPIntentRouting.Matches(actionId,type) is {} routed)return routed;
-        if(Engine.PveIntentRouting.Matches(actionId,type) is {} adaptive)return adaptive;
-        bool enabled = CustomActionEnabled(type);
-
-        if (enabled)
-            return actionId == GetActionId(type);
-
-        return originals.Contains(actionId);
+        bool matches = Engine.PvPIntentRouting.Matches(actionId, type) ?? Engine.PveIntentRouting.Matches(actionId, type) ??
+            (CustomActionEnabled(type) ? actionId == GetActionId(type) : originals.Contains(actionId));
+        if (matches && type is CustomActionType.SingleTargetDPS or CustomActionType.AoEDPS && originals.Length > 0)
+            Engine.SelectionRuntime.ObserveDamageControl(originals[0]);
+        return matches;
     }
 
     public static bool CustomActionEnabled(CustomActionType type)

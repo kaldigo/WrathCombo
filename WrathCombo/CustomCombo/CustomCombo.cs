@@ -90,12 +90,14 @@ internal abstract partial class CustomCombo : CustomComboFunctions
 
         if (Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
         using var healerScope = Engine.HealerSelection.Enter(Preset);
+        using var enemyScope = Engine.SelectionRuntime.EnterEnemyEvaluation(actionID);
         using var mudraScope = NIN.BeginTestingMudra(actionID);
         if (Engine.ExperimentalSelection.ActiveMachinist) MCH.BeginTestingSelection();
         uint resultingActionID = Engine.ActionRoutes.Filter(Engine.HealerSelection.TrySelect(actionID, Preset, out var selection) || SGE.TryTestingSelection(actionID, Preset, out selection) || RDM.TryTestingSelection(actionID, Preset, out selection) || DNC.TryTestingDance(actionID, Preset, out selection) ? selection : Invoke(actionID));
         resultingActionID = BLM.ReviewTestingCast(actionID, resultingActionID, Preset);
         resultingActionID = MCH.ReviewTestingPreparation(actionID, resultingActionID);
         resultingActionID = BLU.ReviewTestingPreparation(actionID, resultingActionID);
+        resultingActionID = Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(resultingActionID));
         mudraScope?.Complete(resultingActionID);
         if (resultingActionID != actionID) resultingActionID = Engine.HealingGroundSelection.Select(actionID, resultingActionID);
         if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) && resultingActionID != actionID)

@@ -21,6 +21,50 @@ internal static class SelectionRuntime
     [ThreadStatic] private static bool automatic;
     [ThreadStatic] private static bool refreshOnPress;
     internal static bool Automatic => automatic;
+    [ThreadStatic] private static EnemyEvaluation? enemyEvaluation;
+    private sealed class EnemyEvaluation(EnemyEvaluation? previous) : IDisposable
+    {
+        internal bool Initialized;
+        internal ulong? Recipient;
+        public void Dispose() => enemyEvaluation = previous;
+    }
+    internal static IDisposable? EnterEnemyEvaluation(uint input)
+    {
+        if (!ExperimentalSelection.ActiveTargets || !automatic && input < 1000000) return null;
+        var scope = new EnemyEvaluation(enemyEvaluation);
+        enemyEvaluation = scope;
+        return scope;
+    }
+    internal static bool HasEvaluationTarget => enemyEvaluation?.Initialized == true;
+    internal static int? DamageCoverage(uint root)
+    {
+        if (!ExperimentalSelection.ActiveTargets || !Player.Available) return null;
+        root = OriginalHook(root);
+        if (!Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(root, out var row) ||
+            row.CastType is not (1 or 2 or 3 or 4 or 10)) return null;
+        return SelectEnemy(root, validateDamage: false).Affected.Length;
+    }
+    internal static IBattleChara? EvaluationTarget => enemyEvaluation?.Recipient is { } id ? Svc.Objects.SearchById(id) as IBattleChara : null;
+    internal static IBattleChara? ResolveAutomaticEnemy(uint root, IBattleChara? legacy)
+    {
+        if (!ExperimentalSelection.ActiveTargets || !Player.Available) return legacy;
+        root = OriginalHook(root);
+        if (!Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(root, out var row) ||
+            row.CastType is not (1 or 2 or 3 or 4 or 10) || !row.CanTargetHostile && !(row.CanTargetSelf && row.CastType == 2)) return legacy;
+        var decision = SelectEnemy(root, validateDamage: false);
+        return decision.Recipient is { } id ? Svc.Objects.SearchById(id) as IBattleChara : null;
+    }
+    internal static void ObserveDamageControl(uint root)
+    {
+        if (enemyEvaluation is not { Initialized: false } scope || root == 0) return;
+        root = OriginalHook(root);
+        if (!Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(root, out var row) ||
+            row.CastType is not (1 or 2 or 3 or 4 or 10) || !row.CanTargetHostile && !(row.CanTargetSelf && row.CastType == 2)) return;
+        // Root geometry chooses the rotation's context once. A later action may fail its
+        // own validation, but must not move a DoT/proc decision to an unchecked enemy.
+        scope.Recipient = SelectEnemy(root, validateDamage: false).Recipient;
+        scope.Initialized = true;
+    }
     private sealed class Scope : IDisposable
     {
         private readonly bool previous = automatic;
@@ -34,7 +78,7 @@ internal static class SelectionRuntime
         private static bool Set(bool value) { bool previous = refreshOnPress; refreshOnPress = value; return previous; }
         public void Dispose() => refreshOnPress = previous;
     }
-    internal static IDisposable BeginPress(bool queued, uint input = 0) => new PressScope(!queued && (ExperimentalSelection.ActiveHealer || ExperimentalSelection.ActivePreparedAction || ExperimentalSelection.ActiveNinja || ExperimentalSelection.ActiveDrg || ExperimentalSelection.ActiveTargets || input == PveIntentRouting.FullRotation));
+    internal static IDisposable BeginPress(bool queued, uint input = 0) => new PressScope(!queued && (PvPIntentRouting.Enabled || ExperimentalSelection.ActiveHealer || ExperimentalSelection.ActivePreparedAction || ExperimentalSelection.ActiveNinja || ExperimentalSelection.ActiveDrg || ExperimentalSelection.ActiveTargets || input == PveIntentRouting.FullRotation));
     internal static bool ConsumePressRefresh() { bool refresh = refreshOnPress; refreshOnPress = false; return refresh; }
     private static readonly Dictionary<uint, SelectionDecision> previews = new();
     private static readonly PreparationSequence sequence = new();
@@ -86,7 +130,7 @@ internal static class SelectionRuntime
             bool buster = TryGetTankBusterTarget(out var victim, out var busterKey);
             Prevention.Observe("tankbuster", buster, Environment.TickCount64, generation, buster ? victim.SafeGameObjectId ?? 0 : 0, null, busterKey);
         }
-        if (Commitment is { } accepted && (!(ExperimentalSelection.ActiveBlueMage ? Combos.PvE.BLU.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveMachinist ? Combos.PvE.MCH.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveSummoner ? Combos.PvE.SMN.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveRedMage ? Combos.PvE.RDM.PreparedRaiseStillValid(accepted) : HealerSelection.CommitmentStillNeeded(accepted)) ||
+        if (Commitment is { } accepted && (!(ExperimentalSelection.ActivePvpMachinist ? Combos.PvP.MCHPvP.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveBlueMage ? Combos.PvE.BLU.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveMachinist ? Combos.PvE.MCH.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveSummoner ? Combos.PvE.SMN.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveRedMage ? Combos.PvE.RDM.PreparedRaiseStillValid(accepted) : HealerSelection.CommitmentStillNeeded(accepted)) ||
             accepted.PreventionEvent != 0 && !Prevention.Contains(accepted.PreventionEvent)))
         {
             TestingApi.Observe("PreparationCanceled:recipient-or-coverage", accepted.Preparation, accepted.PlannedGcd, accepted.Recipient);
@@ -114,10 +158,12 @@ internal static class SelectionRuntime
     {
         boundRecipient = null;
         boundGround = null;
-        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return true;
+        if (!PvPIntentRouting.Enabled && !ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return true;
         UpdateContext();
         var decision = previews.GetValueOrDefault(input) ?? (automatic && automaticDecision?.Action == result ? automaticDecision : null);
         if (decision is null || decision.Action != result) { sequence.CancelPress(); return true; }
+        if (decision.EvaluatedEnemy is { } evaluated && SelectEnemy(result, fixedRecipient: evaluated).Recipient != evaluated)
+        { sequence.CancelPress(); return false; }
         if (decision.GroundPosition is { } position)
         {
             if (decision.Generation != Generation || Environment.TickCount64 - decision.ObservedAt >= 500 ||
@@ -157,25 +203,44 @@ internal static class SelectionRuntime
     }
     internal static unsafe uint RetargetEnemy(uint input, uint action)
     {
-        if (Preview(input) is { } allied && allied.Action == action &&
-            Svc.Objects.SearchById(allied.Recipient) is { } chosen && !chosen.IsHostile()) return action;
-        if (Preview(input) is { } retained && retained.Action == action &&
-            Commitment is { } accepted && accepted.PlannedGcd == action && accepted.Recipient == retained.Recipient)
-            return action;
+        // A provider which published an action/recipient decision owns that pair.
+        // Press-time validation may reject it, but the fallback pass cannot move it.
+        if (Preview(input) is { } retained && retained.Action == action) return action;
         if (Svc.ClientState.IsPvP && !automatic && input < 1000000) return action;
-        if (action >= 1000000 || !Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(action, out var row) || !row.CanTargetHostile)
+        if (action >= 1000000 || !Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(action, out var row))
             return action;
+        // Healing spells share self/circle/attack-type metadata with damage spells.
+        // Only reviewed damage spells and weaponskills enter the hostile coverage pass.
+        bool selfDamage = HasEvaluationTarget && row.CanTargetSelf && row.CastType == 2 &&
+            (row.ActionCategory.RowId == 3 || action is Combos.PvE.WHM.Holy or Combos.PvE.WHM.Holy3 or
+                Combos.PvE.SCH.ArtOfWar or Combos.PvE.SCH.ArtOfWarII or Combos.PvE.SGE.Dyskrasia or
+                Combos.PvE.SGE.Dyskrasia2 or Combos.PvE.SGE.EukrasianDyskrasia or Combos.PvE.DRK.Unleash or
+                Combos.PvE.DRK.StalwartSoul or Combos.PvE.PLD.HolyCircle);
+        if (!row.CanTargetHostile && !selfDamage) return action;
+        if (row.CastType is not (1 or 2 or 3 or 4 or 10)) return action;
+        if (HasEvaluationTarget && EvaluationTarget is null) return Combos.PvE.All.Cease;
+        var result = SelectEnemy(action, fixedRecipient: HasEvaluationTarget ? enemyEvaluation!.Recipient : null);
+        if (result.Recipient is not { } recipient) return Combos.PvE.All.Cease;
+        ulong? evaluatedEnemy = null;
+        if (row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0)
+        { evaluatedEnemy = recipient; recipient = Player.Object!.GameObjectId; }
+        return Publish(input, new(action, action, recipient, 0, result.Reason, Environment.TickCount64, Generation,
+            EvaluatedEnemy: evaluatedEnemy));
+    }
+    private static unsafe TargetDecision SelectEnemy(uint action, bool validateDamage = true, ulong? fixedRecipient = null)
+    {
+        var row = Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().GetRow(action);
+        bool centered = row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0;
         var selected = SimpleTarget.HardTarget as IBattleChara;
         if (selected is not null && !selected.IsHostile()) selected = null;
         var targets = Svc.Objects.GetBattleCharas().Where(a => a.IsHostile() && !a.IsDead && a.IsTargetable).ToArray();
         var actors = targets.Select(a => new TargetActor(a.GameObjectId, a.Position, a.HitboxRadius,
             !a.IsInvincible && !Service.Configuration.IgnoredNPCs.ContainsKey(a.BaseId) &&
-            (!Svc.ClientState.IsPvP || PvpTargetEligibility.CanDamage(action, a)) &&
-            ActionManager.CanUseActionOnTarget(action, a.GameObject()) && InActionRange(action, a), false, GetTargetHPPercent(a) / 100f,
+            (!validateDamage || !Svc.ClientState.IsPvP || PvpTargetEligibility.CanDamage(action, a)) &&
+            (centered ? ActionManager.CanUseActionOnTarget(action, Player.GameObject) :
+                ActionManager.CanUseActionOnTarget(action, a.GameObject()) && (!validateDamage || InActionRange(action, a))), false, GetTargetHPPercent(a) / 100f,
             Svc.ClientState.IsPvP || AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a) || !automatic && a.GameObjectId == selected?.GameObjectId)).ToImmutableArray();
-        var shape = row.CastType switch { 2 => EffectShape.Circle, 3 => EffectShape.Cone, 4 => EffectShape.Line, _ => EffectShape.Single };
-        // Unsupported geometry is not guessed: retain the native/legacy result until its adapter exists.
-        if (row.CastType is not (1 or 2 or 3 or 4)) return action;
+        var shape = row.CastType switch { 2 => EffectShape.Circle, 3 => EffectShape.Cone, 4 => EffectShape.Line, 10 => EffectShape.Donut, _ => EffectShape.Single };
         var overrides = ImmutableArray.CreateBuilder<TargetOverride>();
         if (!automatic || ExperimentalSelection.OverridesInAutomation)
         {
@@ -188,18 +253,24 @@ internal static class SelectionRuntime
             overrides.Insert(ExperimentalSelection.EnemyMouseover && overrides.Count > 0 && overrides[0].Source == TargetSource.WorldMouseover ? 1 : 0,
                 new(TargetSource.Selected, selected.GameObjectId));
         bool acquire = ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy && selected is null;
+        if (fixedRecipient is { } fixedId) { overrides.Clear(); overrides.Add(new(TargetSource.Explicit, fixedId)); }
         var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,
-            new(ActionManager.GetActionRange(action), row.EffectRange, shape, row.CanTargetSelf, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4),
+            new(validateDamage ? centered ? row.EffectRange : ActionManager.GetActionRange(action) : Math.Max(30, (int)row.EffectRange),
+                row.EffectRange, shape, centered, HalfAngle: MathF.PI / 3, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4, InnerRadius: shape == EffectShape.Donut ? row.XAxisModifier > 0 ? row.XAxisModifier : 8 : 0),
             new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true), actors, actors,
             TargetOrder.Apply(overrides, ExperimentalSelection.EnemyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(snapshot);
         TestingApi.RecordDecision("Target", snapshot, result);
-        if (result.Recipient is not { } recipient) return Combos.PvE.All.Cease;
-        return Publish(input, new(action, action, recipient, 0, result.Reason, Environment.TickCount64, Generation));
+        return result;
     }
     internal static bool TargetLifeAllowed(uint action, IGameObject target) =>
         action is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper
-            ? target.IsDead() && !target.HasStatus(Combos.PvE.All.Buffs.Raised, true) : !target.IsDead();
+            ? target.IsDead() && !target.HasStatus(Combos.PvE.All.Buffs.Raised, true) && !RaiseBeingCast(target.GameObjectId) : !target.IsDead();
+
+    private static bool RaiseBeingCast(ulong recipient) => GetPartyMembers().Any(member =>
+        member.BattleChara is { IsCasting: true } caster && caster.GameObjectId != Player.Object?.GameObjectId &&
+        caster.CastTargetObjectId == recipient && caster.CastActionId is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or
+            Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper);
 
     internal static unsafe TargetDecision SelectAlly(uint action, ulong? explicitRecipient = null, Func<IBattleChara, bool>? eligible = null)
     {

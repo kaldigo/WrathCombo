@@ -154,6 +154,19 @@ internal static class RDMPvP
             bool targetHasImmunity = CurrentTarget.HasStatus(PLDPvP.Buffs.HallowedGround, true) || CurrentTarget.HasStatus(DRKPvP.Buffs.UndeadRedemption, true);
             bool isDisplacementPrimed = !hasBind && !JustUsed(Displacement, 8f) && !LocalPlayer.HasStatus(Buffs.Displacement) && hasScorch && InActionRange(Displacement);
             bool isCorpsPrimed = !hasBind && !JustUsed(CorpsACorps, 8f) && chargesCorps > RDMPvP_Corps_Charges && GetTargetDistance() <= RDMPvP_Corps_Range;
+            uint plannedGcd = 0;
+            if (Engine.ExperimentalSelection.ActivePvpScheduling && CurrentTarget is { } plannedTarget)
+            {
+                bool Eligible(uint candidate) => Engine.ActionRoutes.Allowed(candidate) &&
+                    Engine.PvpTargetEligibility.CanDamage(candidate, plannedTarget) && InActionRange(candidate, plannedTarget) &&
+                    ActionReadyForTarget(candidate, plannedTarget.GameObjectId);
+                uint melee = OriginalHook(EnchantedRiposte);
+                if (IsEnabled(Preset.RDMPvP_Riposte) &&
+                    (hasMeleeCombo || hasScorch || Options.Enabled(Feature.PvPRdmRiposteInitiation) && hasEnchantedRiposte) && Eligible(melee)) plannedGcd = melee;
+                else if (IsEnabled(Preset.RDMPvP_Resolution) && !isTargetNPC &&
+                    targetCurrentPercentHp < RDMPvP_Resolution_TargetHP && Eligible(Resolution)) plannedGcd = Resolution;
+                else if (Eligible(OriginalHook(Jolt3))) plannedGcd = OriginalHook(Jolt3);
+            }
             #endregion
 
             // Forte
@@ -163,6 +176,10 @@ internal static class RDMPvP
 
             if (hasTarget && !targetHasImmunity)
             {
+                if (Engine.ExperimentalSelection.ActivePvpScheduling && IsEnabled(Preset.RDMPvP_Embolden) &&
+                    Options.Enabled(Feature.PvPRdmEmboldenInitiation) && hasEmbolden && CanWeave() &&
+                    plannedGcd is Resolution or EnchantedRedoublement or Scorch)
+                    return Embolden;
                 if (!targetHasGuard)
                 {
                     if (IsEnabled(Preset.RDMPvP_PhantomDart) && Role.CanPhantomDart() && CanWeave() && GetTargetHPPercent() <= (RDMPvP_PhantomDartThreshold))
@@ -181,7 +198,7 @@ internal static class RDMPvP
                 if (hasEnchantedRiposte)
                 {
                     // Embolden
-                    if (IsEnabled(Preset.RDMPvP_Embolden) && Options.Enabled(Feature.PvPRdmEmboldenInitiation) && hasEmbolden)
+                    if (!Engine.ExperimentalSelection.ActivePvpScheduling && IsEnabled(Preset.RDMPvP_Embolden) && Options.Enabled(Feature.PvPRdmEmboldenInitiation) && hasEmbolden)
                     {
                         // Combo Setting
                         if (IsEnabled(Preset.RDMPvP_Corps) && (isCorpsPrimed || (!isCorpsPrimed && InActionRange(EnchantedRiposte))))
@@ -198,7 +215,8 @@ internal static class RDMPvP
                 }
 
                 // Riposte Combo
-                if (IsEnabled(Preset.RDMPvP_Riposte) && InActionRange(EnchantedRiposte) && ((Options.Enabled(Feature.PvPRdmRiposteInitiation) && hasEnchantedRiposte) || hasMeleeCombo))
+                if (IsEnabled(Preset.RDMPvP_Riposte) && InActionRange(EnchantedRiposte) && ((Options.Enabled(Feature.PvPRdmRiposteInitiation) && hasEnchantedRiposte) || hasMeleeCombo) &&
+                    (!Engine.ExperimentalSelection.ActivePvpScheduling || plannedGcd == OriginalHook(EnchantedRiposte)))
                     return OriginalHook(EnchantedRiposte);
 
                 // Prefulgence
@@ -216,18 +234,19 @@ internal static class RDMPvP
                 if (!targetHasGuard)
                 {
                     // Scorch
-                    if (IsEnabled(Preset.RDMPvP_Riposte) && hasScorch)
+                    if (IsEnabled(Preset.RDMPvP_Riposte) && hasScorch && (!Engine.ExperimentalSelection.ActivePvpScheduling || plannedGcd == Scorch))
                         return OriginalHook(EnchantedRiposte);
 
                     // Resolution
                     if (IsEnabled(Preset.RDMPvP_Resolution) && IsOffCooldown(Resolution) &&
-                        !isTargetNPC && targetCurrentPercentHp < RDMPvP_Resolution_TargetHP)
+                        !isTargetNPC && targetCurrentPercentHp < RDMPvP_Resolution_TargetHP &&
+                        (!Engine.ExperimentalSelection.ActivePvpScheduling || plannedGcd == Resolution))
                         return OriginalHook(Resolution);
                 }
             }
 
             // Grand Impact / Jolt III
-            return OriginalHook(Jolt3);
+            return Engine.ExperimentalSelection.ActivePvpScheduling ? plannedGcd != 0 ? plannedGcd : All.Cease : OriginalHook(Jolt3);
         }
     }
     internal class RDMPvP_Dash_Feature : CustomCombo

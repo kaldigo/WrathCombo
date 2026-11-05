@@ -7,7 +7,7 @@ using static WrathCombo.Window.Functions.UserConfig;
 
 namespace WrathCombo.Combos.PvP;
 
-internal static class MCHPvP
+internal static partial class MCHPvP
 {
     #region IDS
     internal class Role : PvPPhysRanged;
@@ -88,6 +88,8 @@ internal static class MCHPvP
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, BlastCharge))
                 return actionID;
 
+            if (TryPreparedTool(actionID, out uint preparedTool)) return preparedTool;
+
             #region Variables
             var canWeave = CanWeave();
             var analysisStacks = GetRemainingCharges(Analysis);
@@ -100,14 +102,14 @@ internal static class MCHPvP
                 return PvPPhysRanged.EagleEyeShot;
             if(Engine.PvPIntentRouting.Active && canWeave && CurrentTarget.HasStatus(Debuffs.Wildfire) &&
                 CurrentTarget.Status(Debuffs.Wildfire).RemainingTimeOrZero()<=1 && OriginalHook(Wildfire)!=Wildfire)
-                return OriginalHook(Wildfire);
+                return Engine.PvPIntentRouting.BoundRelease(actionID, Wildfire, OriginalHook(Wildfire));
 
             // Guard is a damage reduction, not absolute immunity. Drill's reviewed
             // PvP exception must remain available without bypassing true immunity.
             if (Engine.ExperimentalSelection.ActivePvpMachinist && plannedTool == Drill &&
                 (CurrentTarget.HasStatus(PvPCommon.Buffs.Guard, true) || CurrentTarget.HasStatus(PvPCommon.Buffs.WeakenedGuard, true)) &&
                 !CurrentTarget.HasStatus(VPRPvP.Buffs.HardenedScales, true) && !PvPCommon.TargetImmuneToDamage(false))
-                return WantsAnalysis(plannedTool, canWeave, overheated) ? Analysis : plannedTool;
+                return WantsAnalysis(plannedTool, canWeave, overheated) ? PrepareAnalysis(actionID, plannedTool) : plannedTool;
 
             if (!PvPCommon.TargetImmuneToDamage() && HasBattleTarget())
             {
@@ -144,7 +146,7 @@ internal static class MCHPvP
                         (!IsEnabled(Preset.MCHPvP_BurstMode_AltDrill) || IsOnCooldown(Wildfire)) &&
                         !canWeave && !overheated && bigDamageStacks > 0)
                     {
-                        return OriginalHook(Analysis);
+                        return Engine.ExperimentalSelection.ActivePvpMachinist ? PrepareAnalysis(actionID, plannedTool) : OriginalHook(Analysis);
                     }
                 }
                 // BigDamageStacks logic with checks for primed buffs

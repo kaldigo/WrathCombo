@@ -1,4 +1,4 @@
-﻿using WrathCombo.CustomComboNS;
+using WrathCombo.CustomComboNS;
 using WrathCombo.CustomComboNS.Functions;
 using WrathCombo.Extensions;
 using WrathCombo.Native;
@@ -71,6 +71,9 @@ internal static class MNKPvP
 
             if (IsEnabled(Preset.MNKPvP_Burst_Meteodrive) && PvPCommon.TargetImmuneToDamage() && GetTargetCurrentHP() <= 20000 && IsLB1Ready)
                 return Meteordrive;
+
+            if (IsEnabled(Preset.MNKPvP_Smite) && GetTargetHPPercent() <= MNKPvP_SmiteThreshold &&
+                Engine.PvpTargetEligibility.GuardedBypass(PvPMelee.Smite)) return PvPMelee.Smite;
 
             if (!PvPCommon.TargetImmuneToDamage())
             {

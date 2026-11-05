@@ -1,7 +1,7 @@
 namespace WrathCombo.Engine.Selection;
 
 internal sealed record SelectionDecision(uint Action, uint PlannedGcd, ulong Recipient, uint Preparation, string Reason, long ObservedAt, long Generation, long PreventionEvent = 0, uint CompletionAction = 0,
-    System.Numerics.Vector3? GroundPosition = null);
+    System.Numerics.Vector3? GroundPosition = null, ulong? EvaluatedEnemy = null);
 
 // Press records a proposal; only a confirmed action accepts it. Preview is a read.
 internal sealed class PreparationSequence

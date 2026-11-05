@@ -112,14 +112,16 @@ internal static class SMNPvP
                 if (LocalPlayer.HasStatus(Buffs.FurtherRuin))
                     return Ruin4;
 
-                if (IsEnabled(Preset.SMNPvP_BurstMode_Necrotize) && GetRemainingCharges(Necrotize) > 0 && !LocalPlayer.HasStatus(Buffs.FurtherRuin))
+                if (IsEnabled(Preset.SMNPvP_BurstMode_Necrotize) && GetRemainingCharges(Necrotize) > 0 && !LocalPlayer.HasStatus(Buffs.FurtherRuin) &&
+                    (!Engine.ExperimentalSelection.ActivePvpScheduling || !bahamutBurst && !phoenixBurst))
                     return Necrotize;
                         
                 // Ifrit (check CrimsonCyclone conditions)
                 if (IsEnabled(Preset.SMNPvP_BurstMode_CrimsonStrike) && OriginalHook(CrimsonCyclone) is CrimsonStrike)
                     return CrimsonStrike;
 
-                if (IsEnabled(Preset.SMNPvP_BurstMode_CrimsonCyclone) && IsOffCooldown(CrimsonCyclone))
+                if (IsEnabled(Preset.SMNPvP_BurstMode_CrimsonCyclone) && IsOffCooldown(CrimsonCyclone) &&
+                    (!Engine.ExperimentalSelection.ActivePvpScheduling || InMeleeRange()))
                     return CrimsonCyclone;
 
                 // Titan

@@ -1,4 +1,4 @@
-﻿using ECommons.GameHelpers;
+using ECommons.GameHelpers;
 using System;
 using System.Linq;
 using WrathCombo.CustomComboNS;
@@ -182,6 +182,9 @@ internal static class NINPvP
                 if(mudraMode && inMeisuiRange && ActionReady(Meisui))return Meisui;
                 if(mudraMode && ActionReady(Huton))return Huton;
             }
+
+            if (IsEnabled(Preset.NINPvP_Smite) && GetTargetHPPercent() <= NINPvP_SmiteThreshold &&
+                Engine.PvpTargetEligibility.GuardedBypass(PvPMelee.Smite)) return PvPMelee.Smite;
 
             if (!PvPCommon.TargetImmuneToDamage())
             {

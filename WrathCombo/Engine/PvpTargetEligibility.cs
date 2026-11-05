@@ -8,6 +8,10 @@ namespace WrathCombo.Engine;
 
 internal static class PvpTargetEligibility
 {
+    internal static bool GuardedBypass(uint action) => ExperimentalSelection.PvpTargeting && CurrentTarget is { } target &&
+        (target.HasStatus(PvPCommon.Buffs.Guard, true) || target.HasStatus(PvPCommon.Buffs.WeakenedGuard, true)) &&
+        ActionRoutes.Allowed(action) && CanDamage(action, target) && InActionRange(action, target) &&
+        ActionReadyForTarget(action, target.GameObjectId);
     internal static bool CanDamage(uint action, IGameObject target) => Selection.PvpEligibility.CanDamage(
         PvPCommon.TargetImmuneToDamage(false, target), target.HasStatus(VPRPvP.Buffs.HardenedScales, true),
         Math.Max(target.Status(PvPCommon.Buffs.Guard, true).RemainingTimeOrZero(),

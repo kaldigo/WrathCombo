@@ -13,6 +13,7 @@ internal partial class BST
     private static bool testingWasReady;
     private static void TickTestingFinisher()
     {
+        using var route = new WrathFork.Contract.ActionRouteContext(ActionRoutes.For(All.SingleTargetDPS));
         ulong capability = CurrentPetIsBMPet ? (ulong)(CurrentPet?.DataId ?? 0) : 0;
         if (testingGeneration != SelectionRuntime.Generation)
         { testingGeneration = SelectionRuntime.Generation; testingFinisher.Reset(); testingWasReady = false; }

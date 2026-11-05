@@ -372,7 +372,7 @@ public static class ActionWatching
                     if (Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveSage) WrathOpener.CurrentOpener?.ProgressOpener(actionId);
                     Engine.SelectionRuntime.Confirm(actionId, ActionSheet.TryGetValue(actionId, out var confirmedRow) && confirmedRow.ActionCategory.Value.RowId is 2 or 3, targets.Select(target => target.id).ToArray());
                 }
-                if(numTargets>0)Engine.PvPIntentRouting.ConfirmRecipient(actionId,targetEntityIds[0].Id);
+                Engine.PvPIntentRouting.ConfirmRecipient(actionId,numTargets>0 ? targetEntityIds[0].Id : 0);
             }
 
             if (casterEntityId == Player.Object.EntityId && ((actionType == ActionType.Action && ActionSheet.TryGetValue(actionId, out var actionSheet) && actionSheet.TargetArea) || actionType == ActionType.Item))
