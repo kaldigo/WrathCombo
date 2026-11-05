@@ -170,20 +170,22 @@ internal unsafe class AutoRotationController
 
     private static bool ShouldSkipAutorotation()
     {
-        return !cfg.Enabled
-               || !Player.Available
-               || Player.Object.IsDead
-               || IsOccupied()
-               || Player.Mounted
-               || !EzThrottler.Throttle("Autorot", cfg.Throttler)
-               || (ActionManager.Instance()->QueuedActionId > 0)
-               || Player.Object.HasRaiseInvincibility
-               || Paused;
+        if (!cfg.Enabled) return !AccordDiagnostics.DiagnosticLog.Reject("Runner disabled");
+        if (!Player.Available) return !AccordDiagnostics.DiagnosticLog.Reject("Player unavailable");
+        if (Player.Object.IsDead) return !AccordDiagnostics.DiagnosticLog.Reject("Player dead");
+        if (IsOccupied()) return !AccordDiagnostics.DiagnosticLog.Reject("Player occupied");
+        if (Player.Mounted) return !AccordDiagnostics.DiagnosticLog.Reject("Player mounted");
+        if (!EzThrottler.Throttle("Autorot", cfg.Throttler)) return !AccordDiagnostics.DiagnosticLog.Reject("Runner throttle");
+        if (ActionManager.Instance()->QueuedActionId > 0) return !AccordDiagnostics.DiagnosticLog.Reject("Native queue occupied");
+        if (Player.Object.HasRaiseInvincibility) return !AccordDiagnostics.DiagnosticLog.Reject("Raise invincibility");
+        if (Paused) return !AccordDiagnostics.DiagnosticLog.Reject("Runner paused");
+        return false;
     }
 
     internal static void Run()
     {
-        if (!AutomationOwnership.Allowed) return;
+        using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Runner.Tick", () => new { AutomationOwnership.Allowed });
+        if (!AutomationOwnership.Allowed) { AccordDiagnostics.DiagnosticLog.Exit("Automation ownership denied"); return; }
         using var selectionScope = SelectionRuntime.AutomaticScope();
         cfg ??= new AutoRotationConfigIPCWrapper(Service.Configuration.RotationConfig);
 

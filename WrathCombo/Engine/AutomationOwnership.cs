@@ -60,6 +60,7 @@ internal sealed class AutomationOwnership : IDisposable
 
     private static string Handle(string json)
     {
+        AccordDiagnostics.DiagnosticLog.Event("Ownership.Request", () => new { Request = json });
         try
         {
             if (!Svc.Framework.IsInFrameworkUpdateThread) throw new InvalidOperationException("Use the framework thread.");

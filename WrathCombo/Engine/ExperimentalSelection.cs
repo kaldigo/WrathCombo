@@ -26,41 +26,41 @@ internal static class ExperimentalSelection
     internal static bool Dancer { get; private set; }
     internal static bool BlueMage { get; private set; }
     internal static bool Beastmaster { get; private set; }
-    internal static bool ActiveBlueMage => BlueMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 36;
-    internal static bool ActiveBeastmaster => Beastmaster && !Svc.ClientState.IsPvP && (uint)Player.Job == 43;
-    internal static bool ActiveDancer => Dancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 38;
-    internal static bool ActiveMonk => Monk && !Svc.ClientState.IsPvP && (uint)Player.Job == 20;
-    internal static bool ActiveNinja => Ninja && !Svc.ClientState.IsPvP && (uint)Player.Job == 30;
-    internal static bool ActiveSamurai => Samurai && !Svc.ClientState.IsPvP && (uint)Player.Job == 34;
-    internal static bool ActiveBlackMage => BlackMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 25;
-    internal static bool ActivePictomancer => Pictomancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 42;
-    internal static bool ActiveRedMage => RedMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 35;
-    internal static bool ActivePreparedCaster => ActiveSummoner || ActiveRedMage;
-    internal static bool ActivePreparedAction => ActivePreparedCaster || ActiveMachinist || ActiveBlueMage || ActivePvpMachinist;
-    internal static bool ActiveSummoner => Summoner && !Svc.ClientState.IsPvP && (uint)Player.Job == 27;
-    internal static bool ActiveViper => Viper && !Svc.ClientState.IsPvP && (uint)Player.Job == 41;
-    internal static bool ActiveReaper => Reaper && !Svc.ClientState.IsPvP && (uint)Player.Job == 39;
-    internal static bool ActiveBard => Bard && !Svc.ClientState.IsPvP && (uint)Player.Job == 23;
+    internal static bool ActiveBlueMage => Observed("ActiveBlueMage", BlueMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 36);
+    internal static bool ActiveBeastmaster => Observed("ActiveBeastmaster", Beastmaster && !Svc.ClientState.IsPvP && (uint)Player.Job == 43);
+    internal static bool ActiveDancer => Observed("ActiveDancer", Dancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 38);
+    internal static bool ActiveMonk => Observed("ActiveMonk", Monk && !Svc.ClientState.IsPvP && (uint)Player.Job == 20);
+    internal static bool ActiveNinja => Observed("ActiveNinja", Ninja && !Svc.ClientState.IsPvP && (uint)Player.Job == 30);
+    internal static bool ActiveSamurai => Observed("ActiveSamurai", Samurai && !Svc.ClientState.IsPvP && (uint)Player.Job == 34);
+    internal static bool ActiveBlackMage => Observed("ActiveBlackMage", BlackMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 25);
+    internal static bool ActivePictomancer => Observed("ActivePictomancer", Pictomancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 42);
+    internal static bool ActiveRedMage => Observed("ActiveRedMage", RedMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 35);
+    internal static bool ActivePreparedCaster => Observed("ActivePreparedCaster", ActiveSummoner || ActiveRedMage);
+    internal static bool ActivePreparedAction => Observed("ActivePreparedAction", ActivePreparedCaster || ActiveMachinist || ActiveBlueMage || ActivePvpMachinist);
+    internal static bool ActiveSummoner => Observed("ActiveSummoner", Summoner && !Svc.ClientState.IsPvP && (uint)Player.Job == 27);
+    internal static bool ActiveViper => Observed("ActiveViper", Viper && !Svc.ClientState.IsPvP && (uint)Player.Job == 41);
+    internal static bool ActiveReaper => Observed("ActiveReaper", Reaper && !Svc.ClientState.IsPvP && (uint)Player.Job == 39);
+    internal static bool ActiveBard => Observed("ActiveBard", Bard && !Svc.ClientState.IsPvP && (uint)Player.Job == 23);
     internal static bool Paladin { get; private set; }
     internal static bool Warrior { get; private set; }
     internal static bool Gunbreaker { get; private set; }
     internal static bool PvpMachinist { get; private set; }
     internal static bool PvpScheduling { get; private set; }
-    internal static bool ActivePvpScheduling => PvpScheduling && PvPIntentRouting.Active;
-    internal static bool ActivePvpMachinist => PvpMachinist && Svc.ClientState.IsPvP && (uint)Player.Job == 31;
-    internal static bool ActiveGunbreaker => Gunbreaker && !Svc.ClientState.IsPvP && (uint)Player.Job == 37;
+    internal static bool ActivePvpScheduling => Observed("ActivePvpScheduling", PvpScheduling && PvPIntentRouting.Active);
+    internal static bool ActivePvpMachinist => Observed("ActivePvpMachinist", PvpMachinist && Svc.ClientState.IsPvP && (uint)Player.Job == 31);
+    internal static bool ActiveGunbreaker => Observed("ActiveGunbreaker", Gunbreaker && !Svc.ClientState.IsPvP && (uint)Player.Job == 37);
     internal static bool DarkKnight { get; private set; }
-    internal static bool ActiveWarrior => Warrior && !Svc.ClientState.IsPvP && (uint)Player.Job == 21;
-    internal static bool ActiveDarkKnight => DarkKnight && !Svc.ClientState.IsPvP && (uint)Player.Job == 32;
-    internal static bool ActivePaladin => Paladin && !Svc.ClientState.IsPvP && (uint)Player.Job == 19;
-    internal static bool ActiveMachinist => Machinist && !Svc.ClientState.IsPvP && (uint)Player.Job == 31;
+    internal static bool ActiveWarrior => Observed("ActiveWarrior", Warrior && !Svc.ClientState.IsPvP && (uint)Player.Job == 21);
+    internal static bool ActiveDarkKnight => Observed("ActiveDarkKnight", DarkKnight && !Svc.ClientState.IsPvP && (uint)Player.Job == 32);
+    internal static bool ActivePaladin => Observed("ActivePaladin", Paladin && !Svc.ClientState.IsPvP && (uint)Player.Job == 19);
+    internal static bool ActiveMachinist => Observed("ActiveMachinist", Machinist && !Svc.ClientState.IsPvP && (uint)Player.Job == 31);
     internal static bool CompareDrg { get; private set; }
     internal static bool Sage { get; private set; }
     internal static bool Scholar { get; private set; }
     internal static bool Astrologian { get; private set; }
     internal static bool WhiteMage { get; private set; }
-    internal static bool ActiveHealer => !Svc.ClientState.IsPvP && ((uint)Player.Job switch
-    { 24 => WhiteMage, 28 => Scholar, 33 => Astrologian, 40 => Sage, _ => false });
+    internal static bool ActiveHealer => Observed("ActiveHealer", !Svc.ClientState.IsPvP && ((uint)Player.Job switch
+    { 24 => WhiteMage, 28 => Scholar, 33 => Astrologian, 40 => Sage, _ => false }));
     internal static bool Forecasts { get; private set; }
     internal static bool IncludeHealing { get; private set; }
     internal static bool IncludeRaise { get; private set; }
@@ -86,9 +86,14 @@ internal static class ExperimentalSelection
     internal static string[] EnemyOverrideOrder { get; private set; } = [.. TargetOrder.EnemySources];
     internal static bool SwitchEnemyTarget { get; private set; }
     internal static bool SwitchAllyTarget { get; private set; }
-    internal static bool ActiveTargets => Svc.ClientState.IsPvP ? PvpTargeting : EnemyTargeting;
-    internal static bool ActiveDrg => Drg && !Svc.ClientState.IsPvP && (uint)Player.Job == 22;
-    internal static bool ActiveSage => Sage && !Svc.ClientState.IsPvP && (uint)Player.Job == 40;
+    internal static bool ActiveTargets => Observed("ActiveTargets", Svc.ClientState.IsPvP ? PvpTargeting : EnemyTargeting);
+    internal static bool ActiveDrg => Observed("ActiveDrg", Drg && !Svc.ClientState.IsPvP && (uint)Player.Job == 22);
+    internal static bool ActiveSage => Observed("ActiveSage", Sage && !Svc.ClientState.IsPvP && (uint)Player.Job == 40);
+    private static bool Observed(string feature, bool active)
+    {
+        AccordDiagnostics.DiagnosticLog.Event("Feature.Evaluated", () => new { Feature = feature, Active = active, Job = (uint)Player.Job, PvP = Svc.ClientState.IsPvP });
+        return active;
+    }
     internal static JObject Read() => new() { ["Drg"] = Drg, ["Machinist"] = Machinist, ["Paladin"] = Paladin, ["CompareDrg"] = CompareDrg, ["Sage"] = Sage,
         ["Scholar"] = Scholar, ["Astrologian"] = Astrologian, ["WhiteMage"] = WhiteMage, ["Forecasts"] = Forecasts, ["Bard"] = Bard, ["Dancer"] = Dancer, ["BlueMage"] = BlueMage, ["Beastmaster"] = Beastmaster,
         ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner, ["RedMage"] = RedMage, ["Pictomancer"] = Pictomancer, ["BlackMage"] = BlackMage, ["Samurai"] = Samurai, ["Monk"] = Monk, ["Ninja"] = Ninja,

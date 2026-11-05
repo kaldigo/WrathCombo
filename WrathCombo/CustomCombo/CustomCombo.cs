@@ -59,6 +59,7 @@ internal abstract partial class CustomCombo : CustomComboFunctions
     /// <returns> True if the action has changed, otherwise false. </returns>
     public unsafe bool TryInvoke(uint actionID, out uint newActionID, IGameObject? targetOverride = null)
     {
+        using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Provider.Evaluate", () => new { Input = actionID, Provider = Preset.ToString() });
         newActionID = 0;
 
         if (!IsEnabled(Preset))
@@ -94,6 +95,7 @@ internal abstract partial class CustomCombo : CustomComboFunctions
         using var mudraScope = NIN.BeginTestingMudra(actionID);
         if (Engine.ExperimentalSelection.ActiveMachinist) MCH.BeginTestingSelection();
         uint resultingActionID = Engine.ActionRoutes.Filter(Engine.HealerSelection.TrySelect(actionID, Preset, out var selection) || SGE.TryTestingSelection(actionID, Preset, out selection) || RDM.TryTestingSelection(actionID, Preset, out selection) || DNC.TryTestingDance(actionID, Preset, out selection) ? selection : Invoke(actionID));
+        Engine.TestingApi.Observe("Provider.Result:" + Preset, actionID, resultingActionID);
         resultingActionID = BLM.ReviewTestingCast(actionID, resultingActionID, Preset);
         resultingActionID = MCH.ReviewTestingPreparation(actionID, resultingActionID);
         resultingActionID = BLU.ReviewTestingPreparation(actionID, resultingActionID);

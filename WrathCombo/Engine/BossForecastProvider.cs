@@ -22,8 +22,17 @@ internal static class BossForecastProvider
     internal static void Reset() { Current = null; context = ""; nextPoll = 0; Generation++; }
     private static T? Read<T>(string endpoint) where T : struct
     {
-        try { return Svc.PluginInterface.GetIpcSubscriber<T>("BossMod." + endpoint).InvokeFunc(); }
-        catch { return null; }
+        try
+        {
+            var value = Svc.PluginInterface.GetIpcSubscriber<T>("BossMod." + endpoint).InvokeFunc();
+            AccordDiagnostics.DiagnosticLog.Event("Forecast.Read", () => new { Endpoint = endpoint, Available = true, Value = value });
+            return value;
+        }
+        catch (Exception ex)
+        {
+            AccordDiagnostics.DiagnosticLog.Event("Forecast.Read", () => new { Endpoint = endpoint, Available = false, Error = ex.Message });
+            return null;
+        }
     }
     private static float? Seconds(string endpoint) => EncounterForecast.Normalize(Read<float>(endpoint));
     internal static void Tick()

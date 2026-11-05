@@ -27,7 +27,12 @@ internal static class ActionRoutes
     }
     internal static bool Allowed(uint action) => ActionRouteContext.Allowed(action) &&
         !ActionRouteContext.Excluded.Any(id => CustomComboFunctions.OriginalHook(id) == action);
-    internal static uint Filter(uint action) => Allowed(action) ? action : All.Cease;
+    internal static uint Filter(uint action)
+    {
+        bool allowed = Allowed(action);
+        AccordDiagnostics.DiagnosticLog.Event("Route.Permission", () => new { Action = action, Allowed = allowed, Excluded = ActionRouteContext.Excluded.ToArray() });
+        return allowed ? action : All.Cease;
+    }
 
     internal static void RegisterDirectActions(CustomActionManager manager)
     {

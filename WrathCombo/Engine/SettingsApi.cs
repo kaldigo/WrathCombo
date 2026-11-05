@@ -39,7 +39,12 @@ internal sealed class SettingsApi : IDisposable
                 // BST is not a supported setup job; its type initializer installs a live framework callback.
                 if (type.FullName != "WrathCombo.Combos.PvE.BST" && typeof(UserData).IsAssignableFrom(field.FieldType)) _ = field.GetValue(null);
         read.RegisterFunc(() => Guard(() => Envelope()));
-        apply.RegisterFunc(request => Guard(() => Apply(JObject.Parse(request))));
+        apply.RegisterFunc(request => Guard(() => {
+            AccordDiagnostics.DiagnosticLog.Event("Settings.ApplyRequest", () => new { Request = request });
+            var response = Apply(JObject.Parse(request));
+            AccordDiagnostics.DiagnosticLog.Event("Settings.ApplyResponse", () => response);
+            return response;
+        }));
         discover.RegisterFunc(() => Guard(() => new JObject { ["Success"] = true, ["Schema"] = SettingsSchema.Describe(Snapshot()) }));
         validate.RegisterFunc(request => Guard(() => {
             var current = Snapshot();

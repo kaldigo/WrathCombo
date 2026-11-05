@@ -190,7 +190,10 @@ public static class ActionWatching
         //        Svc.Framework.RunOnTick(() => _tainted = false, TimeSpan.FromSeconds(2));
         //    }
         //}
-        return UseActionLocHook.Original(thisPtr, actionType, actionId, targetId, location, extraParam, a7);
+        AccordDiagnostics.DiagnosticLog.Event("Native.LocationRequest", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Position = location == null ? (Vector3?)null : *location });
+        bool accepted = UseActionLocHook.Original(thisPtr, actionType, actionId, targetId, location, extraParam, a7);
+        AccordDiagnostics.DiagnosticLog.Event("Native.LocationResult", () => new { Action = actionId, Target = targetId, Accepted = accepted });
+        return accepted;
     }
 
     public static void Enable()
@@ -248,6 +251,8 @@ public static class ActionWatching
                 targets.Add((targetEntityIds[i], effectBlocks[i]));
             }
 
+            AccordDiagnostics.DiagnosticLog.Event("Server.Effect", () => new { Actor = casterEntityId, Action = actionId, Type = actionType.ToString(), Sequence = header->GlobalSequence, SourceSequence = header->SourceSequence,
+                Targets = targets.Select(t => new { Id = t.id, Effects = t.effects.Select(e => new { e.Type, e.Value, e.Param0, e.Param1, e.Param2 }).ToArray() }).ToArray() });
             // Process Targets
             foreach (var target in targets)
             {
@@ -383,6 +388,7 @@ public static class ActionWatching
         }
         catch (Exception ex)
         {
+            AccordDiagnostics.DiagnosticLog.Event("Error.NativeHook", () => new { Error = ex.ToString() });
             Svc.Log.Error(ex, "ReceiveActionEffectDetour");
         }
     }
@@ -456,6 +462,7 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is sent. </summary>
     private unsafe static void SendActionDetour(ulong targetObjectId, ActionType actionType, uint actionId, ushort sequence, long a5, long a6, long a7, long a8, long a9)
     {
+        AccordDiagnostics.DiagnosticLog.Event("Native.Send", () => new { Action = actionId, Type = actionType.ToString(), Target = targetObjectId, SourceSequence = sequence });
         Engine.TestingApi.Observe("Send:" + actionType, 0, actionId, targetObjectId);
         try
         {
@@ -510,6 +517,7 @@ public static class ActionWatching
         }
         catch (Exception ex)
         {
+            AccordDiagnostics.DiagnosticLog.Event("Error.NativeHook", () => new { Error = ex.ToString() });
             Service.ActionReplacer.EnableActionReplacingIfRequired();
             Svc.Log.Error(ex, "SendActionDetour");
             SendActionHook!.Original(targetObjectId, actionType, actionId, sequence, a5, a6, a7, a8, a9);
@@ -590,12 +598,14 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is used. </summary>
     private unsafe static bool UseActionDetour(ActionManager* actionManager, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
+        using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Native.Press", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Mode = mode.ToString(), External = Engine.AutomationOwnership.ExternalAction });
         bool queuedExternal = mode == ActionManager.UseActionMode.Queue &&
             externalQueue.Matches((uint)actionType, actionId, targetId, Environment.TickCount64);
         if (Engine.AutomationOwnership.ExternalAction || queuedExternal)
         {
             using var externalScope = Engine.AutomationOwnership.QueuedExternalScope();
             bool result = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+            AccordDiagnostics.DiagnosticLog.Event("Native.ExternalResult", () => new { Action = actionId, Target = targetId, Submitted = result, Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, QueueTarget = actionManager->QueuedTargetId.Id });
             externalQueue.Observe(result, actionManager->ActionQueued, (uint)actionType, actionId, targetId,
                 actionManager->QueuedActionId, actionManager->QueuedTargetId, Environment.TickCount64);
             return result;
@@ -613,7 +623,7 @@ public static class ActionWatching
                     if (customAct.OnClick != null)
                     {
                         customAct.OnClick();
-                        return false;
+                        return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                     }
                 }
 
@@ -624,7 +634,7 @@ public static class ActionWatching
                 {
                     Engine.IntentRouting.ObserveInput(actionId, replacedWith);
                     if (!Engine.SelectionRuntime.Press(actionId, replacedWith, out testingRecipient, out testingGround))
-                    { Engine.SelectionRuntime.RejectPress(); return false; }
+                    { Engine.SelectionRuntime.RejectPress(); return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted"); }
                     trackedPress = true;
                     strictDecision = testingRecipient is not null;
                     Engine.PveIntentRouting.Press(actionId, replacedWith);
@@ -637,7 +647,7 @@ public static class ActionWatching
                     // If the replaced action is a mudra and we're already in a mudra sequence
                     // where the base mudra matches, ignore the input.
                     if (NIN.MudraSigns.Contains(replacedWith) && NIN.InMudra && NIN.MudraToBase(LastAction) == NIN.MudraToBase(replacedWith))
-                        return false;
+                        return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
 
                     // Determine if the queued action conflicts with the current mudra state.
                     var queuedProblem = (queuedAct > 0 && queuedAct != NIN.Ninjutsu && !NIN.MudraSigns.Contains(queuedAct) && !NIN.NormalJutsus.Contains(queuedAct) && !NIN.TCJJutsus.Contains(queuedAct)) || queuedAct == LastAction;
@@ -646,7 +656,7 @@ public static class ActionWatching
                     if (NIN.InMudra && (queuedProblem || !replacedProgressMudra))
                     {
                         actionManager->QueuedActionId = 0;
-                        return false;
+                        return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                     }
                 }
 
@@ -654,7 +664,7 @@ public static class ActionWatching
                 {
                     if (replacedWith != All.Cease)
                         Svc.Toasts.ShowError("This is a custom action, it does nothing on its own.");
-                    return false;
+                    return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                 }
 
                 var disablingReplacingTemp = (mode == ActionManager.UseActionMode.Queue || AutoRotationController.AutorotRaidwiding) && actionId < All.SingleTargetDPS && replacedWith < All.SingleTargetDPS;
@@ -681,7 +691,7 @@ public static class ActionWatching
                     var targObj = changedTargetId.GetObject();
                     var delivered = Engine.Selection.RetargetDelivery.Validate(originalTargetId, changedTargetId,
                         targObj != null && targObj.IsTargetable && !(targObj.IsHostile() && targObj.IsDead), strictDecision);
-                    if (delivered is not { } validRecipient) return false;
+                    if (delivered is not { } validRecipient) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                     targetId = validRecipient;
                 }
 
@@ -691,7 +701,7 @@ public static class ActionWatching
 
                 // However, if we have a queued target ID assume that's what we want and not whatever current retargeting is. TODO: Setting?
                 if (strictDecision && actionManager->ActionQueued && Engine.Selection.RetargetDelivery.ConflictsWithBoundRecipient(
-                        testingRecipient!.Value, actionManager->QueuedTargetId.Id, Service.Configuration.OverwriteQueue)) return false;
+                        testingRecipient!.Value, actionManager->QueuedTargetId.Id, Service.Configuration.OverwriteQueue)) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                 targetId = Engine.Selection.RetargetDelivery.Select(targetId, actionManager->QueuedTargetId.Id,
                     mode == ActionManager.UseActionMode.Queue, Service.Configuration.OverwriteQueue, changed);
 
@@ -704,7 +714,7 @@ public static class ActionWatching
                 if (targetObject is null && targetId != 0xE000_0000)
                 {
                     Service.ActionReplacer.EnableActionReplacingIfRequired();
-                    if (strictDecision) return false;
+                    if (strictDecision) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                     return submitted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
                 }
 
@@ -712,7 +722,7 @@ public static class ActionWatching
                     if (!ActionManager.CanUseActionOnTarget(replacedWith,
                             targetObject.Struct()))
                     {
-                        if (strictDecision) return false;
+                        if (strictDecision) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
                         targetId = originalTargetId;
                     }
 
@@ -790,13 +800,16 @@ public static class ActionWatching
         }
         catch (Exception ex)
         {
+            AccordDiagnostics.DiagnosticLog.Event("Error.NativeHook", () => new { Error = ex.ToString() });
             Svc.Log.Error(ex, "UseActionDetour");
             Service.ActionReplacer.EnableActionReplacingIfRequired();
-            if (strictDecision) return false;
+            if (strictDecision) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
             return submitted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
         }
         finally
         {
+            AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Target = targetId, Strict = strictDecision, Submitted = submitted, Tracked = trackedPress,
+                Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, QueueTarget = actionManager->QueuedTargetId.Id });
             if (trackedPress && !submitted)
             {
                 Engine.SelectionRuntime.RejectPress();

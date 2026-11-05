@@ -14,6 +14,7 @@ class AutomaticProposalTests(unittest.TestCase):
         method = source[start:end]
         harness = r"""
 using System;
+namespace AccordDiagnostics { static class DiagnosticLog { public static void Event(string kind, Func<object?> data) {} public static bool Reject(string reason) => false; } }
 record SelectionDecision(uint Action, ulong Recipient, uint Preparation, int Generation);
 static class Combos { public static class PvE { public static class All { public const uint SingleTargetDPS = 1000000; } } }
 namespace WrathFork.Contract { sealed class ActionRouteContext(object policy) : IDisposable { public void Dispose() {} } }

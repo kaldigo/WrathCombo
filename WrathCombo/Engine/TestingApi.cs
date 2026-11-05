@@ -10,6 +10,7 @@ namespace WrathCombo.Engine;
 internal sealed class TestingApi : IDisposable
 {
     private readonly AutomationOwnership ownership = new();
+    private readonly AccordDiagnostics.DiagnosticEndpoint diagnostics;
     private static readonly object Gate = new();
     private static readonly DecisionTrace Trace = new();
     private static readonly System.Collections.Generic.Queue<JObject> Decisions = new();
@@ -19,6 +20,7 @@ internal sealed class TestingApi : IDisposable
     private static string Context => $"{Player.Object?.GameObjectId}:{Player.Job}:{Player.Level}:{Svc.ClientState.TerritoryType}:{Svc.ClientState.IsPvP}";
     internal TestingApi(Func<JObject> settings)
     {
+        diagnostics = new("WrathCombo", "WrathCombo.Diagnostics.v1", DiagnosticState, () => new { Settings = settings(), Experimental = ExperimentalSelection.Read() });
         api.RegisterFunc(command =>
         {
             try
@@ -57,12 +59,14 @@ internal sealed class TestingApi : IDisposable
     }
     internal static void Observe(string kind, uint input, uint output, ulong? recipient = null)
     {
+        AccordDiagnostics.DiagnosticLog.Event(kind, () => new { Input = input, Output = output, Recipient = recipient });
         // Diagnostics must never interrupt an action hook, even during teardown.
         try { lock (Gate) { if (Trace.Active) Trace.Add(Environment.TickCount64, Context, kind, input, output, recipient); } }
         catch { lock (Gate) Trace.Stop("Observation failed"); }
     }
     internal static void RecordDecision(string provider, object input, object? output)
     {
+        AccordDiagnostics.DiagnosticLog.Event("Decision." + provider, () => new { Input = input, Output = output });
         try
         {
             lock (Gate)
@@ -75,11 +79,20 @@ internal sealed class TestingApi : IDisposable
         }
         catch { /* Observation must not affect selection. */ }
     }
+    private static unsafe object DiagnosticState()
+    {
+        var manager = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.Instance();
+        return new { AutomationOwnership.Allowed, AutomationOwnership.ExternalAction, SelectionRuntime.Automatic,
+            PartyMouseover = global::WrathCombo.CustomComboNS.SimpleTarget.UIMouseOverTarget?.GameObjectId,
+            Commitment = SelectionRuntime.Commitment, Experimental = ExperimentalSelection.Read(),
+            Encounter = BossForecastProvider.Current, AutoPaused = AutoRotation.AutoRotationController.Paused,
+            Queue = manager == null ? null : new { ActionQueued = manager->ActionQueued, QueuedActionId = manager->QueuedActionId, Target = manager->QueuedTargetId.Id, AnimationLock = manager->AnimationLock, CastActionId = manager->CastActionId, CastTimeElapsed = manager->CastTimeElapsed, CastTimeTotal = manager->CastTimeTotal } };
+    }
     internal void Tick()
     {
         if (ExperimentalSelection.Forecasts) BossForecastProvider.Tick();
         SelectionRuntime.Tick();
         lock (Gate) { if (Trace.Active) Trace.Check(Environment.TickCount64, Context); }
     }
-    public void Dispose() { ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
+    public void Dispose() { diagnostics.Dispose(); ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
 }

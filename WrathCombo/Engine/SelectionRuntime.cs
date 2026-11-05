@@ -150,6 +150,7 @@ internal static class SelectionRuntime
     }
     internal static uint Publish(uint input, SelectionDecision decision)
     {
+        AccordDiagnostics.DiagnosticLog.Event("Decision.Publish", () => new { Input = input, Decision = decision });
         previews[input] = decision;
         if (automatic) { automaticDecision = decision; automaticInput = input; }
         TestingApi.Observe("PlannedGcd:" + decision.Reason, decision.Action, decision.PlannedGcd, decision.Recipient);
@@ -174,6 +175,7 @@ internal static class SelectionRuntime
 
     internal static unsafe bool Press(uint input, uint result, out ulong? boundRecipient, out System.Numerics.Vector3? boundGround)
     {
+        AccordDiagnostics.DiagnosticLog.Event("Decision.Press", () => new { Input = input, Result = result, Automatic = automatic, Preview = previews.GetValueOrDefault(input), AutomaticDecision = automaticDecision });
         boundRecipient = null;
         boundGround = null;
         if (!PvPIntentRouting.Enabled && !ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg && !ExperimentalSelection.ActiveTargets) return true;
@@ -185,11 +187,11 @@ internal static class SelectionRuntime
             : previews.GetValueOrDefault(input) ?? (automatic && automaticDecision?.Action == result ? automaticDecision : null);
         if (decision is null || decision.Action != result) { sequence.CancelPress(); return true; }
         if (decision.EvaluatedEnemy is { } evaluated && SelectEnemy(result, fixedRecipient: evaluated).Recipient != evaluated)
-        { sequence.CancelPress(); return false; }
+        { sequence.CancelPress(); return AccordDiagnostics.DiagnosticLog.Reject("Decision press validation failed"); }
         if (decision.GroundPosition is { } position)
         {
             if (decision.Generation != Generation || Environment.TickCount64 - decision.ObservedAt >= 500 ||
-                !ActionRoutes.Allowed(result) || !HealingGroundSelection.StillValid(result, position)) return false;
+                !ActionRoutes.Allowed(result) || !HealingGroundSelection.StillValid(result, position)) return AccordDiagnostics.DiagnosticLog.Reject("Decision press validation failed");
             sequence.CancelPress();
             pendingConfirmation = decision;
             boundRecipient = decision.Recipient;
@@ -202,7 +204,7 @@ internal static class SelectionRuntime
             !recipient.IsTargetable || !TargetLifeAllowed(validateAction, recipient) || !ActionRoutes.Allowed(validateAction) || !ActionRoutes.Allowed(decision.Action) ||
             Svc.ClientState.IsPvP && recipient.IsHostile() && !PvpTargetEligibility.CanDamage(validateAction, recipient) ||
             !ActionManager.CanUseActionOnTarget(validateAction, recipient.Struct()) || !InActionRange(validateAction, recipient))
-        { sequence.CancelPress(); return false; }
+        { sequence.CancelPress(); return AccordDiagnostics.DiagnosticLog.Reject("Decision press validation failed"); }
         if (decision.Preparation != 0 || decision.CompletionAction != 0) sequence.Press(decision);
         else sequence.CancelPress();
         pendingConfirmation = decision;
@@ -211,6 +213,7 @@ internal static class SelectionRuntime
     }
     internal static void Confirm(uint action, bool consumesPreparation, IReadOnlyCollection<ulong>? recipients = null)
     {
+        AccordDiagnostics.DiagnosticLog.Event("Decision.Confirm", () => new { Action = action, consumesPreparation, Recipients = recipients, Pending = pendingConfirmation, Commitment });
         if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction) return;
         var expected = pendingConfirmation?.Action == action ? pendingConfirmation : Commitment?.PlannedGcd == action ? Commitment : null;
         bool confirmedRecipient = expected is null || expected.GroundPosition is not null || expected.Preparation == action || expected.Recipient == Player.Object?.GameObjectId ||

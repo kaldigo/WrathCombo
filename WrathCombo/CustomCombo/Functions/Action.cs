@@ -172,22 +172,26 @@ internal abstract partial class CustomComboFunctions
     internal static unsafe bool ActionReadyForTarget(uint actionId, ulong targetId,
         bool recastCheck = false, bool castCheck = false)
     {
+        using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Readiness.Check", () => new { Action = actionId, Target = targetId, recastCheck, castCheck });
         if (actionId == 0 || !Engine.ActionRoutes.Allowed(actionId))
-            return false;
+            return AccordDiagnostics.DiagnosticLog.Reject("Action readiness prerequisite");
 
         if (actionId >= All.SingleTargetDPS)
             return true;
 
         if (Player.Job is Job.BLU && IsBlueMageSpellbookAction(actionId) && !IsSpellActive(actionId))
-            return false;
+            return AccordDiagnostics.DiagnosticLog.Reject("Action readiness prerequisite");
 
         if (ActionRequestIPCProvider.GetArtificialCooldown(ActionType.Action, actionId) > 0)
         {
-            return false;
+            return AccordDiagnostics.DiagnosticLog.Reject("Action readiness prerequisite");
         }
 
-        return (HasCharges(actionId) || (GetAttackType(actionId) != ActionAttackType.Ability && GetCooldownRemainingTime(actionId) <= RemainingGCD + BaseActionQueue)) &&
-            ActionManager.Instance()->GetActionStatus(ActionType.Action, actionId, targetId, checkRecastActive: recastCheck, checkCastingActive: castCheck) is 0 or 582 or 580;
+        bool cooldownReady = HasCharges(actionId) || (GetAttackType(actionId) != ActionAttackType.Ability && GetCooldownRemainingTime(actionId) <= RemainingGCD + BaseActionQueue);
+        uint? status = cooldownReady ? ActionManager.Instance()->GetActionStatus(ActionType.Action, actionId, targetId, checkRecastActive: recastCheck, checkCastingActive: castCheck) : null;
+        bool ready = status is 0 or 582 or 580;
+        AccordDiagnostics.DiagnosticLog.Event("Readiness.Result", () => new { Action = actionId, Target = targetId, CooldownReady = cooldownReady, NativeStatus = status, Ready = ready });
+        return ready;
     }
 
     /// <summary> Checks if all passed actions are ready to be used. </summary>
