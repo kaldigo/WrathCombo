@@ -21,6 +21,7 @@ class CheckedActionCacheTests(unittest.TestCase):
 using System;
 using System.Collections.Generic;
 static class Engine {
+    public static class EmergencyRotation { public const uint Single = 1000017, Area = 1000018; }
     public static class RotationBehaviour { public static uint CheckedAction; }
     public static class AutomationOwnership { public static bool ExternalAction; }
     public static class SelectionRuntime {
@@ -44,6 +45,10 @@ class Program {
     static void Main() {
         var hook = new Hook();
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 200) throw new Exception("Normal cache changed");
+        foreach (var backup in new[] { Engine.EmergencyRotation.Single, Engine.EmergencyRotation.Area }) {
+            hook.LastActionInvokeFor[backup] = 123;
+            if (hook.GetAdjustedActionDetour(IntPtr.Zero, backup) != backup) throw new Exception("Backup hotbar action reused a cached rotation");
+        }
         Engine.RotationBehaviour.CheckedAction = 100;
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 100) throw new Exception("Stale targeted replacement escaped checked execution");
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 101) != 201) throw new Exception("Unrelated action affected");

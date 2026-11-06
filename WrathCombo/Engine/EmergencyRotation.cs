@@ -11,11 +11,29 @@ namespace WrathCombo.Engine;
 
 internal sealed class EmergencyRotation : IDisposable
 {
+    internal const uint Single = 1_000_017, Area = 1_000_018;
+    private readonly ICallGateProvider<bool> available = Svc.PluginInterface.GetIpcProvider<bool>("WrathCombo.EmergencyHotbars.v1");
     [ThreadStatic] internal static bool Resolving;
     private readonly ICallGateProvider<bool, string> press = Svc.PluginInterface.GetIpcProvider<bool, string>("WrathCombo.EmergencyDamage.v1");
-    internal EmergencyRotation() => press.RegisterFunc(Press);
-    private static unsafe string Press(bool area)
+    internal EmergencyRotation()
     {
+        available.RegisterFunc(() => true);
+        press.RegisterFunc(Press);
+    }
+    internal static bool HotbarPress(uint id)
+    {
+        try
+        {
+            if (!Svc.PluginInterface.GetIpcSubscriber<bool>("Accord.EmergencyHotbarsArmed.v1").InvokeFunc()) return false;
+            Dispatch(id == Area, out bool accepted);
+            return accepted;
+        }
+        catch (Exception ex) { Svc.Log.Warning(ex, "Emergency hotbar press unavailable"); return false; }
+    }
+    private static string Press(bool area) => Dispatch(area, out _);
+    private static unsafe string Dispatch(bool area, out bool accepted)
+    {
+        accepted = false;
         if (!Svc.Framework.IsInFrameworkUpdateThread || !Player.Available || Player.IsDead || Svc.ClientState.IsPvP)
             return "Backup damage controls require a living PvE character.";
         if (!AutomationOwnership.Managed || AutomationOwnership.Allowed)
@@ -33,9 +51,10 @@ internal sealed class EmergencyRotation : IDisposable
         if (action == 0 || action >= All.SingleTargetDPS) return "Wrath has no usable damage action for this press.";
         ulong target = Svc.Targets.Target?.GameObjectId ?? 0xE0000000;
         using var dispatch = AutomationOwnership.QueuedExternalScope();
-        bool accepted = ActionManager.Instance()->UseAction(ActionType.Action, action, target);
-        AccordDiagnostics.DiagnosticLog.Event("Emergency.Press", () => new { Area = area, Action = action, Target = target, Accepted = accepted });
+        accepted = ActionManager.Instance()->UseAction(ActionType.Action, action, target);
+        bool submitted = accepted;
+        AccordDiagnostics.DiagnosticLog.Event("Emergency.Press", () => new { Area = area, Action = action, Target = target, Accepted = submitted });
         return accepted ? "Wrath accepted the backup press." : "The game did not accept the backup action.";
     }
-    public void Dispose() => press.UnregisterFunc();
+    public void Dispose() { available.UnregisterFunc(); press.UnregisterFunc(); }
 }

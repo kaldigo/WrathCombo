@@ -19,9 +19,9 @@ AutomationOwnership.Allowed=false;
 foreach(bool area in new[]{false,true}) {
  uint input=area?1000001u:1000000u;
  ActionReplacer.FilteredCombos=[new Combo(input,156)];
- Press(area);Check(ActionManager.Last==(156u,77ul) && !EmergencyRotation.Resolving && !ExperimentalSelection.LegacyDamage && !AutomationOwnership.Bypass);
+ Check(EmergencyRotation.HotbarPress(area ? EmergencyRotation.Area : EmergencyRotation.Single));Check(ActionManager.Last==(156u,77ul) && !EmergencyRotation.Resolving && !ExperimentalSelection.LegacyDamage && !AutomationOwnership.Bypass);
 }
-Check(ActionManager.Calls==2);
+Check(ActionManager.Calls==2); Svc.PluginInterface.Armed=false;Check(!EmergencyRotation.HotbarPress(EmergencyRotation.Single) && ActionManager.Calls==2);
 ActionReplacer.FilteredCombos=[new Combo(1000000,1000004)];Press(false);Check(ActionManager.Calls==2);
 Svc.ClientState.IsPvP=true;Press(true);Check(ActionManager.Calls==2);
 namespace WrathCombo.Engine {
@@ -36,13 +36,15 @@ namespace WrathCombo.Services {static class Service {public static ActionReplace
 namespace WrathCombo.Combos.PvE {static class All {public const uint SingleTargetDPS=1000000,AoEDPS=1000001;}}
 namespace ECommons.GameHelpers {static class Player {public static bool Available=true,IsDead;}}
 namespace ECommons.DalamudServices {
- static class Svc {public static PI PluginInterface=new(); public static Framework Framework=new();public static Client ClientState=new();public static Targets Targets=new();}
+ class LogStub { public void Warning(Exception e,string m){} }
+ static class Svc {public static LogStub Log=new();public static PI PluginInterface=new(); public static Framework Framework=new();public static Client ClientState=new();public static Targets Targets=new();}
  class Targets {public Target? Target=new();} class Target {public ulong GameObjectId=77;}
  class Client {public bool IsPvP;} class Framework {public bool IsInFrameworkUpdateThread=true;}
- class PI {public Func<bool,string>? Call;public Dalamud.Plugin.Ipc.ICallGateProvider<T,R> GetIpcProvider<T,R>(string name)=>new Gate<T,R>(this);}
+ class SimpleGate<T>(PI pi):Dalamud.Plugin.Ipc.ICallGateProvider<T>{public T InvokeFunc()=>(T)(object)pi.Armed; public void RegisterFunc(Func<T> f){} public void UnregisterFunc(){} }
+ class PI {public bool Armed=true;public SimpleGate<T> GetIpcSubscriber<T>(string name)=>new(this);public SimpleGate<T> GetIpcProvider<T>(string name)=>new(this);public Func<bool,string>? Call;public Dalamud.Plugin.Ipc.ICallGateProvider<T,R> GetIpcProvider<T,R>(string name)=>new Gate<T,R>(this);}
  class Gate<T,R>(PI plugin):Dalamud.Plugin.Ipc.ICallGateProvider<T,R>{public void RegisterFunc(Func<T,R> f)=>plugin.Call=x=>(string)(object)f((T)(object)x)!;public void UnregisterFunc()=>plugin.Call=null;}
 }
-namespace Dalamud.Plugin.Ipc {interface ICallGateProvider<T,R>{void RegisterFunc(Func<T,R> f);void UnregisterFunc();}}
+namespace Dalamud.Plugin.Ipc {interface ICallGateProvider<T>{void RegisterFunc(Func<T> f);void UnregisterFunc();} interface ICallGateProvider<T,R>{void RegisterFunc(Func<T,R> f);void UnregisterFunc();}}
 namespace FFXIVClientStructs.FFXIV.Client.Game {
  enum ActionType {Action}
  unsafe struct ActionManager {public static int Calls; public static (uint,ulong) Last;

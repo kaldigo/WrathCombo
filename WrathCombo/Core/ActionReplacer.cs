@@ -112,6 +112,7 @@ internal sealed class ActionReplacer : IDisposable
     /// </remarks>
     private uint GetAdjustedActionDetour(IntPtr _, uint actionID)
     {
+        if (actionID is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area) return actionID;
         if (Engine.AutomationOwnership.ExternalAction) return OriginalHook(actionID);
         try
         {

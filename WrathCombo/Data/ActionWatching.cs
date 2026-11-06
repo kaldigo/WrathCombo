@@ -601,6 +601,8 @@ public static class ActionWatching
     {
         Engine.TestingApi.ObserveNormalPress(actionId, Engine.SelectionRuntime.Automatic, mode == ActionManager.UseActionMode.Queue);
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Native.Press", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Mode = mode.ToString(), External = Engine.AutomationOwnership.ExternalAction });
+        if (actionType == ActionType.Action && actionId is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area)
+            return mode != ActionManager.UseActionMode.Queue && Engine.EmergencyRotation.HotbarPress(actionId);
         bool queuedExternal = mode == ActionManager.UseActionMode.Queue &&
             externalQueue.Matches((uint)actionType, actionId, targetId, Environment.TickCount64);
         if (Engine.AutomationOwnership.ExternalAction || queuedExternal)
