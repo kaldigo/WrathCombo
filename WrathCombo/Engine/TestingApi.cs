@@ -11,6 +11,7 @@ internal sealed class TestingApi : IDisposable
 {
     private readonly AutomationOwnership ownership = new();
     private readonly RotationSettingsApi rotationSettings = new();
+    private readonly EmergencyRotation emergency = new();
     private readonly AccordDiagnostics.DiagnosticEndpoint diagnostics;
     private static readonly object Gate = new();
     private static readonly DecisionTrace Trace = new();
@@ -89,11 +90,29 @@ internal sealed class TestingApi : IDisposable
             Encounter = BossForecastProvider.Current, AutoPaused = AutoRotation.AutoRotationController.Paused,
             Queue = manager == null ? null : new { ActionQueued = manager->ActionQueued, QueuedActionId = manager->QueuedActionId, Target = manager->QueuedTargetId.Id, AnimationLock = manager->AnimationLock, CastActionId = manager->CastActionId, CastTimeElapsed = manager->CastTimeElapsed, CastTimeTotal = manager->CastTimeTotal } };
     }
+    private static long normalWindow;
+    private static int manualPresses, autoPresses, sends;
+    private static uint lastInput, lastSend;
+    internal static void ObserveNormalPress(uint input, bool automatic, bool queued)
+    {
+        if (queued) return;
+        if (automatic) autoPresses++; else manualPresses++;
+        lastInput = input;
+    }
+    internal static void ObserveNormalSend(uint action) { sends++; lastSend = action; }
     internal void Tick()
     {
+        if (Environment.TickCount64 >= normalWindow)
+        {
+            normalWindow = Environment.TickCount64 + 30000;
+            if (Player.Available && (manualPresses + autoPresses + sends > 0 || Svc.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]))
+                Svc.Log.Information("Combat summary job={Job} manual presses={Manual} automatic presses={Automatic} sends={Sends} last input={Input} last send={Action}", Player.Job, manualPresses, autoPresses, sends, lastInput, lastSend);
+            manualPresses = autoPresses = sends = 0;
+            lastInput = lastSend = 0;
+        }
         if (ExperimentalSelection.Forecasts) BossForecastProvider.Tick();
         SelectionRuntime.Tick();
         lock (Gate) { if (Trace.Active) Trace.Check(Environment.TickCount64, Context); }
     }
-    public void Dispose() { diagnostics.Dispose(); rotationSettings.Dispose(); ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
+    public void Dispose() { diagnostics.Dispose(); rotationSettings.Dispose(); emergency.Dispose(); ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
 }

@@ -68,7 +68,7 @@ namespace ECommons.DalamudServices {
 namespace ECommons.GameHelpers { static class Player { public static uint Job=25; } }
 namespace WrathCombo.Services { static class Service { public static Configuration Configuration=new(); } class Configuration { public JObject RotationSelectionSettings=new(); } }
 namespace WrathCombo.CustomComboNS.Functions { static class CustomComboFunctions { public static bool Combat; public static bool InCombat()=>Combat; } }
-namespace AccordDiagnostics { static class DiagnosticLog { public static void Event(string kind, Func<object> data) {} } }
+namespace AccordDiagnostics { static class DiagnosticLog { public static bool Active => false; public static void Event(string kind, Func<object> data, string? sampleKey=null) {} } }
 namespace WrathCombo.Engine {
  static class AutomationOwnership { public static bool Busy; }
  static class SelectionRuntime { public static object? Commitment; public static int Resets; public static void Reset() { Resets++; Commitment=null; } }

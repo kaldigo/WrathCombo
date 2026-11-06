@@ -274,9 +274,9 @@ internal static class SelectionRuntime
             if (ExperimentalSelection.EnemyFocus && SimpleTarget.FocusTarget is IBattleChara focus && focus.IsHostile())
                 overrides.Add(new(TargetSource.Focus, focus.GameObjectId));
         }
-        if (selected is not null && !ExperimentalSelection.AutomaticEnemies)
+        if (selected is not null && (!automatic || !ExperimentalSelection.AutomaticEnemies))
             overrides.Insert(ExperimentalSelection.EnemyMouseover && overrides.Count > 0 && overrides[0].Source == TargetSource.WorldMouseover ? 1 : 0,
-                new(TargetSource.Selected, selected.GameObjectId));
+                new(automatic ? TargetSource.Selected : TargetSource.Explicit, selected.GameObjectId));
         bool acquire = ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy && selected is null;
         if (fixedRecipient is { } fixedId) { overrides.Clear(); overrides.Add(new(TargetSource.Explicit, fixedId)); }
         var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,

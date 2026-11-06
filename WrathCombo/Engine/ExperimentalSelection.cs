@@ -92,9 +92,11 @@ internal static class ExperimentalSelection
     internal static bool ActiveTargets => Observed("ActiveTargets", Svc.ClientState.IsPvP ? PvpTargeting : EnemyTargeting);
     internal static bool ActiveDrg => Observed("ActiveDrg", Drg && !Svc.ClientState.IsPvP && (uint)Player.Job == 22);
     internal static bool ActiveSage => Observed("ActiveSage", (Sage || ManagedHealing) && !Svc.ClientState.IsPvP && (uint)Player.Job == 40);
+    [ThreadStatic] internal static bool LegacyDamage;
     private static bool Observed(string feature, bool active)
     {
-        AccordDiagnostics.DiagnosticLog.Event("Feature.Evaluated", () => new { Feature = feature, Active = active, Job = (uint)Player.Job, PvP = Svc.ClientState.IsPvP });
+        if (LegacyDamage) return false;
+        if (AccordDiagnostics.DiagnosticLog.Active) AccordDiagnostics.DiagnosticLog.Event("Feature.Evaluated", () => new { Feature = feature, Active = active, Job = (uint)Player.Job, PvP = Svc.ClientState.IsPvP }, feature + (active ? ":active" : ":inactive"));
         return active;
     }
     internal static JObject Read() => new() { ["Drg"] = Drg, ["Machinist"] = Machinist, ["Paladin"] = Paladin, ["CompareDrg"] = CompareDrg, ["Sage"] = Sage,

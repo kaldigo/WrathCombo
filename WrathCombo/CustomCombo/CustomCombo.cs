@@ -83,6 +83,15 @@ internal abstract partial class CustomCombo : CustomComboFunctions
         using var route = routePolicy is null ? null : new WrathFork.Contract.ActionRouteContext(routePolicy);
 
 
+        if (Engine.EmergencyRotation.Resolving)
+        {
+            var type = global::WrathCombo.Native.CustomActionHelper.GetTypeByAttribute(PresetStorage.AllPresets[Preset].AutoAction);
+            var expected = actionID == All.SingleTargetDPS ? global::WrathCombo.Native.CustomActionType.SingleTargetDPS : global::WrathCombo.Native.CustomActionType.AoEDPS;
+            if (type != expected) return false;
+            newActionID = Engine.ActionRoutes.Filter(Invoke(actionID));
+            return newActionID != 0 && newActionID != actionID;
+        }
+
         if (ActionRequestIPCProvider.TryGetRequestedAction(out var id))
         {
             newActionID = Engine.ActionRoutes.Filter(id);

@@ -1,3 +1,4 @@
+using System.IO;
 using System;
 using System.Collections.Generic;
 using Dalamud.Plugin.Ipc;
@@ -34,7 +35,10 @@ internal sealed class DiagnosticEndpoint : IDisposable
             var status = JObject.FromObject(DiagnosticLog.Status());
             if (command == "start")
             {
-                DiagnosticLog.Start(DiagnosticLog.Root(Svc.PluginInterface.GetPluginConfigDirectory()), id, component);
+                var root = DiagnosticLog.Root(Svc.PluginInterface.GetPluginConfigDirectory());
+                string? duty = input.Value<string>("Duty");
+                if (duty != null && !Guid.TryParseExact(duty, "N", out _)) throw new InvalidOperationException("Invalid duty capture identifier.");
+                DiagnosticLog.Start(duty == null ? root : Path.Combine(root, "LastDuty", duty), id, component, duty != null);
                 previousSettings = ""; nextState = nextSettings = nextCheckpoint = 0;
                 heartbeat = Environment.TickCount64;
                 DiagnosticLog.Event("Settings.Initial", settings);
@@ -46,7 +50,7 @@ internal sealed class DiagnosticEndpoint : IDisposable
                 if (command == "stop") DiagnosticLog.Stop("User stopped diagnostics");
             }
             else if (command != "status") throw new InvalidOperationException("Unknown diagnostic command.");
-            return JsonConvert.SerializeObject(new { Success = true, Schema = 1, Status = DiagnosticLog.Status() });
+            return JsonConvert.SerializeObject(new { Success = true, Schema = 1, DutyCaptureVersion = 1, Status = DiagnosticLog.Status() });
         }
         catch (Exception ex) { return JsonConvert.SerializeObject(new { Success = false, Error = ex.Message, Status = DiagnosticLog.Status() }); }
     }

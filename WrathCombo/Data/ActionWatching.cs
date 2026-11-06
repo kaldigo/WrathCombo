@@ -462,6 +462,7 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is sent. </summary>
     private unsafe static void SendActionDetour(ulong targetObjectId, ActionType actionType, uint actionId, ushort sequence, long a5, long a6, long a7, long a8, long a9)
     {
+        Engine.TestingApi.ObserveNormalSend(actionId);
         AccordDiagnostics.DiagnosticLog.Event("Native.Send", () => new { Action = actionId, Type = actionType.ToString(), Target = targetObjectId, SourceSequence = sequence });
         Engine.TestingApi.Observe("Send:" + actionType, 0, actionId, targetObjectId);
         try
@@ -598,6 +599,7 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is used. </summary>
     private unsafe static bool UseActionDetour(ActionManager* actionManager, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
+        Engine.TestingApi.ObserveNormalPress(actionId, Engine.SelectionRuntime.Automatic, mode == ActionManager.UseActionMode.Queue);
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Native.Press", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Mode = mode.ToString(), External = Engine.AutomationOwnership.ExternalAction });
         bool queuedExternal = mode == ActionManager.UseActionMode.Queue &&
             externalQueue.Matches((uint)actionType, actionId, targetId, Environment.TickCount64);
@@ -685,6 +687,19 @@ public static class ActionWatching
                     changedTargetId = boundRecipient;
                 }
 
+                // A direct hostile press can pull an unengaged enemy, including while the runner is enabled.
+                // A queued replay must retain the recipient of the original press.
+                bool manualEnemy = mode != ActionManager.UseActionMode.Queue && !Engine.SelectionRuntime.Automatic &&
+                    Svc.Targets.Target is IBattleChara chosen && chosen.IsHostile() && chosen.IsTargetable && !chosen.IsDead &&
+                    ActionSheet.TryGetValue(replacedWith, out var hostileRow) && hostileRow.CanTargetHostile &&
+                    !hostileRow.TargetArea && (originalTargetId is 0 or 0xE0000000 || originalTargetId == chosen.GameObjectId) &&
+                    ActionManager.CanUseActionOnTarget(replacedWith, (FFXIVClientStructs.FFXIV.Client.Game.Object.GameObject*)chosen.Address);
+                if (manualEnemy)
+                {
+                    changed = true;
+                    changedTargetId = Svc.Targets.Target!.GameObjectId;
+                }
+
                 // If retargeting kicks in, update target ID
                 if (changed)
                 {
@@ -702,7 +717,7 @@ public static class ActionWatching
                 // However, if we have a queued target ID assume that's what we want and not whatever current retargeting is. TODO: Setting?
                 if (strictDecision && actionManager->ActionQueued && Engine.Selection.RetargetDelivery.ConflictsWithBoundRecipient(
                         testingRecipient!.Value, actionManager->QueuedTargetId.Id, Service.Configuration.OverwriteQueue)) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
-                targetId = Engine.Selection.RetargetDelivery.Select(targetId, actionManager->QueuedTargetId.Id,
+                targetId = Engine.Selection.RetargetDelivery.Select(targetId, (Engine.SelectionRuntime.Automatic || actionManager->ActionQueued && !strictDecision && !manualEnemy) ? actionManager->QueuedTargetId.Id : 0,
                     mode == ActionManager.UseActionMode.Queue, Service.Configuration.OverwriteQueue, changed);
 
                 var areaTargeted = replacedWith >= 1_000_000 ? false : ActionSheet.TryGetValue(replacedWith, out var s) && s.TargetArea;

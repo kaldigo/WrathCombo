@@ -513,6 +513,8 @@ public class CustomActionHelper()
     /// <returns></returns>
     public static bool OneButtonRotationChecker(uint actionId, CustomActionType type, params uint[] originals)
     {
+        if (Engine.EmergencyRotation.Resolving)
+            return type is CustomActionType.SingleTargetDPS or CustomActionType.AoEDPS && actionId == GetActionId(type);
         bool matches = Engine.PvPIntentRouting.Matches(actionId, type) ?? Engine.PveIntentRouting.Matches(actionId, type) ??
             (CustomActionEnabled(type) ? actionId == GetActionId(type) : originals.Contains(actionId));
         if (matches && type is CustomActionType.SingleTargetDPS or CustomActionType.AoEDPS && originals.Length > 0)
