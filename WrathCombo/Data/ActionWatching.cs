@@ -724,10 +724,11 @@ public static class ActionWatching
                 if (!Svc.Objects.Any(x => x.GameObjectId == actionManager->QueuedTargetId.Id))
                     actionManager->QueuedTargetId = 0;
 
-                // However, if we have a queued target ID assume that's what we want and not whatever current retargeting is. TODO: Setting?
-                if (strictDecision && actionManager->ActionQueued && Engine.Selection.RetargetDelivery.ConflictsWithBoundRecipient(
-                        testingRecipient!.Value, actionManager->QueuedTargetId.Id, Service.Configuration.OverwriteQueue)) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
-                targetId = Engine.Selection.RetargetDelivery.Select(targetId, (Engine.SelectionRuntime.Automatic || actionManager->ActionQueued && !strictDecision && !manualEnemy) ? actionManager->QueuedTargetId.Id : 0,
+                // The game can retain the last recipient after the queue empties.
+                ulong queuedRecipient = actionManager->ActionQueued ? actionManager->QueuedTargetId.Id : 0;
+                if (strictDecision && Engine.Selection.RetargetDelivery.ConflictsWithBoundRecipient(
+                        testingRecipient!.Value, queuedRecipient, Service.Configuration.OverwriteQueue)) return AccordDiagnostics.DiagnosticLog.Reject("Native press not submitted");
+                targetId = Engine.Selection.RetargetDelivery.Select(targetId, (Engine.SelectionRuntime.Automatic || !strictDecision && !manualEnemy) ? queuedRecipient : 0,
                     mode == ActionManager.UseActionMode.Queue, Service.Configuration.OverwriteQueue, changed);
 
                 var areaTargeted = replacedWith >= 1_000_000 ? false : ActionSheet.TryGetValue(replacedWith, out var s) && s.TargetArea;
@@ -798,7 +799,7 @@ public static class ActionWatching
                     Svc.Log.Verbose($"[QueuedTargetUpdate] Updating queued target ID to {Svc.Objects.SearchById(changedTargetId)?.Name}");
 
                     // Only sets the queued target once if overwrite is not enabled, otherwise will update each button press
-                    if (actionManager->QueuedTargetId.Id == 0 || Service.Configuration.OverwriteQueue)
+                    if (queuedRecipient == 0 || Service.Configuration.OverwriteQueue)
                         actionManager->QueuedTargetId = targetId;
                 }
 
