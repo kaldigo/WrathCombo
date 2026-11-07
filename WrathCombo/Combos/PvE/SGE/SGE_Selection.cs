@@ -121,9 +121,12 @@ internal partial class SGE
             }
             if (gcds && RotationBehaviour.Protection != false &&
                 (hp < 80 || !damage || ForecastRaidwide() is >= 2.5f and <= 6f) && SelectPrognosis(ref action, ForecastRaidwide())) return true;
-            if (damage) return false;
-            action = ActionRoutes.Allowed(Prognosis) ? OriginalHook(Prognosis) : All.Cease;
-            return true;
+            if (!damage)
+            {
+                action = ActionRoutes.Allowed(Prognosis) ? OriginalHook(Prognosis) : All.Cease;
+                return true;
+            }
+            // An AoE damage button can still need a single-target heal.
         }
 
         var recipient = SelectionRuntime.SelectAlly(Diagnosis);

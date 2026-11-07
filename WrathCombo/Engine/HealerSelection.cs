@@ -143,6 +143,18 @@ internal static partial class HealerSelection
     {
         var selected = SelectionRuntime.SelectAlly(BasicHeal);
         if (selected.Recipient is not { } targetId) return null;
+        if (area)
+        {
+            var partyHeal = RecoveryFor(input, targetId, true, gcds, explicitHeal);
+            if (partyHeal is not null || explicitHeal) return partyHeal;
+            // Multiple enemies do not imply group damage. Check the selected
+            // ally's own health before giving the damage button back to Holy.
+        }
+        return RecoveryFor(input, targetId, false, gcds, explicitHeal);
+    }
+
+    private static unsafe SelectionDecision? RecoveryFor(uint input, ulong targetId, bool area, bool gcds, bool explicitHeal)
+    {
         var target = Svc.Objects.SearchById(targetId);
         float hp = area ? GetPartyAvgHPPercent() : GetTargetHPPercent(target, forceUsePending: true);
         var priorities = Job switch
