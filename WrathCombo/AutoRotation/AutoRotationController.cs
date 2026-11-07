@@ -186,6 +186,8 @@ internal unsafe class AutoRotationController
     {
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Runner.Tick", () => new { AutomationOwnership.Allowed });
         if (!AutomationOwnership.Allowed) { AccordDiagnostics.DiagnosticLog.Exit("Automation ownership denied"); return; }
+        if (RotationInterop.ManualLimitBreak.Waiting()) { AccordDiagnostics.DiagnosticLog.Exit("Manual limit break in progress"); return; }
+        using var queueScope = RotationInterop.ManualLimitBreak.TrackRunner();
         using var selectionScope = SelectionRuntime.AutomaticScope();
         cfg ??= new AutoRotationConfigIPCWrapper(Service.Configuration.RotationConfig);
 

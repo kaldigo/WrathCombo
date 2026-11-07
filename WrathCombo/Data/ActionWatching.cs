@@ -190,6 +190,7 @@ public static class ActionWatching
         //        Svc.Framework.RunOnTick(() => _tainted = false, TimeSpan.FromSeconds(2));
         //    }
         //}
+        RotationInterop.ManualLimitBreak.Placement(actionType, actionId);
         AccordDiagnostics.DiagnosticLog.Event("Native.LocationRequest", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Position = location == null ? (Vector3?)null : *location });
         bool accepted = UseActionLocHook.Original(thisPtr, actionType, actionId, targetId, location, extraParam, a7);
         AccordDiagnostics.DiagnosticLog.Event("Native.LocationResult", () => new { Action = actionId, Target = targetId, Accepted = accepted });
@@ -601,6 +602,13 @@ public static class ActionWatching
     {
         Engine.TestingApi.ObserveNormalPress(actionId, Engine.SelectionRuntime.Automatic, mode == ActionManager.UseActionMode.Queue);
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Native.Press", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Mode = mode.ToString(), External = Engine.AutomationOwnership.ExternalAction });
+        if (RotationInterop.ManualLimitBreak.Input(actionManager, actionType, actionId, mode == ActionManager.UseActionMode.Queue))
+        {
+            using var native = Engine.AutomationOwnership.QueuedExternalScope();
+            bool accepted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+            AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Submitted = accepted, Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, ManualLimitBreak = true });
+            return accepted;
+        }
         if (actionType == ActionType.Action && actionId is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area)
             return mode != ActionManager.UseActionMode.Queue && Engine.EmergencyRotation.HotbarPress(actionId);
         bool queuedExternal = mode == ActionManager.UseActionMode.Queue &&
