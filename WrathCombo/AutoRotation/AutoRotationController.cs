@@ -335,7 +335,41 @@ internal unsafe class AutoRotationController
             LockedST = false;
         }
 
+        if (isHealer && ExperimentalSelection.ActiveHealer && ExperimentalSelection.EffectiveHealing &&
+            RotationBehaviour.Support != false && TryRotationButtonHeal())
+            return;
+
         ProcessAutoActions(ref _, canHeal, false);
+    }
+
+    private static bool TryRotationButtonHeal()
+    {
+        // Use the same routed input as the combined bar, including its ST/AoE choice.
+        // A native Stone/Dosis input can bypass the bar's allied-action selection.
+        const uint input = PveIntentRouting.FullRotation;
+        using var intent = PveIntentRouting.Enter(input);
+        var policy = ActionRoutes.For(input);
+        if (policy?.Direct == true) return false;
+        using var route = new ActionRouteContext(policy);
+        foreach (var preset in _autoActions.Keys)
+        {
+            if (preset.Attributes().AutoAction is not { IsHeal: false } damage || damage.IsAoE != PveIntentRouting.Area)
+                continue;
+            SelectionRuntime.BeginPreview(input);
+            if (!HealerSelection.TrySelect(input, preset, out var action) && !SGE.TryTestingSelection(input, preset, out action))
+                continue;
+            if (SelectionRuntime.Preview(input) is not { } decision || action != decision.Action || !ActionRoutes.Allowed(action))
+                continue;
+            if ((action.ActionAttackType() == ActionAttackType.Ability ? AnimationLock : RemainingGCD) > cfg!.QueueWindow)
+                return false;
+            if (TimeMoving.TotalMilliseconds > 0 && ActionManager.GetAdjustedCastTime(ActionType.Action, action) > 0 &&
+                !(cfg.OrbwalkerIntegration && OrbwalkerIPC.CanOrbwalk))
+                return false;
+            bool accepted = SelectionRuntime.ExecuteAutomatic(decision);
+            AccordDiagnostics.DiagnosticLog.Event("Runner.RotationHeal", () => new { Input = input, decision.Action, decision.Recipient, Accepted = accepted });
+            return accepted;
+        }
+        return false;
     }
 
     public static IEnumerable<uint> TankbusterActions =
