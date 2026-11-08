@@ -530,6 +530,8 @@ public static class ActionWatching
 
     private static unsafe bool CanQueueActionDetour(ActionManager* actionManager, ActionType actionType, uint actionID)
     {
+        if (RotationInterop.ManualLimitBreak.IsLimitBreak(actionType, actionID))
+            return CanQueueAction.Original(actionManager, actionType, actionID);
         float threshold = Service.Configuration.QueueAdjust ? Service.Configuration.QueueAdjustThreshold : 0.5f;
 
         return GetRemainingActionRecast(actionManager, actionType, actionID) is { } remaining && remaining <= threshold;
@@ -596,6 +598,38 @@ public static class ActionWatching
     }
 
     private static readonly RotationInterop.ExternalQueue externalQueue = new();
+    private sealed record PendingLimitBreak(uint Action, ulong Target, ulong Selected, ulong PlayerId, uint Territory,
+        uint Extra, uint ComboRoute, long Expires);
+    private static PendingLimitBreak? pendingLimitBreak;
+    private static long nextLimitBreakAttempt;
+    [ThreadStatic] private static bool manualGeneralLimitBreak;
+
+    internal static unsafe void TickManualLimitBreak()
+    {
+        if (pendingLimitBreak is not { } request) return;
+        var am = ActionManager.Instance();
+        bool expired = Environment.TickCount64 >= request.Expires;
+        if (expired || Player.Object?.GameObjectId != request.PlayerId || Player.IsDead || !InCombat() ||
+            Svc.ClientState.TerritoryType != request.Territory || (Svc.Targets.Target?.GameObjectId ?? 0) != request.Selected ||
+            LimitBreakLevel == 0 || LimitBreakAction != request.Action || am == null ||
+            am->ActionQueued || am->AreaTargetingActionId != 0 || am->CastActionId == request.Action)
+        {
+            pendingLimitBreak = null;
+            AccordDiagnostics.DiagnosticLog.Event("LimitBreak.PendingEnded", () => new { request.Action, request.Target, expired });
+            return;
+        }
+        if (Environment.TickCount64 < nextLimitBreakAttempt || am->AnimationLock > 0 || am->CastActionId != 0 ||
+            am->GetActionStatus(ActionType.Action, request.Action, request.Target) != 0) return;
+
+        // Retry only a rejected submission. The first accepted request consumes the click.
+        nextLimitBreakAttempt = Environment.TickCount64 + 150;
+        using var native = Engine.AutomationOwnership.QueuedExternalScope();
+        bool accepted = UseActionHook!.Original(am, ActionType.Action, request.Action, request.Target, request.Extra,
+            ActionManager.UseActionMode.None, request.ComboRoute, null);
+        if (accepted || am->ActionQueued || am->AreaTargetingActionId != 0)
+            pendingLimitBreak = null;
+        AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Retry", () => new { request.Action, request.Target, accepted, Queued = am->ActionQueued });
+    }
 
     /// <summary> Handles logic when an action is used. </summary>
     private unsafe static bool UseActionDetour(ActionManager* actionManager, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
@@ -604,13 +638,38 @@ public static class ActionWatching
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Native.Press", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Mode = mode.ToString(), External = Engine.AutomationOwnership.ExternalAction });
         if (RotationInterop.ManualLimitBreak.Input(actionManager, actionType, actionId, mode == ActionManager.UseActionMode.Queue))
         {
+            bool manualInput = manualGeneralLimitBreak || !Engine.AutomationOwnership.ExternalAction && !Engine.SelectionRuntime.Automatic;
+            bool previousGeneral = manualGeneralLimitBreak;
             using var native = Engine.AutomationOwnership.QueuedExternalScope();
-            bool accepted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+            bool accepted;
+            try
+            {
+                manualGeneralLimitBreak = manualInput && actionType == ActionType.GeneralAction;
+                accepted = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+            }
+            finally { manualGeneralLimitBreak = previousGeneral; }
+            // GeneralAction 3 can succeed even when its nested concrete action failed.
+            // Only the concrete result owns the pending request.
+            if (manualInput && actionType == ActionType.Action && mode == ActionManager.UseActionMode.None && !Svc.ClientState.IsPvP)
+            {
+                uint status = actionManager->GetActionStatus(actionType, actionId, targetId);
+                uint baseStatus = actionManager->GetActionStatus(actionType, actionId, targetId, checkRecastActive: false, checkCastingActive: false);
+                pendingLimitBreak = !accepted && !actionManager->ActionQueued && baseStatus == 0 && InCombat() &&
+                    Player.Object is { IsDead: false } player && LimitBreakLevel > 0 && LimitBreakAction == actionId &&
+                    actionManager->AreaTargetingActionId == 0
+                    ? new(actionId, targetId, Svc.Targets.Target?.GameObjectId ?? 0, player.GameObjectId, Svc.ClientState.TerritoryType,
+                        extraParam, comboRouteId, Environment.TickCount64 + 1800) : null;
+                AccordDiagnostics.DiagnosticLog.Event("LimitBreak.ConcreteResult", () => new { Action = actionId, Target = targetId, accepted,
+                    status, baseStatus, Level = LimitBreakLevel, Lock = actionManager->AnimationLock, Pending = pendingLimitBreak != null });
+            }
             AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Submitted = accepted, Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, ManualLimitBreak = true });
             return accepted;
         }
         if (actionType == ActionType.Action && actionId is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area)
             return mode != ActionManager.UseActionMode.Queue && Engine.EmergencyRotation.HotbarPress(actionId);
+        if (pendingLimitBreak != null && mode == ActionManager.UseActionMode.None && !Engine.SelectionRuntime.Automatic &&
+            !Engine.AutomationOwnership.ExternalAction)
+            pendingLimitBreak = null;
         bool queuedExternal = mode == ActionManager.UseActionMode.Queue &&
             externalQueue.Matches((uint)actionType, actionId, targetId, Environment.TickCount64);
         if (Engine.AutomationOwnership.ExternalAction || queuedExternal)

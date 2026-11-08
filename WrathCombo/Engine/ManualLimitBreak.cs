@@ -17,7 +17,7 @@ internal static unsafe class ManualLimitBreak
     private static QueueEntry Queue(ActionManager* am) => am != null && am->ActionQueued
         ? new(am->QueuedActionType, am->QueuedActionId, am->QueuedTargetId.Id) : default;
 
-    private static bool IsLimitBreak(ActionType type, uint id)
+    internal static bool IsLimitBreak(ActionType type, uint id)
     {
         if (type == ActionType.GeneralAction) return id == 3;
         if (type != ActionType.Action || id == 0 || id >= 1_000_000) return false;

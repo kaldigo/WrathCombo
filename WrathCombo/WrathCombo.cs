@@ -363,6 +363,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
             BlueMageService.PopulateBLUSpells();
             TargetHelper.Draw();
 
+            ActionWatching.TickManualLimitBreak();
             if (!SettingsApi.HasConflict) AutoRotationController.Run();
 
             UpcomingPositionalHintService.Tick();
