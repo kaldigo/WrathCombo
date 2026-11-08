@@ -658,7 +658,7 @@ public static class ActionWatching
                     Player.Object is { IsDead: false } player && LimitBreakLevel > 0 && LimitBreakAction == actionId &&
                     actionManager->AreaTargetingActionId == 0
                     ? new(actionId, targetId, Svc.Targets.Target?.GameObjectId ?? 0, player.GameObjectId, Svc.ClientState.TerritoryType,
-                        extraParam, comboRouteId, Environment.TickCount64 + 1800) : null;
+                        extraParam, comboRouteId, RotationInterop.ManualLimitBreak.InputDeadline(actionManager, Environment.TickCount64)) : null;
                 AccordDiagnostics.DiagnosticLog.Event("LimitBreak.ConcreteResult", () => new { Action = actionId, Target = targetId, accepted,
                     status, baseStatus, Level = LimitBreakLevel, Lock = actionManager->AnimationLock, Pending = pendingLimitBreak != null });
             }

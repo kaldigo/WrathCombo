@@ -30,6 +30,17 @@ internal static unsafe class ManualLimitBreak
         return found;
     }
 
+    // Snapshot the existing action lock once. Rechecking the deadline on each frame
+    // would keep an invalid click alive indefinitely.
+    internal static long InputDeadline(ActionManager* am, long now)
+    {
+        var gcd = am->GetRecastGroupDetail(57);
+        float recast = gcd != null && gcd->IsActive ? gcd->Total - gcd->Elapsed : 0;
+        float cast = am->CastActionId != 0 ? am->CastTimeTotal - am->CastTimeElapsed : 0;
+        float remaining = Math.Max(0, Math.Max(recast, Math.Max(cast, am->AnimationLock)));
+        return now + (long)Math.Ceiling(remaining * 1000) + 1800;
+    }
+
     internal static bool Input(ActionManager* am, ActionType type, uint id, bool queueReplay)
     {
         if (am == null || runnerDepth != 0) return false;
@@ -40,7 +51,7 @@ internal static unsafe class ManualLimitBreak
         bool clear = queued.Id != 0 && queued == runnerQueue && now < queueExpires && !IsLimitBreak(queued.Type, queued.Id);
         if (clear) am->ActionQueued = false;
         runnerQueue = default;
-        holdUntil = now + 1800;
+        holdUntil = InputDeadline(am, now);
         AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Input", () => new { Action = id, ClearedRunnerQueue = clear, PreviousAction = queued.Id });
         return true;
     }

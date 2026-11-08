@@ -21,6 +21,13 @@ unsafe {
     void Press() => ManualLimitBreak.Input(am, ActionType.GeneralAction, 3, false);
     void Queue(uint id, ulong target) { am->ActionQueued=true; am->QueuedActionType=ActionType.Action; am->QueuedActionId=id; am->QueuedTargetId.Id=target; }
     PendingTest.Run();
+    var gcd = am->GetRecastGroupDetail(57);
+    gcd->IsActive=true; gcd->Total=2.5f; gcd->Elapsed=0;
+    Clock.TickCount64=1000; Press(); Clock.TickCount64+=2501;
+    Check(ManualLimitBreak.Waiting(),"runner resumed before LB got its post-GCD retry");
+    am->CastActionId=123; am->CastTimeTotal=5; am->CastTimeElapsed=1;
+    Check(ManualLimitBreak.InputDeadline(am,1000)==6800,"longer current cast was ignored");
+    am->CastActionId=0; gcd->IsActive=false;
     Clock.TickCount64=10000;
     using (ManualLimitBreak.TrackRunner()) Queue(34606,42);
     Press(); Check(!am->ActionQueued && ManualLimitBreak.Waiting(),"Viper queue beat manual LB");
@@ -65,10 +72,11 @@ static unsafe class PendingTest {
 PENDING
     public static void Run(){
         var am=ActionManager.Instance();
-        void Click()=>pendingLimitBreak=new(201,42,42,1,2,0,0,Environment.TickCount64+1800);
-        Click(); am->AnimationLock=0.5f; TickManualLimitBreak();
+        void Click()=>pendingLimitBreak=new(201,42,42,1,2,0,0,ManualLimitBreak.InputDeadline(am,Environment.TickCount64));
+        var gcd=am->GetRecastGroupDetail(57); gcd->IsActive=true; gcd->Total=2.5f;
+        Click(); Environment.TickCount64+=2000; TickManualLimitBreak();
         if(UseActionHook.Calls!=0 || pendingLimitBreak==null) throw new Exception("Locked click was lost");
-        am->AnimationLock=0; TickManualLimitBreak(); TickManualLimitBreak();
+        Environment.TickCount64+=500; gcd->IsActive=false; TickManualLimitBreak(); TickManualLimitBreak();
         if(UseActionHook.Calls!=1 || pendingLimitBreak==null) throw new Exception("Retry throttle failed");
         Environment.TickCount64+=200; TickManualLimitBreak(); TickManualLimitBreak();
         if(UseActionHook.Calls!=2 || pendingLimitBreak!=null) throw new Exception("Accepted click replayed");
@@ -88,11 +96,15 @@ namespace ECommons.DalamudServices {
 }
 namespace FFXIVClientStructs.FFXIV.Client.Game {
  enum ActionType { Action=1, GeneralAction=5 }
+ struct Recast { public bool IsActive; public float Total,Elapsed; }
  struct Target {public ulong Id;}
  unsafe struct ActionManager {
    public enum UseActionMode {None}
-   public uint GetActionStatus(ActionType type,uint action,ulong target)=>0;
+   public uint GetActionStatus(ActionType type,uint action,ulong target)=>gcd->IsActive ? 1u : 0u;
    static ActionManager* pointer=(ActionManager*)System.Runtime.InteropServices.NativeMemory.AllocZeroed((nuint)sizeof(ActionManager));
+   static Recast* gcd=(Recast*)System.Runtime.InteropServices.NativeMemory.AllocZeroed((nuint)sizeof(Recast));
+   public Recast* GetRecastGroupDetail(int group)=> group==57 ? gcd : null;
+   public float CastTimeTotal,CastTimeElapsed;
    public static ActionManager* Instance()=>pointer;
    public ActionType QueuedActionType,CastActionType,AreaTargetingActionType;
    public uint QueuedActionId,CastActionId,AreaTargetingActionId;
