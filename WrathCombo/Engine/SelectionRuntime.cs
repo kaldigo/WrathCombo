@@ -72,11 +72,22 @@ internal static class SelectionRuntime
         public void Dispose() => automatic = previous;
     }
     internal static IDisposable AutomaticScope() => new Scope();
-    private sealed class PressScope(bool refresh) : IDisposable
+    [ThreadStatic] private static int pressDepth;
+    internal static bool HandlingPress => pressDepth != 0;
+    private sealed class PressScope : IDisposable
     {
-        private readonly bool previous = Set(refresh);
-        private static bool Set(bool value) { bool previous = refreshOnPress; refreshOnPress = value; return previous; }
-        public void Dispose() => refreshOnPress = previous;
+        private readonly bool previous;
+        internal PressScope(bool refresh)
+        {
+            previous = refreshOnPress;
+            refreshOnPress = refresh;
+            pressDepth++;
+        }
+        public void Dispose()
+        {
+            refreshOnPress = previous;
+            pressDepth--;
+        }
     }
     internal static IDisposable BeginPress(bool queued, uint input = 0) => new PressScope(!queued && (PvPIntentRouting.Enabled || ExperimentalSelection.ActiveHealer || ExperimentalSelection.ActivePreparedAction || ExperimentalSelection.ActiveNinja || ExperimentalSelection.ActiveDrg || ExperimentalSelection.ActiveTargets || input == PveIntentRouting.FullRotation));
     internal static bool ConsumePressRefresh() { bool refresh = refreshOnPress; refreshOnPress = false; return refresh; }
@@ -243,7 +254,13 @@ internal static class SelectionRuntime
                 Combos.PvE.DRK.StalwartSoul or Combos.PvE.PLD.HolyCircle);
         if (!row.CanTargetHostile && !selfDamage) return action;
         if (row.CastType is not (1 or 2 or 3 or 4 or 10)) return action;
-        if (HasEvaluationTarget && EvaluationTarget is null) return Combos.PvE.All.Cease;
+        if (HasEvaluationTarget && EvaluationTarget is null)
+        {
+            if (!automatic && PveIntentRouting.IsDamageButton(input) && !InPvP() && !InCombat() &&
+                !CountdownActive && SimpleTarget.HardTarget is null && ActionLearned(action))
+                Service.ActionReplacer.RememberIdleIcon(input, action);
+            return Combos.PvE.All.Cease;
+        }
         var result = SelectEnemy(action, fixedRecipient: HasEvaluationTarget ? enemyEvaluation!.Recipient : null);
         if (result.Recipient is not { } recipient) return Combos.PvE.All.Cease;
         ulong? evaluatedEnemy = null;

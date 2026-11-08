@@ -37,6 +37,11 @@ internal sealed class ActionReplacer : IDisposable
     private readonly Hook<IsActionReplaceableDelegate> isActionReplaceableHook;
 
     public readonly Dictionary<uint, uint> LastActionInvokeFor = [];
+    private readonly Dictionary<uint, uint> idleIcons = [];
+    internal void RememberIdleIcon(uint input, uint action) => idleIcons[input] = action;
+    private uint DisplayAction(uint input, uint result) =>
+        result == All.Cease && !Engine.SelectionRuntime.HandlingPress && !Engine.SelectionRuntime.Automatic &&
+        idleIcons.TryGetValue(input, out var icon) ? icon : result;
 
     /// <summary>
     ///     Critical for the hook, do not remove or modify.
@@ -128,11 +133,12 @@ internal sealed class ActionReplacer : IDisposable
             // Only refresh every so often
             if (!Engine.SelectionRuntime.ConsumePressRefresh() && !EzThrottler.Throttle("Actions" + actionID,
                     Service.Configuration.Throttle) && LastActionInvokeFor.TryGetValue(actionID, out var cached))
-                return cached;
+                return DisplayAction(actionID, cached);
 
             // Actually get the action
+            idleIcons.Remove(actionID);
             LastActionInvokeFor[actionID] = GetAdjustedAction(actionID);
-            return LastActionInvokeFor[actionID];
+            return DisplayAction(actionID, LastActionInvokeFor[actionID]);
         }
         catch (Exception e)
         {

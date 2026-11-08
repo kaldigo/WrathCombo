@@ -18,6 +18,7 @@ internal static class PveIntentRouting
     private static string context = "";
     private static bool active, area, previewArea;
     private static (uint Action, bool Area, long At) pending;
+    internal static bool IsDamageButton(uint input) => input is All.SingleTargetDPS or All.AoEDPS or FullRotation;
     internal static bool Area => active && area;
     internal static uint RouteInput(uint input) => input == FullRotation && !InPvP() ? ((active ? area : previewArea) ? All.AoEDPS : All.SingleTargetDPS) : input;
     private static void Context()

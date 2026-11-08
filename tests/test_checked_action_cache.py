@@ -17,15 +17,21 @@ class CheckedActionCacheTests(unittest.TestCase):
             depth += (source[end] == '{') - (source[end] == '}')
             end += 1
         method = source[start:end].replace('private uint', 'public uint', 1)
+        opener = (ROOT / 'WrathCombo/CustomCombo/WrathOpener.cs').read_text(encoding='utf-8-sig')
+        opener = opener[opener.index('    public unsafe bool FullOpener('):opener.index('    internal void ObserveForTesting')].replace('unsafe ', '')
+        display = source[source.index('    private readonly Dictionary<uint, uint> idleIcons'):source.index('    /// <summary>', source.index('    private uint DisplayAction'))]
         harness = r'''
 using System;
 using System.Collections.Generic;
+static class All { public const uint Cease = 1000004; }
 static class Engine {
+    public static class ExperimentalSelection { public static bool ActiveDrg, ActiveSage; }
+    public static class PveIntentRouting { public static bool IsDamageButton(uint id) => id == 1000016; }
     public static class EmergencyRotation { public const uint Single = 1000017, Area = 1000018; }
     public static class RotationBehaviour { public static uint CheckedAction; }
     public static class AutomationOwnership { public static bool ExternalAction; }
     public static class SelectionRuntime {
-        public static bool Refresh;
+        public static bool Refresh, HandlingPress, Automatic;
         public static bool ConsumePressRefresh() { bool refresh = Refresh; Refresh = false; return refresh; }
     }
 }
@@ -36,10 +42,20 @@ static class Logs { public static void Log(this Exception e) => throw e; }
 class Hook {
     public object FilteredCombos = new();
     public Dictionary<uint, uint> LastActionInvokeFor = new() { [100] = 200, [101] = 201 };
+DISPLAY
     void UpdateFilteredCombos() { }
     uint OriginalHook(uint action) => action;
     uint GetAdjustedAction(uint action) => 999;
 METHOD
+}
+class Opener {
+    public bool CountdownActive, Combat, testingObserved = true, testingHasAction = true;
+    public uint testingAction = All.Cease;
+    public int OpenerStep = 1;
+    public List<Func<uint>> OpenerActions = [() => All.Cease];
+    bool InCombat() => Combat;
+    bool ObserveOpener(ref uint action) { action = All.Cease; return true; }
+OPENER
 }
 class Program {
     static void Main() {
@@ -62,10 +78,36 @@ class Program {
         Engine.SelectionRuntime.Refresh = true;
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 999 || Engine.SelectionRuntime.Refresh)
             throw new Exception("Real press did not refresh the selected action exactly once");
+        hook.LastActionInvokeFor[1000016] = All.Cease;
+        hook.RememberIdleIcon(1000016, 25859);
+        uint Read() => hook.GetAdjustedActionDetour(IntPtr.Zero, 1000016);
+        if (Read() != 25859) throw new Exception("Idle WHM button did not display Glare");
+        Engine.SelectionRuntime.HandlingPress = true;
+        if (Read() != All.Cease) throw new Exception("A targetless press executed the idle icon");
+        Engine.SelectionRuntime.HandlingPress = false;
+        Engine.SelectionRuntime.Automatic = true;
+        if (Read() != All.Cease) throw new Exception("Automatic execution received the idle icon");
+        Engine.SelectionRuntime.Automatic = false;
+        if (Read() != 25859) throw new Exception("Press changed the cached idle display");
+        var opener = new Opener();
+        foreach (bool sage in new[] { false, true }) {
+            Engine.ExperimentalSelection.ActiveSage = sage;
+            void Check(bool expectHold, uint input = 1000016) {
+                uint action = input;
+                if (opener.FullOpener(ref action) != expectHold || action != (expectHold ? All.Cease : input))
+                    throw new Exception("Unexpected prepull result for " + input);
+            }
+            Check(false);
+            Check(true, 119);
+            opener.CountdownActive = true; Check(true); opener.CountdownActive = false;
+            opener.Combat = true; Check(true); opener.Combat = false;
+            Engine.SelectionRuntime.Automatic = true; Check(true); Engine.SelectionRuntime.Automatic = false;
+            opener.OpenerStep = 2; Check(true); opener.OpenerStep = 1;
+        }
         Console.WriteLine("Checked-action cache boundary passed");
     }
 }
-'''.replace('METHOD', method)
+'''.replace('METHOD', method).replace('DISPLAY', display).replace('OPENER', opener)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             (path / 'Cache.csproj').write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>')

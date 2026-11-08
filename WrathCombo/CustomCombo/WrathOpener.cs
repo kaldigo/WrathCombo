@@ -182,13 +182,26 @@ public abstract class WrathOpener
 
     public unsafe bool FullOpener(ref uint actionID)
     {
+        uint input = actionID;
+        bool hasAction;
         if (Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveSage)
         {
             if (!testingObserved) { actionID = All.Cease; return true; }
             if (testingHasAction) actionID = testingAction;
-            return testingHasAction;
+            hasAction = testingHasAction;
         }
-        return ObserveOpener(ref actionID);
+        else
+            hasAction = ObserveOpener(ref actionID);
+
+        // The first countdown sentinel must leave the manual rotation usable for ordinary pulls.
+        if (hasAction && actionID == All.Cease && OpenerStep == 1 &&
+            Engine.PveIntentRouting.IsDamageButton(input) && !Engine.SelectionRuntime.Automatic &&
+            !CountdownActive && !InCombat() && OpenerActions.Count > 0 && OpenerActions[0]() == All.Cease)
+        {
+            actionID = input;
+            return false;
+        }
+        return hasAction;
     }
 
     internal void ObserveForTesting()
