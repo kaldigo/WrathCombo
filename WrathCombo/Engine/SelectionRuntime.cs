@@ -197,7 +197,7 @@ internal static class SelectionRuntime
             ? automaticDecision
             : previews.GetValueOrDefault(input) ?? (automatic && automaticDecision?.Action == result ? automaticDecision : null);
         if (decision is null || decision.Action != result) { sequence.CancelPress(); return true; }
-        if (decision.EvaluatedEnemy is { } evaluated && SelectEnemy(result, fixedRecipient: evaluated).Recipient != evaluated)
+        if (!decision.ManualDamage && decision.EvaluatedEnemy is { } evaluated && SelectEnemy(result, fixedRecipient: evaluated).Recipient != evaluated)
         { sequence.CancelPress(); return AccordDiagnostics.DiagnosticLog.Reject("Decision press validation failed"); }
         if (decision.GroundPosition is { } position)
         {
@@ -214,7 +214,7 @@ internal static class SelectionRuntime
         if (decision.Generation != Generation || Environment.TickCount64 - decision.ObservedAt >= 500 || recipient is null ||
             !recipient.IsTargetable || !TargetLifeAllowed(validateAction, recipient) || !ActionRoutes.Allowed(validateAction) || !ActionRoutes.Allowed(decision.Action) ||
             Svc.ClientState.IsPvP && recipient.IsHostile() && !PvpTargetEligibility.CanDamage(validateAction, recipient) ||
-            !ActionManager.CanUseActionOnTarget(validateAction, recipient.Struct()) || !InActionRange(validateAction, recipient))
+            !ActionManager.CanUseActionOnTarget(validateAction, recipient.Struct()) || !decision.ManualDamage && !InActionRange(validateAction, recipient))
         { sequence.CancelPress(); return AccordDiagnostics.DiagnosticLog.Reject("Decision press validation failed"); }
         if (decision.Preparation != 0 || decision.CompletionAction != 0) sequence.Press(decision);
         else sequence.CancelPress();
@@ -254,20 +254,30 @@ internal static class SelectionRuntime
                 Combos.PvE.DRK.StalwartSoul or Combos.PvE.PLD.HolyCircle);
         if (!row.CanTargetHostile && !selfDamage) return action;
         if (row.CastType is not (1 or 2 or 3 or 4 or 10)) return action;
-        if (HasEvaluationTarget && EvaluationTarget is null)
+        var result = HasEvaluationTarget && EvaluationTarget is null ? TargetDecision.None("No evaluation target") :
+            SelectEnemy(action, fixedRecipient: HasEvaluationTarget ? enemyEvaluation!.Recipient : null);
+        if (result.Recipient is not { } recipient)
         {
-            if (!automatic && PveIntentRouting.IsDamageButton(input) && !InPvP() && !InCombat() &&
-                !CountdownActive && SimpleTarget.HardTarget is null && ActionLearned(action))
-                Service.ActionReplacer.RememberIdleIcon(input, action);
+            // The provider has already selected a real action. A failed coverage or
+            // target estimate need not veto a manual attempt on its native recipient.
+            bool centered = row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0;
+            if (!automatic && PveIntentRouting.IsDamageButton(input) && !InPvP() && ActionLearned(action))
+            {
+                var target = centered ? Player.Object : SimpleTarget.HardTarget as IBattleChara;
+                if (target is { IsDead: false, IsTargetable: true } && (centered || row.CanTargetHostile && target.IsHostile()) &&
+                    ActionManager.CanUseActionOnTarget(action, target.GameObject()))
+                    return Publish(input, new(action, action, target.GameObjectId, 0, "Manual damage on native recipient",
+                        Environment.TickCount64, Generation, ManualDamage: true));
+                if (!InCombat() && !CountdownActive && SimpleTarget.HardTarget is null)
+                    Service.ActionReplacer.RememberIdleIcon(input, action);
+            }
             return Combos.PvE.All.Cease;
         }
-        var result = SelectEnemy(action, fixedRecipient: HasEvaluationTarget ? enemyEvaluation!.Recipient : null);
-        if (result.Recipient is not { } recipient) return Combos.PvE.All.Cease;
         ulong? evaluatedEnemy = null;
         if (row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0)
         { evaluatedEnemy = recipient; recipient = Player.Object!.GameObjectId; }
         return Publish(input, new(action, action, recipient, 0, result.Reason, Environment.TickCount64, Generation,
-            EvaluatedEnemy: evaluatedEnemy));
+            EvaluatedEnemy: evaluatedEnemy, ManualDamage: !automatic && !InPvP() && PveIntentRouting.IsDamageButton(input)));
     }
     private static unsafe TargetDecision SelectEnemy(uint action, bool validateDamage = true, ulong? fixedRecipient = null)
     {
