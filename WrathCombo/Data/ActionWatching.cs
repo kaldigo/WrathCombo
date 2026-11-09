@@ -758,7 +758,7 @@ public static class ActionWatching
 
                 // A direct hostile press can pull an unengaged enemy, including while the runner is enabled.
                 // A queued replay must retain the recipient of the original press.
-                bool manualEnemy = mode != ActionManager.UseActionMode.Queue && !Engine.SelectionRuntime.Automatic &&
+                bool manualEnemy = !strictDecision && mode != ActionManager.UseActionMode.Queue && !Engine.SelectionRuntime.Automatic &&
                     Svc.Targets.Target is IBattleChara chosen && chosen.IsHostile() && chosen.IsTargetable && !chosen.IsDead &&
                     ActionSheet.TryGetValue(replacedWith, out var hostileRow) && hostileRow.CanTargetHostile &&
                     !hostileRow.TargetArea && (originalTargetId is 0 or 0xE0000000 || originalTargetId == chosen.GameObjectId) &&

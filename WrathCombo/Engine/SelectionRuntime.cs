@@ -263,7 +263,7 @@ internal static class SelectionRuntime
             bool centered = row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0;
             if (!automatic && PveIntentRouting.IsDamageButton(input) && !InPvP() && ActionLearned(action))
             {
-                var target = centered ? Player.Object : SimpleTarget.HardTarget as IBattleChara;
+                var target = centered ? Player.Object : ManualEnemyForAction(action);
                 if (target is { IsDead: false, IsTargetable: true } && (centered || row.CanTargetHostile && target.IsHostile()) &&
                     ActionManager.CanUseActionOnTarget(action, target.GameObject()))
                     return Publish(input, new(action, action, target.GameObjectId, 0, "Manual damage on native recipient",
@@ -285,14 +285,29 @@ internal static class SelectionRuntime
         bool centered = row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0;
         var selected = SimpleTarget.HardTarget as IBattleChara;
         if (selected is not null && !selected.IsHostile()) selected = null;
+        var overrides = EnemyOverrides(selected);
         var targets = Svc.Objects.GetBattleCharas().Where(a => a.IsHostile() && !a.IsDead && a.IsTargetable).ToArray();
         var actors = targets.Select(a => new TargetActor(a.GameObjectId, a.Position, a.HitboxRadius,
             !a.IsInvincible && !Service.Configuration.IgnoredNPCs.ContainsKey(a.BaseId) &&
             (!validateDamage || !Svc.ClientState.IsPvP || PvpTargetEligibility.CanDamage(action, a)) &&
             (centered ? ActionManager.CanUseActionOnTarget(action, Player.GameObject) :
                 ActionManager.CanUseActionOnTarget(action, a.GameObject()) && (!validateDamage || InActionRange(action, a))), false, GetTargetHPPercent(a) / 100f,
-            Svc.ClientState.IsPvP || AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a) || !automatic && a.GameObjectId == selected?.GameObjectId)).ToImmutableArray();
+            Svc.ClientState.IsPvP || AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a) || !automatic && overrides.Any(o => o.Id == a.GameObjectId))).ToImmutableArray();
         var shape = row.CastType switch { 2 => EffectShape.Circle, 3 => EffectShape.Cone, 4 => EffectShape.Line, 10 => EffectShape.Donut, _ => EffectShape.Single };
+        bool acquire = ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy && selected is null;
+        ImmutableArray<TargetOverride> requested = fixedRecipient is { } fixedId
+            ? [new(TargetSource.Explicit, fixedId)] : overrides;
+        var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,
+            new(validateDamage ? centered ? row.EffectRange : ActionManager.GetActionRange(action) : Math.Max(30, (int)row.EffectRange),
+                row.EffectRange, shape, centered, HalfAngle: MathF.PI / 3, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4, InnerRadius: shape == EffectShape.Donut ? row.XAxisModifier > 0 ? row.XAxisModifier : 8 : 0),
+            new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true, AllowManualSplash: !automatic && !Svc.ClientState.IsPvP), actors, actors,
+            requested);
+        var result = TargetSelection.Select(snapshot);
+        TestingApi.RecordDecision("Target", snapshot, result);
+        return result;
+    }
+    private static ImmutableArray<TargetOverride> EnemyOverrides(IBattleChara? selected)
+    {
         var overrides = ImmutableArray.CreateBuilder<TargetOverride>();
         if (!automatic || ExperimentalSelection.OverridesInAutomation)
         {
@@ -301,20 +316,24 @@ internal static class SelectionRuntime
             if (ExperimentalSelection.EnemyFocus && SimpleTarget.FocusTarget is IBattleChara focus && focus.IsHostile())
                 overrides.Add(new(TargetSource.Focus, focus.GameObjectId));
         }
-        if (selected is not null && (!automatic || !ExperimentalSelection.AutomaticEnemies))
-            overrides.Insert(ExperimentalSelection.EnemyMouseover && overrides.Count > 0 && overrides[0].Source == TargetSource.WorldMouseover ? 1 : 0,
-                new(automatic ? TargetSource.Selected : TargetSource.Explicit, selected.GameObjectId));
-        bool acquire = ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy && selected is null;
-        if (fixedRecipient is { } fixedId) { overrides.Clear(); overrides.Add(new(TargetSource.Explicit, fixedId)); }
-        var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,
-            new(validateDamage ? centered ? row.EffectRange : ActionManager.GetActionRange(action) : Math.Max(30, (int)row.EffectRange),
-                row.EffectRange, shape, centered, HalfAngle: MathF.PI / 3, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4, InnerRadius: shape == EffectShape.Donut ? row.XAxisModifier > 0 ? row.XAxisModifier : 8 : 0),
-            new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true, AllowManualSplash: !automatic && !Svc.ClientState.IsPvP), actors, actors,
-            TargetOrder.Apply(overrides, ExperimentalSelection.EnemyOverrideOrder).ToImmutableArray());
-        var result = TargetSelection.Select(snapshot);
-        TestingApi.RecordDecision("Target", snapshot, result);
-        return result;
+        if (selected != null && selected.IsHostile() && (!automatic || !ExperimentalSelection.AutomaticEnemies))
+            overrides.Add(new(TargetSource.Selected, selected.GameObjectId));
+        return TargetOrder.Apply(overrides, ExperimentalSelection.EnemyOverrideOrder).ToImmutableArray();
     }
+
+    private static unsafe IBattleChara? ManualEnemyForAction(uint action)
+    {
+        // Keep the recipient used to evaluate procs and DoTs, even if its range estimate failed.
+        if (enemyEvaluation?.Recipient is { } fixedId) return Svc.Objects.SearchById(fixedId) as IBattleChara;
+        foreach (var candidate in EnemyOverrides(SimpleTarget.HardTarget as IBattleChara))
+        {
+            if (Svc.Objects.SearchById(candidate.Id) is IBattleChara { IsDead: false, IsTargetable: true } actor &&
+                ActionManager.CanUseActionOnTarget(action, actor.GameObject())) return actor;
+            if (!ExperimentalSelection.Fallback) break;
+        }
+        return null;
+    }
+
     internal static bool TargetLifeAllowed(uint action, IGameObject target) =>
         action is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper
             ? target.IsDead() && !target.HasStatus(Combos.PvE.All.Buffs.Raised, true) && !RaiseBeingCast(target.GameObjectId) : !target.IsDead();

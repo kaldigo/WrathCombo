@@ -34,6 +34,7 @@ static class Replay {
     static bool InPvP()=>false;
     static bool InCombat()=>true;
     static bool ActionLearned(uint a)=>true;
+    static IBattleChara? ManualEnemyForAction(uint action)=>SimpleTarget.HardTarget;
     static ulong recipient;
     static uint Publish(uint i,Decision d){recipient=d.target;return d.action;}
     static uint Resolve(uint action,uint input=1000016) {
