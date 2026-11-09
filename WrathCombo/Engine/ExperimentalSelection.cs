@@ -87,6 +87,7 @@ internal static class ExperimentalSelection
     internal static bool OverridesInAutomation { get; private set; }
     internal static string[] AllyOverrideOrder { get; private set; } = [.. TargetOrder.AllySources];
     internal static string[] EnemyOverrideOrder { get; private set; } = [.. TargetOrder.EnemySources];
+    internal static bool AcquireVisibleEnemy { get; private set; } = true;
     internal static bool SwitchEnemyTarget { get; private set; }
     internal static bool SwitchAllyTarget { get; private set; }
     internal static bool ActiveTargets => Observed("ActiveTargets", Svc.ClientState.IsPvP ? PvpTargeting : EnemyTargeting);
@@ -110,7 +111,7 @@ internal static class ExperimentalSelection
         ["EnemyTargeting"] = EnemyTargeting, ["AcquireEnemy"] = AcquireEnemy, ["OverridesInAutomation"] = OverridesInAutomation,
         ["EnemyMouseover"] = EnemyMouseover, ["EnemyFocus"] = EnemyFocus, ["PvpTargeting"] = PvpTargeting,
         ["AllyOverrideOrder"] = new JArray(AllyOverrideOrder), ["EnemyOverrideOrder"] = new JArray(EnemyOverrideOrder),
-        ["SwitchEnemyTarget"] = SwitchEnemyTarget, ["SwitchAllyTarget"] = SwitchAllyTarget };
+        ["AcquireVisibleEnemy"] = AcquireVisibleEnemy, ["SwitchEnemyTarget"] = SwitchEnemyTarget, ["SwitchAllyTarget"] = SwitchAllyTarget };
     internal static void Apply(JObject request, bool restoring = false)
     {
         if (!restoring && (CustomComboFunctions.InCombat() || AutomationOwnership.Busy || SelectionRuntime.Commitment is not null))
@@ -163,6 +164,7 @@ internal static class ExperimentalSelection
         OverridesInAutomation = current.Value<bool>("OverridesInAutomation");
         AllyOverrideOrder = current["AllyOverrideOrder"]!.Values<string>().Select(item => item!).ToArray();
         EnemyOverrideOrder = current["EnemyOverrideOrder"]!.Values<string>().Select(item => item!).ToArray();
+        AcquireVisibleEnemy = current.Value<bool>("AcquireVisibleEnemy");
         SwitchEnemyTarget = current.Value<bool>("SwitchEnemyTarget"); SwitchAllyTarget = current.Value<bool>("SwitchAllyTarget");
         SelectionRuntime.Reset();
         BossForecastProvider.Reset();

@@ -684,6 +684,7 @@ public static class ActionWatching
         // A changed/cleared native queue no longer belongs to RSR.
         externalQueue.Validate(actionManager->ActionQueued, actionManager->QueuedActionId, actionManager->QueuedTargetId);
         using var selectionPress = Engine.SelectionRuntime.BeginPress(mode == ActionManager.UseActionMode.Queue, actionId);
+        uint dispatchedAction = 0;
         bool strictDecision = false, submitted = false, trackedPress = false;
         try
         {
@@ -795,6 +796,7 @@ public static class ActionWatching
                 if (areaTargeted && disablingReplacingTemp) //Ground targets don't hit the send method, so it has to be re-enabled here. Could be re-enabled further down the line if it causes output issues.
                     Service.ActionReplacer.EnableActionReplacingIfRequired();
 
+                dispatchedAction = replacedWith;
                 var targetObject = targetId.GetObject();
                 if (targetObject is null && targetId != 0xE000_0000)
                 {
@@ -865,8 +867,8 @@ public static class ActionWatching
                 Svc.Log.Verbose($"[QueuedTargetUpdate] A:{actionManager->QueuedActionId.ActionName()} Q:{Svc.Objects.SearchById(actionManager->QueuedTargetId)?.Name} T:{Svc.Objects.SearchById(targetId)?.Name} M:{mode} W:{willQueue}");
 
                 Svc.Log.Verbose($"[FinalUse] Target changed is {changed}. Using {actionId.ActionName()} ({actionId}) -> {replacedWith.ActionName()} ({replacedWith}) on {(changed ? targetId.GetObject()?.Name : originalTargetId.GetObject()?.Name)} ({(changed ? targetId : originalTargetId):X})");
-                var hookResult = changed ? UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted) :
-                    UseActionHook.Original(actionManager, actionType, actionId, originalTargetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
+                if (!changed) targetId = originalTargetId;
+                var hookResult = UseActionHook.Original(actionManager, actionType, actionId, targetId, extraParam, mode, comboRouteId, outOptAreaTargeted);
                 submitted = hookResult;
 
                 Service.ActionReplacer.EnableActionReplacingIfRequired();
@@ -895,6 +897,11 @@ public static class ActionWatching
         {
             AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Target = targetId, Strict = strictDecision, Submitted = submitted, Tracked = trackedPress,
                 Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, QueueTarget = actionManager->QueuedTargetId.Id });
+            if (submitted && trackedPress && dispatchedAction != 0 && Engine.SelectionRuntime.Automatic)
+            {
+                try { Engine.SelectionRuntime.FollowAcceptedEnemy(dispatchedAction, targetId); }
+                catch (Exception ex) { Svc.Log.Error(ex, "Could not update the visible enemy after automatic action"); }
+            }
             if (trackedPress && !submitted)
             {
                 Engine.SelectionRuntime.RejectPress();

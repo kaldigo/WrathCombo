@@ -156,9 +156,31 @@ internal static class SelectionRuntime
         ? decision.Preparation != 0 ? Player.Object : Svc.Objects.SearchById(decision.Recipient) as IBattleChara : null;
     internal static bool MaySwitchVisibleTarget(IGameObject target, bool legacy)
     {
-        if (target.IsHostile()) return ExperimentalSelection.ActiveTargets ? ExperimentalSelection.SwitchEnemyTarget : legacy;
+        if (target.IsHostile()) return !ExperimentalSelection.ActiveTargets && legacy; // Managed enemies follow accepted actions.
+        if (ExperimentalSelection.ActiveTargets && target.GameObjectId == Player.Object?.GameObjectId)
+            return ExperimentalSelection.SwitchAllyTarget;
         return ExperimentalSelection.ActiveHealer || PvpAllySelection.Active ? ExperimentalSelection.SwitchAllyTarget : legacy;
     }
+    internal static void FollowAcceptedEnemy(uint action, ulong recipient)
+    {
+        if (!automatic || !ExperimentalSelection.ActiveTargets || Player.Object is not { } player) return;
+        var selected = Svc.Targets.Target;
+        bool vacant = selected == null || selected.GameObjectId == player.GameObjectId;
+        if (!(vacant ? ExperimentalSelection.AcquireVisibleEnemy : ExperimentalSelection.SwitchEnemyTarget)) return;
+
+        // A point-blank attack is delivered to self but has a separately evaluated enemy.
+        if (recipient == player.GameObjectId && automaticDecision is { EvaluatedEnemy: { } enemy } decision &&
+            decision.Action == action && decision.Recipient == recipient && decision.Generation == Generation &&
+            Environment.TickCount64 - decision.ObservedAt is >= 0 and < 500)
+            recipient = enemy;
+        else if (!Data.ActionWatching.ActionSheet.TryGetValue(action, out var row) || !row.CanTargetHostile) return;
+        if (selected?.GameObjectId == recipient ||
+            Svc.Objects.SearchById(recipient) is not IBattleChara { IsDead: false, IsTargetable: true } target ||
+            !target.IsHostile()) return;
+        Svc.Targets.Target = target;
+        AccordDiagnostics.DiagnosticLog.Event("Runner.VisibleEnemy", () => new { Action = action, Previous = selected?.GameObjectId, Enemy = recipient });
+    }
+
     internal static uint Publish(uint input, SelectionDecision decision)
     {
         AccordDiagnostics.DiagnosticLog.Event("Decision.Publish", () => new { Input = input, Decision = decision });
