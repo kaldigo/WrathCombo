@@ -1236,7 +1236,10 @@ internal unsafe class AutoRotationController
             (enemy.TargetObjectId == Player.Object.GameObjectId ||
              GetPartyMembers().Any(member => enemy.TargetObjectId == member.GameObjectId ||
                  member.BattleChara is { } ally && ally.Struct()->InCombat && ally.TargetObjectId == enemy.GameObjectId) ||
-             Player.Object.Struct()->InCombat && Player.Object.TargetObjectId == enemy.GameObjectId);
+             Player.Object.Struct()->InCombat && Player.Object.TargetObjectId == enemy.GameObjectId ||
+             // Story allies fight alongside the player without joining the party roster.
+             Player.TerritoryIntendedUseEnum is (TerritoryIntendedUseEnum.Quest_Battle or TerritoryIntendedUseEnum.Quest_Battle_2) &&
+             enemy.TargetObject is IBattleNpc { IsDead: false } storyAlly && !storyAlly.IsHostile());
 
         public static IEnumerable<IBattleChara> BaseSelection
         {
