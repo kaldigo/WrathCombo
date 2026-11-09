@@ -11,7 +11,7 @@ internal sealed record TargetActor(ulong Id, Vector3 Position, float Radius, boo
 internal sealed record TargetOverride(TargetSource Source, ulong Id);
 internal sealed record TargetAction(float Range, float Radius, EffectShape Shape = EffectShape.Single, bool CenterOnCaster = false,
     float HalfAngle = MathF.PI / 4, float Width = 4, float InnerRadius = 0);
-internal sealed record TargetPolicy(bool Automatic, bool FallbackOnInvalidOverride, bool PreferCoverage, bool PreferInjured, bool AvoidUnengaged);
+internal sealed record TargetPolicy(bool Automatic, bool FallbackOnInvalidOverride, bool PreferCoverage, bool PreferInjured, bool AvoidUnengaged, bool AllowManualSplash = false);
 internal sealed record TargetSelectionInput(Vector3 Caster, float CasterRadius, TargetAction Action, TargetPolicy Policy,
     ImmutableArray<TargetActor> Candidates, ImmutableArray<TargetActor> Affected, ImmutableArray<TargetOverride> Overrides);
 internal sealed record TargetDecision(ulong? Recipient, ImmutableArray<ulong> Affected, TargetSource Source, string Reason)
@@ -31,7 +31,7 @@ internal static class TargetSelection
         bool Eligible(TargetActor actor) => actor.Eligible &&
             Vector3.Distance(caster, actor.Position) <= action.Range + casterRadius + actor.Radius;
         ImmutableArray<ulong> Hits(TargetActor actor) => action.Shape == EffectShape.Single ? [actor.Id] : affected.Where(a => Covers(caster, actor.Position, action, a)).Select(a => a.Id).ToImmutableArray();
-        bool Safe(TargetActor actor) => !policy.AvoidUnengaged || (action.Shape == EffectShape.Single ? actor.MayAffect : !affected.Any(a => !a.MayAffect && Covers(caster, actor.Position, action, a)));
+        bool Safe(TargetActor actor) => !policy.AvoidUnengaged || (action.Shape == EffectShape.Single || policy.AllowManualSplash ? actor.MayAffect : !affected.Any(a => !a.MayAffect && Covers(caster, actor.Position, action, a)));
         foreach (var target in overrides)
         {
             if (target.Id == 0) continue;

@@ -38,20 +38,22 @@ METHOD
         var enemy = new IBattleNpc { GameObjectId=3, TargetObject=storyAlly, TargetObjectId=2, Hostile=true };
         enemy.Struct()->InCombat=true;
         var selected = new TargetActor(4,Vector3.Zero,2,true,false,1);
-        ulong? Select() {
+        ulong? Select(bool manual=false) {
             var nearby = selected with {Id=3, MayAffect=FightingParty(enemy)};
             return TargetSelection.Select(Vector3.Zero,.5f,new(20,5,EffectShape.Circle),
-                new(true,false,true,false,true),[selected,nearby],[selected,nearby],[new(TargetSource.Explicit,4)]).Recipient;
+                new(true,false,true,false,true,AllowManualSplash:manual),[selected,nearby],[selected,nearby],[new(TargetSource.Explicit,4)]).Recipient;
         }
         foreach (var duty in new[]{TerritoryIntendedUseEnum.Quest_Battle,TerritoryIntendedUseEnum.Quest_Battle_2}) {
             Player.TerritoryIntendedUseEnum=duty;
             if(Select()!=4) throw new Exception("Story NPC combat blocked the selected target");
         }
         enemy.Struct()->InCombat=false;
-        if(Select()!=null) throw new Exception("Idle enemy permitted");
+        if(Select()!=null) throw new Exception("Idle enemy permitted during automation");
+        if(Select(manual:true)!=4) throw new Exception("Nearby idle enemy vetoed a manual attack");
         enemy.Struct()->InCombat=true;
         Player.TerritoryIntendedUseEnum=TerritoryIntendedUseEnum.Dungeon;
         if(Select()!=null) throw new Exception("Solo rule leaked outside quest battles");
+        if(Select(manual:true)!=4) throw new Exception("Manual splash blocked outside a solo duty");
         Player.TerritoryIntendedUseEnum=TerritoryIntendedUseEnum.Quest_Battle_2;
         storyAlly.Hostile=true;
         if(Select()!=null) throw new Exception("Hostile NPC treated as ally");

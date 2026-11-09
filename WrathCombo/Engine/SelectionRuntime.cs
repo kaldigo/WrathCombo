@@ -299,7 +299,7 @@ internal static class SelectionRuntime
         var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,
             new(validateDamage ? centered ? row.EffectRange : ActionManager.GetActionRange(action) : Math.Max(30, (int)row.EffectRange),
                 row.EffectRange, shape, centered, HalfAngle: MathF.PI / 3, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4, InnerRadius: shape == EffectShape.Donut ? row.XAxisModifier > 0 ? row.XAxisModifier : 8 : 0),
-            new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true), actors, actors,
+            new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true, AllowManualSplash: !automatic && !Svc.ClientState.IsPvP), actors, actors,
             TargetOrder.Apply(overrides, ExperimentalSelection.EnemyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(snapshot);
         TestingApi.RecordDecision("Target", snapshot, result);
