@@ -27,18 +27,18 @@ static class ActionManager {
 }
 static class PveIntentRouting {public static bool IsDamageButton(uint input)=>input==1000016;}
 namespace Combos.PvE { static class All { public const uint Cease=1000004; } }
-static class Service { public static class ActionReplacer { public static void RememberIdleIcon(uint i,uint a){} } }
+static class Service { public static class ActionReplacer { public static (uint,uint) Icon; public static void RememberIdleIcon(uint i,uint a)=>Icon=(i,a); } }
 static class Replay {
     const int Generation=1;
     static bool automatic, CountdownActive=false;
     static bool InPvP()=>false;
-    static bool InCombat()=>true;
+    static bool combat=true; static bool InCombat()=>combat;
     static bool ActionLearned(uint a)=>true;
     static IBattleChara? ManualEnemyForAction(uint action)=>SimpleTarget.HardTarget;
     static ulong recipient;
     static uint Publish(uint i,Decision d){recipient=d.target;return d.action;}
-    static uint Resolve(uint action,uint input=1000016) {
-        var row=new {CanTargetSelf=action==2,CanTargetHostile=action==1};
+    static uint Resolve(uint action,uint input=1000016,bool damageRotation=false) {
+        var row=new {CanTargetSelf=action==2,CanTargetHostile=action is 1 or 16495 or 25783};
         {
 FALLBACK
     }
@@ -60,6 +60,18 @@ FINISH
         automatic=false; SimpleTarget.HardTarget=null;
         if(Resolve(2)!=2 || recipient!=1) throw new Exception("Targetless self AoE was blocked");
         if(Resolve(1)!=All.Cease) throw new Exception("Invented a hostile target");
+        combat=false;
+        foreach (var (input, action) in new (uint,uint)[] { (97,16495), (106,25783) })
+        {
+            foreach (var selected in new IBattleChara?[] { null, Player.Object, new(88,false) })
+            {
+                SimpleTarget.HardTarget=selected; Service.ActionReplacer.Icon=default;
+                if(Resolve(action,input,true)!=All.Cease || Service.ActionReplacer.Icon!=(input,action))
+                    throw new Exception("Bard native rotation lost its town icon or acquired a recipient");
+            }
+            CountdownActive=true; Service.ActionReplacer.Icon=default; Resolve(action,input,true); CountdownActive=false;
+            if(Service.ActionReplacer.Icon!=default) throw new Exception("Countdown hold disguised as idle");
+        }
         if(FinishOrHold(TechnicalFinish4)!=All.Cease) throw new Exception("Lost Dancer hold");
         remaining=1;
         if(FinishOrHold(TechnicalFinish4)!=TechnicalFinish4) throw new Exception("Lost expiring finish");

@@ -112,7 +112,7 @@ internal abstract partial class CustomCombo : CustomComboFunctions
         mudraScope?.Complete(resultingActionID);
         if (resultingActionID != actionID) resultingActionID = Engine.HealingGroundSelection.Select(actionID, resultingActionID);
         if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) && resultingActionID != actionID)
-            resultingActionID = Engine.SelectionRuntime.RetargetEnemy(actionID, resultingActionID);
+            resultingActionID = Engine.SelectionRuntime.RetargetEnemy(actionID, resultingActionID, PresetStorage.AllPresets[Preset].AutoAction is { IsHeal: false });
 
         var presetException = _presetsAllowedToReturnUnchanged
             .TryGetValue(Preset, out var actionException);

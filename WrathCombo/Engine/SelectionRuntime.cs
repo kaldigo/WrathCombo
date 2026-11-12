@@ -259,7 +259,7 @@ internal static class SelectionRuntime
             pendingConfirmation = null;
         }
     }
-    internal static unsafe uint RetargetEnemy(uint input, uint action)
+    internal static unsafe uint RetargetEnemy(uint input, uint action, bool damageRotation)
     {
         // A provider which published an action/recipient decision owns that pair.
         // Press-time validation may reject it, but the fallback pass cannot move it.
@@ -290,9 +290,13 @@ internal static class SelectionRuntime
                     ActionManager.CanUseActionOnTarget(action, target.GameObject()))
                     return Publish(input, new(action, action, target.GameObjectId, 0, "Manual damage on native recipient",
                         Environment.TickCount64, Generation, ManualDamage: true));
-                if (!InCombat() && !CountdownActive && SimpleTarget.HardTarget is null)
-                    Service.ActionReplacer.RememberIdleIcon(input, action);
             }
+            // Split layouts can use native roots (e.g. Heavy Shot and Quick Nock).
+            // Keep the provider's learned action as the idle icon while the executable result stays Cease.
+            if (!automatic && !InPvP() && !InCombat() && !CountdownActive &&
+                (damageRotation || PveIntentRouting.IsDamageButton(input)) && ActionLearned(action) &&
+                SimpleTarget.HardTarget?.IsHostile() != true)
+                Service.ActionReplacer.RememberIdleIcon(input, action);
             return Combos.PvE.All.Cease;
         }
         ulong? evaluatedEnemy = null;
