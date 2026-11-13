@@ -19,7 +19,7 @@ class CheckedActionCacheTests(unittest.TestCase):
         method = source[start:end].replace('private uint', 'public uint', 1)
         opener = (ROOT / 'WrathCombo/CustomCombo/WrathOpener.cs').read_text(encoding='utf-8-sig')
         opener = opener[opener.index('    public unsafe bool FullOpener('):opener.index('    internal void ObserveForTesting')].replace('unsafe ', '')
-        display = source[source.index('    private readonly Dictionary<uint, uint> idleIcons'):source.index('    /// <summary>', source.index('    private uint DisplayAction'))]
+        display = source[source.index('    private readonly Dictionary<uint, (uint Action'):source.index('    /// <summary>', source.index('    private uint DisplayAction'))]
         harness = r'''
 using System;
 using System.Collections.Generic;
@@ -31,11 +31,13 @@ static class Engine {
     public static class RotationBehaviour { public static uint CheckedAction; }
     public static class AutomationOwnership { public static bool ExternalAction; }
     public static class SelectionRuntime {
-        public static bool Refresh, HandlingPress, Automatic;
+        public static bool Refresh, HandlingPress, Automatic; public static bool IdleDamageDisplayAllowed=true;
         public static bool ConsumePressRefresh() { bool refresh = Refresh; Refresh = false; return refresh; }
     }
 }
-static class Player { public static bool Available = true; }
+enum Job { GNB, WHM }
+static class Player { public static bool Available = true; public static Job Job; public static int Level=100; }
+static class Svc { public static class ClientState { public static uint TerritoryType=100; } }
 static class Service { public static class Configuration { public static int Throttle = 50; } }
 static class EzThrottler { public static bool Throttle(string key, int interval) => false; }
 static class Logs { public static void Log(this Exception e) => throw e; }
@@ -89,6 +91,10 @@ class Program {
         if (Read() != All.Cease) throw new Exception("Automatic execution received the idle icon");
         Engine.SelectionRuntime.Automatic = false;
         if (Read() != 25859) throw new Exception("Press changed the cached idle display");
+        Player.Job=Job.WHM;
+        if(Read()!=All.Cease)throw new Exception("Job switch reused an idle icon");
+        Player.Job=Job.GNB; Engine.SelectionRuntime.IdleDamageDisplayAllowed=false;
+        if(Read()!=All.Cease)throw new Exception("A stale icon hid a new hold");
         var opener = new Opener();
         foreach (bool sage in new[] { false, true }) {
             Engine.ExperimentalSelection.ActiveSage = sage;

@@ -37,11 +37,13 @@ internal sealed class ActionReplacer : IDisposable
     private readonly Hook<IsActionReplaceableDelegate> isActionReplaceableHook;
 
     public readonly Dictionary<uint, uint> LastActionInvokeFor = [];
-    private readonly Dictionary<uint, uint> idleIcons = [];
-    internal void RememberIdleIcon(uint input, uint action) => idleIcons[input] = action;
+    private readonly Dictionary<uint, (uint Action, Job Job, uint Territory, int Level)> idleIcons = [];
+    internal void RememberIdleIcon(uint input, uint action) => idleIcons[input] = (action, Player.Job, Svc.ClientState.TerritoryType, Player.Level);
     private uint DisplayAction(uint input, uint result) =>
-        result == All.Cease && !Engine.SelectionRuntime.HandlingPress && !Engine.SelectionRuntime.Automatic &&
-        idleIcons.TryGetValue(input, out var icon) ? icon : result;
+        (result == All.Cease || result == input && Engine.PveIntentRouting.IsDamageButton(input)) && !Engine.SelectionRuntime.HandlingPress && !Engine.SelectionRuntime.Automatic &&
+        idleIcons.TryGetValue(input, out var icon) && icon.Job == Player.Job && icon.Level == Player.Level &&
+        icon.Territory == Svc.ClientState.TerritoryType && Engine.SelectionRuntime.IdleDamageDisplayAllowed
+            ? icon.Action : result;
 
     /// <summary>
     ///     Critical for the hook, do not remove or modify.
@@ -196,9 +198,17 @@ internal sealed class ActionReplacer : IDisposable
                         return All.Cease;
                     }
 
-                    return Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(newActionID));
+                    var selected = Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(newActionID));
+                    if (selected == All.Cease && !idleIcons.ContainsKey(actionID))
+                        RememberProviderStarter(actionID, combo);
+                    return selected;
                 }
             }
+
+            // Some enabled rotations decline the input entirely when no enemy exists.
+            if (Engine.PveIntentRouting.IsDamageButton(actionID) && Engine.SelectionRuntime.IdleDamageDisplayAllowed)
+                foreach (var combo in FilteredCombos)
+                    if (CustomComboFunctions.IsEnabled(combo.Preset) && RememberProviderStarter(actionID, combo)) break;
 
             return actionID == Engine.PveIntentRouting.FullRotation ? All.Cease : Engine.ActionRoutes.Filter(OriginalHook(actionID));
         }
@@ -208,6 +218,30 @@ internal sealed class ActionReplacer : IDisposable
             Svc.Log.Error(ex, "Preset error");
             return OriginalHook(actionID);
         }
+    }
+
+    private bool RememberProviderStarter(uint input, CustomCombo combo)
+    {
+        if (!Engine.SelectionRuntime.IdleDamageDisplayAllowed) return false;
+        var preset = combo.Preset.Attributes();
+        if (preset.IsPvP || preset.AutoAction is not { IsHeal: false } damage ||
+            preset.ReplaceSkill?.ActionIDs is not { Count: > 0 } roots) return false;
+        var type = damage.IsAoE ? Native.CustomActionType.AoEDPS : Native.CustomActionType.SingleTargetDPS;
+        bool virtualInput = Engine.PveIntentRouting.IsDamageButton(input);
+        bool matches = Engine.PveIntentRouting.Matches(input, type) ??
+            (Native.CustomActionHelper.CustomActionEnabled(type) ? input == Native.CustomActionHelper.GetActionId(type) : roots.Contains(input));
+        if (!matches) return false;
+        foreach (var root in roots)
+        {
+            if (!virtualInput && root != input) continue;
+            var icon = OriginalHook(root);
+            if (icon == 0 || icon >= All.SingleTargetDPS || !CustomComboFunctions.ActionLearned(icon) ||
+                !Engine.ActionRoutes.Allowed(root) || !Engine.ActionRoutes.Allowed(icon) ||
+                Player.Job == Job.BLU && !CustomComboFunctions.IsSpellActive(root)) continue;
+            RememberIdleIcon(input, icon);
+            return true;
+        }
+        return false;
     }
 
     internal static bool DisableJobCheck = false;

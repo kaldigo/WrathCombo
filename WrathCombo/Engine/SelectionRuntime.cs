@@ -73,6 +73,13 @@ internal static class SelectionRuntime
     }
     internal static IDisposable AutomaticScope() => new Scope();
     [ThreadStatic] private static int pressDepth;
+    internal static bool IdleDamageDisplayAllowed =>
+        !Automatic && !HandlingPress && !InPvP() && !InCombat() && !CountdownActive &&
+        Player.Object is { IsDead: false, IsCasting: false } && SimpleTarget.HardTarget?.IsHostile() != true &&
+        !(Service.Configuration.PenaltyPause > 0 && PlayerHasActionPenalty(false)) && Commitment == null &&
+        !(Player.Job == ECommons.ExcelServices.Job.DNC && Combos.PvE.DNC.DanceInProgress) &&
+        !(Player.Job == ECommons.ExcelServices.Job.NIN && Combos.PvE.NIN.InMudra);
+
     internal static bool HandlingPress => pressDepth != 0;
     private sealed class PressScope : IDisposable
     {

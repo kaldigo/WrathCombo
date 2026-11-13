@@ -13,6 +13,8 @@ namespace WrathCombo.Combos.PvE;
 
 internal partial class DNC
 {
+    internal static bool DanceInProgress => Gauge.IsDancing;
+
     internal static bool TryTestingDance(uint input, Preset preset, out uint action)
     {
         action = 0;

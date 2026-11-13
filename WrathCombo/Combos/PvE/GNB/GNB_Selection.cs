@@ -1,7 +1,5 @@
 using WrathCombo.CustomComboNS;
 using WrathCombo.Engine;
-using ECommons.GameFunctions;
-using WrathCombo.Services;
 using WrathCombo.Engine.Selection;
 using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
 using static WrathCombo.Combos.PvE.GNB.Config;
@@ -10,15 +8,6 @@ namespace WrathCombo.Combos.PvE;
 
 internal partial class GNB
 {
-    private static uint DisplayPlannedGcd(uint input, uint planned, uint starter)
-    {
-        // Range filtering can reject every candidate before the shared retargeting pass sees a weapon skill.
-        if (planned == All.Cease && !SelectionRuntime.Automatic && !InPvP() && !InCombat() && !CountdownActive &&
-            SimpleTarget.HardTarget?.IsHostile() != true && ActionLearned(starter) && ActionRoutes.Allowed(starter))
-            Service.ActionReplacer.RememberIdleIcon(input, starter);
-        return planned;
-    }
-
     private static uint PlanTestingGcd(bool area, bool advanced)
     {
         if (!ExperimentalSelection.ActiveGunbreaker) return 0;

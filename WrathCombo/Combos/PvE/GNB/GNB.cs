@@ -84,7 +84,7 @@ internal partial class GNB : Tank
             if (ShouldContinue(Preset.GNB_ST_Simple, CanContinue, CanWeave()))
                 return OriginalHook(Continuation);
 
-            if (Engine.ExperimentalSelection.ActiveGunbreaker) return DisplayPlannedGcd(actionID, plannedGcd, KeenEdge);
+            if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
             //Burst - at Lv100 we want to send Reign as soon as we enter No Mercy (unless we're in opener/reopener with max GF charges), else we send Gnashing Fang (since no Reign)
             var wantGF = GetCooldownRemainingTime(GnashingFang) < 0.5f || !ActionLearned(ReignOfBeasts);
@@ -201,7 +201,7 @@ internal partial class GNB : Tank
             if (ShouldContinue(Preset.GNB_ST_Continuation, CanContinue, CanWeave()))
                 return OriginalHook(Continuation);
 
-            if (Engine.ExperimentalSelection.ActiveGunbreaker) return DisplayPlannedGcd(actionID, plannedGcd, KeenEdge);
+            if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
             //Burst - at Lv100 we want to send Reign as soon as we enter No Mercy (unless we're in opener/reopener with max GF charges), else we send Gnashing Fang (since no Reign)
             var wantGF = GetCooldownRemainingTime(GnashingFang) < 0.5f || !ActionLearned(ReignOfBeasts);
@@ -295,7 +295,7 @@ internal partial class GNB : Tank
                 if (ShouldContinue(Preset.GNB_AoE_Simple, CanFB, CanWeave()))
                     return OriginalHook(Continuation);
 
-                if (Engine.ExperimentalSelection.ActiveGunbreaker) return DisplayPlannedGcd(actionID, plannedGcd, DemonSlice);
+                if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
                 if (ShouldUseReignOfBeasts(Preset.GNB_AoE_Simple))
                     return ReignOfBeasts;
@@ -374,7 +374,7 @@ internal partial class GNB : Tank
                 if (ShouldContinue(Preset.GNB_AoE_FatedBrand, CanFB, CanWeave()))
                     return OriginalHook(Continuation);
 
-                if (Engine.ExperimentalSelection.ActiveGunbreaker) return DisplayPlannedGcd(actionID, plannedGcd, DemonSlice);
+                if (Engine.ExperimentalSelection.ActiveGunbreaker) return plannedGcd;
 
                 if (ShouldUseReignOfBeasts(Preset.GNB_AoE_Reign))
                     return ReignOfBeasts;
