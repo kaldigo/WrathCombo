@@ -12,7 +12,7 @@ class LeaseCoexistenceTests(unittest.TestCase):
     def test_saved_settings_and_runner_with_external_lease(self):
         wrapper=(ROOT/'WrathCombo/AutoRotation/AutoRotationConfigIPCWrapper.cs').read_text()
         enabled=wrapper[wrapper.index('    public bool Enabled =>'):wrapper.index('    public bool InCombatOnly')]
-        apply=method((ROOT/'WrathCombo/Engine/SettingsApi.cs').read_text(),'    private JObject Apply(JObject request)')
+        apply=method((ROOT/'WrathCombo/Engine/SettingsApi.cs').read_text(),'    private JObject Apply(JObject request, bool compact = false)')
         harness=r"""
 using System;
 using System.Collections.Generic;
@@ -36,9 +36,11 @@ class Program {
   bool blocked=false; try { api.Call(request); } catch(InvalidOperationException) { blocked=true; }
   Check(blocked && api.Saves==0,"Uncoordinated lease protection changed");
   AutomationOwnership.Managed=true;
-  api.Call(request);
+  var committed=api.Call(request,true);
+  Check(committed.Count==3 && !committed["Receipt"]!.Value<bool>("Replay"),"Compact commit unexpectedly returned a full envelope");
   Check(api.Saves==1 && api.Current.Value<bool>("Value"),"Coordinated lease blocked settings");
-  var replay=api.Call(request);
+  var replay=api.Call(request,true);
+  Check(replay.Count==3 && replay.Value<string>("ConfigurationId")=="config" && replay.Value<bool>("Success"),"Compact ack contract");
   Check(api.Saves==1 && replay["Receipt"]!.Value<bool>("Replay"),"Pending retry duplicated settings commit");
   Console.WriteLine("Managed runner priority, standalone lease behavior and settings replay with an external lease passed.");
  }
@@ -64,7 +66,7 @@ class Api {
  JObject ValidatePatch(JObject current,JObject patch)=>(JObject)patch.DeepClone();
  void Persist(JObject updated,JObject receipts) { Current=updated;Service.Configuration.ForkOperationReceipts=receipts; Saves++; }
  JObject Envelope()=>new() { ["Revision"]=SettingsTransaction.Hash(Current) }; void Notify(string state) {}
- public JObject Call(JObject request)=>Apply(request);
+ public JObject Call(JObject request, bool compact=false)=>Apply(request,compact);
 __APPLY__
 }
 """.replace('__ENABLED__',enabled).replace('__APPLY__',apply)

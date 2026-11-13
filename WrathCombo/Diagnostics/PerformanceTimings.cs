@@ -4,7 +4,7 @@ using ECommons.DalamudServices;
 
 namespace AccordDiagnostics;
 
-internal enum TimedPath { Framework, LiveLayout, Plan, HotbarApply, SettingsStamp, SettingsRead, SettingsApply, RunnerStart, RunnerAttempt, TargetSelection, Preview, Serialize }
+internal enum TimedPath { Framework, LiveLayout, Plan, HotbarApply, SettingsStamp, SettingsRead, SettingsApply, BackupWrite, SlotWrite, SlotVerify, ConfigSave, RunnerStart, RunnerAttempt, TargetSelection, Preview, Serialize }
 
 // Instrumentation is independent of detailed capture. Use fixed buckets to bound memory.
 internal static class PerformanceTimings
@@ -36,6 +36,11 @@ internal static class PerformanceTimings
             while (i < LimitsMs.Length && ms > LimitsMs[i]) i++;
             c.Histogram[i]++;
         }
+    }
+    internal static void SaveConfig(Dalamud.Configuration.IPluginConfiguration config)
+    {
+        using var timing = Measure(TimedPath.ConfigSave);
+        Svc.PluginInterface.SavePluginConfig(config);
     }
     internal static Sample Measure(TimedPath path) => new(path);
     internal static void Report()

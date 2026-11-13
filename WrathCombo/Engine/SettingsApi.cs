@@ -19,6 +19,7 @@ namespace WrathCombo.Engine;
 internal sealed class SettingsApi : IDisposable
 {
     private readonly ICallGateProvider<string> read = Svc.PluginInterface.GetIpcProvider<string>("WrathFork.Settings.Read.v2");
+    private readonly ICallGateProvider<string, string> commit = Svc.PluginInterface.GetIpcProvider<string, string>("WrathFork.Settings.Commit.v1");
     private readonly ICallGateProvider<string, string> apply = Svc.PluginInterface.GetIpcProvider<string, string>("WrathFork.Settings.Apply.v2");
     private readonly ICallGateProvider<string> discover = Svc.PluginInterface.GetIpcProvider<string>("WrathFork.Settings.Discover.v2");
     private readonly ICallGateProvider<string, string> validate = Svc.PluginInterface.GetIpcProvider<string, string>("WrathFork.Settings.Validate.v2");
@@ -53,7 +54,7 @@ internal sealed class SettingsApi : IDisposable
             if (Service.Configuration.HoldManagedOpeners != value)
             {
                 Service.Configuration.HoldManagedOpeners = value;
-                try { Svc.PluginInterface.SavePluginConfig(Service.Configuration); }
+                try { AccordDiagnostics.PerformanceTimings.SaveConfig(Service.Configuration); }
                 catch { Service.Configuration.HoldManagedOpeners = !value; throw; }
                 if (value && RotationBehaviour.Managed) global::WrathCombo.CustomComboNS.WrathOpener.CurrentOpener?.ResetOpener();
                 ResetOpenerPreview();
@@ -61,12 +62,14 @@ internal sealed class SettingsApi : IDisposable
             return value;
         });
         read.RegisterFunc(() => Guard(() => Envelope()));
-        apply.RegisterFunc(request => Guard(() => {
+        commit.RegisterFunc(request => CommitRequest(request, compact: true));
+        apply.RegisterFunc(request => CommitRequest(request, compact: false));
+        string CommitRequest(string request, bool compact) => Guard(() => {
             AccordDiagnostics.DiagnosticLog.Event("Settings.ApplyRequest", () => new { Request = request });
-            var response = Apply(JObject.Parse(request));
+            var response = Apply(JObject.Parse(request), compact);
             AccordDiagnostics.DiagnosticLog.Event("Settings.ApplyResponse", () => response);
             return response;
-        }));
+        });
         discover.RegisterFunc(() => Guard(() => new JObject { ["Success"] = true, ["Schema"] = SettingsSchema.Describe(Snapshot()) }));
         validate.RegisterFunc(request => Guard(() => {
             var current = Snapshot();
@@ -117,16 +120,19 @@ internal sealed class SettingsApi : IDisposable
             ["KnownPresets"] = new JArray(Enum.GetValues<Preset>().Select(p => (int)p)) };
     }
 
-    private JObject Apply(JObject request)
+    private JObject Apply(JObject request, bool compact = false)
     {
         // Accord owns the persistent baseline while coordinated. External leases remain
         // runtime overlays and must not block an idempotent settings transaction.
         if (!AutomationOwnership.Managed && WrathCombo.P!.IPC.Leasing.Registrations.Count != 0)
             throw new InvalidOperationException("Release existing engine leases before applying persistent settings.");
-        var receipt = SettingsTransaction.Execute(request, instance, Service.Configuration.ForkConfigurationId, Snapshot(),
-            Service.Configuration.ForkOperationReceipts, patch => ValidatePatch(Snapshot(), patch), Persist);
-        var result = Envelope();
-        observedRevision = result.Value<string>("Revision")!;
+        var current = Snapshot();
+        var receipt = SettingsTransaction.Execute(request, instance, Service.Configuration.ForkConfigurationId, current,
+            Service.Configuration.ForkOperationReceipts, patch => ValidatePatch(current, patch), Persist);
+        var result = compact
+            ? new JObject { ["Success"] = true, ["ConfigurationId"] = Service.Configuration.ForkConfigurationId }
+            : Envelope();
+        if (!receipt.Value<bool>("Replay")) observedRevision = receipt.Value<string>("CommittedRevision")!;
         result["Receipt"] = receipt;
         if (!receipt.Value<bool>("Replay")) Notify("Changed");
         return result;
@@ -144,8 +150,9 @@ internal sealed class SettingsApi : IDisposable
         var before = JObject.FromObject(Service.Configuration);
         var directory = Path.Combine(Svc.PluginInterface.GetPluginConfigDirectory(), "configuration-backups");
         SettingsTransaction.PersistWithRollback(updated, receipts, before, Populate, Refresh,
-            () => Svc.PluginInterface.SavePluginConfig(Service.Configuration), () =>
+            () => AccordDiagnostics.PerformanceTimings.SaveConfig(Service.Configuration), () =>
             {
+                using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.BackupWrite);
                 Directory.CreateDirectory(directory);
                 File.WriteAllText(Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json"), before.ToString());
             });
@@ -219,5 +226,5 @@ internal sealed class SettingsApi : IDisposable
         }
     }
 
-    public void Dispose() { stamp.UnregisterFunc(); hold.UnregisterFunc(); Notify("Unloading"); read.UnregisterFunc(); apply.UnregisterFunc(); discover.UnregisterFunc(); validate.UnregisterFunc(); IntentRouting.Reset(); }
+    public void Dispose() { stamp.UnregisterFunc(); hold.UnregisterFunc(); Notify("Unloading"); read.UnregisterFunc(); commit.UnregisterFunc(); apply.UnregisterFunc(); discover.UnregisterFunc(); validate.UnregisterFunc(); IntentRouting.Reset(); }
 }
