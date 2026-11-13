@@ -37,6 +37,7 @@ public partial class Configuration : IPluginConfiguration
     // Opt-in coordination survives reload in the stopped state until Accord reacquires authority.
     public bool AccordAutomationManaged;
     public Newtonsoft.Json.Linq.JObject RotationSelectionSettings { get; set; } = new();
+    public bool HoldManagedOpeners { get; set; }
     public Dictionary<uint, WrathFork.Contract.RotationPreferences> RotationPreferences { get; set; } = new();
     public Dictionary<uint, Dictionary<WrathFork.Contract.Feature, bool>> ForkFeatures { get; set; } = new();
     public Dictionary<uint, Dictionary<uint, WrathFork.Contract.ActionRoutePolicy>> ActionRoutes { get; set; } = new();

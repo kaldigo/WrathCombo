@@ -334,6 +334,8 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        AccordDiagnostics.PerformanceTimings.Report();
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.Framework);
         try
         {
             #region Checks that don't require the Player to be loaded

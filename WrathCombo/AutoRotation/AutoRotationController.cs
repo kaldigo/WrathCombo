@@ -184,6 +184,7 @@ internal unsafe class AutoRotationController
 
     internal static void Run()
     {
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.RunnerAttempt);
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Runner.Tick", () => new { AutomationOwnership.Allowed });
         if (!AutomationOwnership.Allowed) { AccordDiagnostics.DiagnosticLog.Exit("Automation ownership denied"); return; }
         if (RotationInterop.ManualLimitBreak.Waiting()) { AccordDiagnostics.DiagnosticLog.Exit("Manual limit break in progress"); return; }
@@ -199,7 +200,7 @@ internal unsafe class AutoRotationController
             return;
 
         if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat) return;
-        if (RotationBehaviour.Preferences?.Openers == false) WrathOpener.CurrentOpener?.ResetOpener();
+        if (RotationBehaviour.AllowOpeners == false) WrathOpener.CurrentOpener?.ResetOpener();
         uint _ = 0;
 
         // Pre-emptive HoT/Shield for healers

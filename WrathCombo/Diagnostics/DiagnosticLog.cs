@@ -14,6 +14,7 @@ namespace AccordDiagnostics;
 // Identical, locally authored source in all three plugins. No runtime dependency between engines.
 internal static class DiagnosticLog
 {
+    internal static Action<long>? ObserveSerialization;
     private static readonly object Gate = new();
     [ThreadStatic] private static long scope;
     private static long scopes;
@@ -108,6 +109,7 @@ internal static class DiagnosticLog
                     observed.NextSample[key] = now + 1000;
                 }
             }
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
             var payload = data();
             lock (Gate)
             {
@@ -116,6 +118,7 @@ internal static class DiagnosticLog
                 var line = JsonConvert.SerializeObject(new { Schema = 1, Session = s.Id, Component = s.Component,
                     Scope = scope, Sequence = ++s.Sequence, Utc = DateTime.UtcNow, MonotonicMs = Environment.TickCount64,
                     ElapsedMs = Environment.TickCount64 - s.Started, Kind = kind, Data = payload }, new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
+                ObserveSerialization?.Invoke(System.Diagnostics.Stopwatch.GetTimestamp() - started);
                 if (!s.Queue.Writer.TryWrite(line)) Interlocked.Increment(ref s.Dropped);
             }
         }

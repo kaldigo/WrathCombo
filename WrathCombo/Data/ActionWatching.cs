@@ -897,6 +897,13 @@ public static class ActionWatching
         {
             AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Target = targetId, Strict = strictDecision, Submitted = submitted, Tracked = trackedPress,
                 Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, QueueTarget = actionManager->QueuedTargetId.Id });
+            if (!submitted && Engine.SelectionRuntime.Automatic && AccordDiagnostics.DiagnosticLog.Active)
+                AccordDiagnostics.DiagnosticLog.Event("Native.AutomaticBlock", () => new {
+                    Action = actionId, Resolved = dispatchedAction, Target = targetId,
+                    Conditions = Svc.Condition.AsReadOnlySet().Select(flag => flag.ToString()).ToArray(),
+                    AnimationLock = actionManager->AnimationLock, Cast = actionManager->CastActionId, Queued = actionManager->QueuedActionId,
+                    GameStatus = actionId < 1000000 ? (uint?)actionManager->GetActionStatus(actionType, actionId, targetId) : null
+                });
             if (submitted && trackedPress && dispatchedAction != 0 && Engine.SelectionRuntime.Automatic)
             {
                 try { Engine.SelectionRuntime.FollowAcceptedEnemy(dispatchedAction, targetId); }

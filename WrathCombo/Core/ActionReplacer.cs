@@ -119,6 +119,7 @@ internal sealed class ActionReplacer : IDisposable
     /// </remarks>
     private uint GetAdjustedActionDetour(IntPtr _, uint actionID)
     {
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.Preview);
         if (actionID is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area) return actionID;
         if (Engine.AutomationOwnership.ExternalAction) return OriginalHook(actionID);
         try

@@ -31,6 +31,14 @@ internal static class TargetSelection
         bool Eligible(TargetActor actor) => actor.Eligible &&
             Vector3.Distance(caster, actor.Position) <= action.Range + casterRadius + actor.Radius;
         ImmutableArray<ulong> Hits(TargetActor actor) => action.Shape == EffectShape.Single ? [actor.Id] : affected.Where(a => Covers(caster, actor.Position, action, a)).Select(a => a.Id).ToImmutableArray();
+        int Coverage(TargetActor actor)
+        {
+            if (action.Shape == EffectShape.Single) return 1;
+            int hits = 0;
+            foreach (var candidate in affected)
+                if (Covers(caster, actor.Position, action, candidate)) hits++;
+            return hits;
+        }
         bool Safe(TargetActor actor) => !policy.AvoidUnengaged || (action.Shape == EffectShape.Single || policy.AllowManualSplash ? actor.MayAffect : !affected.Any(a => !a.MayAffect && Covers(caster, actor.Position, action, a)));
         foreach (var target in overrides)
         {
@@ -43,7 +51,7 @@ internal static class TargetSelection
         }
         if (!policy.Automatic) return TargetDecision.None("Automatic recipient selection disabled");
         var best = candidates.Where(Eligible).Where(Safe)
-            .OrderByDescending(a => policy.PreferCoverage ? Hits(a).Length : 0)
+            .OrderByDescending(a => policy.PreferCoverage ? Coverage(a) : 0)
             .ThenByDescending(a => a.Party)
             .ThenBy(a => policy.PreferInjured ? a.Health : 0)
             .ThenBy(a => Vector3.DistanceSquared(caster, a.Position)).ThenBy(a => a.Id).FirstOrDefault();

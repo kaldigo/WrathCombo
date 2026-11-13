@@ -214,7 +214,7 @@ public abstract class WrathOpener
 
     private unsafe bool ObserveOpener(ref uint actionID)
     {
-        if (Engine.RotationBehaviour.Preferences?.Openers == false) { ResetOpener(); return false; }
+        if (Engine.RotationBehaviour.AllowOpeners == false) { ResetOpener(); return false; }
         if (IsOccupied())
             return false;
 
