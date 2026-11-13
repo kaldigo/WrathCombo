@@ -58,11 +58,12 @@ __ENABLED__
 class SavedConfig { public string ForkConfigurationId="config"; public JObject ForkOperationReceipts=new(); }
 static class Service { public static SavedConfig Configuration=new(); }
 class Api {
+ string observedRevision="";
  public JObject Current=new() { ["Value"]=false }; public int Saves; string instance="instance";
  JObject Snapshot()=>(JObject)Current.DeepClone();
  JObject ValidatePatch(JObject current,JObject patch)=>(JObject)patch.DeepClone();
  void Persist(JObject updated,JObject receipts) { Current=updated;Service.Configuration.ForkOperationReceipts=receipts; Saves++; }
- JObject Envelope()=>new(); void Notify(string state) {}
+ JObject Envelope()=>new() { ["Revision"]=SettingsTransaction.Hash(Current) }; void Notify(string state) {}
  public JObject Call(JObject request)=>Apply(request);
 __APPLY__
 }

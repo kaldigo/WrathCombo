@@ -35,6 +35,10 @@ static class Engine {
         public static bool ConsumePressRefresh() { bool refresh = Refresh; Refresh = false; return refresh; }
     }
 }
+namespace AccordDiagnostics {
+    enum TimedPath { Preview }
+    static class PerformanceTimings { internal static System.IDisposable? Measure(TimedPath _) => null; }
+}
 enum Job { GNB, WHM }
 static class Player { public static bool Available = true; public static Job Job; public static int Level=100; }
 static class Svc { public static class ClientState { public static uint TerritoryType=100; } }
