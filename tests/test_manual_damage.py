@@ -13,6 +13,11 @@ class ManualDamageTests(unittest.TestCase):
                            runtime.index("        ulong? evaluatedEnemy = null;")]
         dancer = (root / "Combos/PvE/DNC/DNC_Helper.cs").read_text()
         finish = dancer[dancer.index("    private static uint FinishOrHold"):dancer.index("    // The native replacement is Improvised Finish")]
+        gunbreaker = (root / "Combos/PvE/GNB/GNB_Selection.cs").read_text()
+        display = gunbreaker[gunbreaker.index("    private static uint DisplayPlannedGcd"):gunbreaker.index("    private static uint PlanTestingGcd")]
+        providers = (root / "Combos/PvE/GNB/GNB.cs").read_text()
+        for starter in ("KeenEdge", "DemonSlice"):
+            self.assertEqual(2, providers.count(f"return DisplayPlannedGcd(actionID, plannedGcd, {starter});"))
         program = """
 record IBattleChara(ulong GameObjectId, bool hostile, bool IsDead=false, bool IsTargetable=true) {
     public bool IsHostile()=>hostile;
@@ -52,6 +57,9 @@ FALLBACK
     static bool EnemyIn15Yalms=false;
     static bool IsNotEnabled(int preset)=>false;
 FINISH
+    static class SelectionRuntime {public static bool Automatic => automatic;}
+    static class ActionRoutes {public static bool Allowed(uint id)=>true;}
+    DISPLAY
     static void Main(){
         SimpleTarget.HardTarget=new(99,true);
         if(Resolve(1)!=1 || recipient!=99) throw new Exception("Lost explicit target");
@@ -72,12 +80,18 @@ FINISH
             CountdownActive=true; Service.ActionReplacer.Icon=default; Resolve(action,input,true); CountdownActive=false;
             if(Service.ActionReplacer.Icon!=default) throw new Exception("Countdown hold disguised as idle");
         }
+        SimpleTarget.HardTarget=null; Service.ActionReplacer.Icon=default;
+        if(DisplayPlannedGcd(1000016,All.Cease,16137)!=All.Cease || Service.ActionReplacer.Icon!=(1000016u,16137u))
+            throw new Exception("Combined Gunbreaker lost its idle icon or made the blocked press executable");
+        CountdownActive=true; Service.ActionReplacer.Icon=default;
+        DisplayPlannedGcd(1000016,All.Cease,16137); CountdownActive=false;
+        if(Service.ActionReplacer.Icon!=default) throw new Exception("Countdown Cease hidden");
         if(FinishOrHold(TechnicalFinish4)!=All.Cease) throw new Exception("Lost Dancer hold");
         remaining=1;
         if(FinishOrHold(TechnicalFinish4)!=TechnicalFinish4) throw new Exception("Lost expiring finish");
     }
 }
-""".replace("FALLBACK", fallback).replace("FINISH", finish)
+""".replace("FALLBACK", fallback).replace("FINISH", finish).replace("DISPLAY", display)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             (path / "Program.cs").write_text(program)
