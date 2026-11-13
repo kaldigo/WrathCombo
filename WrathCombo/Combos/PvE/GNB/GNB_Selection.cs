@@ -1,6 +1,6 @@
 using WrathCombo.CustomComboNS;
 using WrathCombo.Engine;
-using WrathCombo.Extensions;
+using ECommons.GameFunctions;
 using WrathCombo.Services;
 using WrathCombo.Engine.Selection;
 using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
