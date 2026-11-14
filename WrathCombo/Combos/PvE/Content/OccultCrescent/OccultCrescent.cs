@@ -133,7 +133,7 @@ internal partial class OccultCrescent
             !Bursting.PlayerIsDamageBuffed)
             return false;
 
-        if (IsEnabledAndUsable(Preset.Phantom_Monk_PhantomKick, PhantomKick) &&
+        if (Engine.ExperimentalSelection.AllowPhantomKick && IsEnabledAndUsable(Preset.Phantom_Monk_PhantomKick, PhantomKick) &&
             !IsMoving() && InActionRange(PhantomKick) &&
             GetTargetDistance() <= Phantom_Monk_PhantomKick_Distance)
         {
@@ -1501,7 +1501,7 @@ internal partial class OccultCrescent
 
     private static bool TryRetargetPhantomRaise(ref uint actionID, uint raiseAction)
     {
-        var raiseTarget = SimpleTarget.Stack.AllyToRaiseOccult;
+        var raiseTarget = SimpleTarget.Stack.PhantomRaiseTarget(raiseAction);
         if (raiseTarget is null)
             return false;
 

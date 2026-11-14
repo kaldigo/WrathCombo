@@ -124,13 +124,26 @@ internal static class SimpleTarget
         ///     The Customizable Raise Stack.
         /// </summary>
         public static IGameObject? AllyToRaise =>
-            GetStack(StackOption.RaiseStack, target => target.IfCanUseOn(WHM.Raise));
+            GetStack(StackOption.RaiseStack, target => target.IfCanUseOn(WHM.Raise)) ?? NearbyRaiseTarget(WHM.Raise);
 
         /// <summary>
         /// Same as <see cref="AllyToRaise"/> but for the OC raise actions to account for Forked Tower shenanigans.
         /// </summary>
         public static IGameObject? AllyToRaiseOccult =>
-            GetStack(StackOption.RaiseStack, target => target.IfCanUseOn(OccultCrescent.Revive));
+            PhantomRaiseTarget(OccultCrescent.Revive);
+
+        internal static IGameObject? PhantomRaiseTarget(uint action) =>
+            GetStack(StackOption.RaiseStack, target => target != null && Engine.SelectionRuntime.TargetLifeAllowed(action, target) ? target.IfInSightInRangeCanUseOn(action) : null) ?? NearbyRaiseTarget(action);
+
+        internal static IBattleChara? NearbyRaiseTarget(uint action)
+        {
+            if (!Engine.ExperimentalSelection.RaiseNearbyPlayers || InPvP()) return null;
+            return Svc.Objects.GetBattleCharas()
+                .Where(actor => actor.IsDead && actor.IsTargetable && actor.IsAPlayer() && !actor.IsInParty() &&
+                    !actor.IsHostile() && Engine.SelectionRuntime.TargetLifeAllowed(action, actor) &&
+                    actor.IfInSightInRangeCanUseOn(action) != null)
+                .MinBy(actor => GetTargetDistance(actor));
+        }
 
         /// <summary>
         ///     The <see cref="AllyToHeal">Heal Stack</see>, but filtered to
@@ -628,10 +641,10 @@ internal static class SimpleTarget
     public static IGameObject? PartyMember8 => GetPartyMemberInSlotSlot(8);
 
     /// <summary>
-    ///     Tries to get a party member, by slot number (1â€“8).
+    ///     Tries to get a party member, by slot number (1–8).
     /// </summary>
     /// <param name="slot">
-    ///     The party slot (1 for local player, 2â€“8 for party members).
+    ///     The party slot (1 for local player, 2–8 for party members).
     /// </param>
     /// <returns>
     ///     An <see cref="IGameObject" /> for the party member if found;

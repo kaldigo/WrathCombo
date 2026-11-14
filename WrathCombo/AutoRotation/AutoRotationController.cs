@@ -136,7 +136,8 @@ internal unsafe class AutoRotationController
         x.BattleChara is not null &&
         x.BattleChara.IsDead &&
         x.BattleChara.IsTargetable &&
-        (cfg.HealerSettings.AutoRezOutOfParty || GetPartyMembers().Any(y => y.GameObjectId == x.BattleChara.GameObjectId)) &&
+        (GetPartyMembers().Any(y => y.GameObjectId == x.BattleChara.GameObjectId) ||
+         (RotationBehaviour.Managed ? ExperimentalSelection.RaiseNearbyPlayers && x.BattleChara.IsAPlayer() : cfg.HealerSettings.AutoRezOutOfParty)) &&
         GetTargetDistance(x.BattleChara) <= QueryRange &&
         !x.BattleChara.HasRaiseStatus &&
         !x.BattleChara.HasRaiseInvincibility &&
@@ -707,6 +708,10 @@ internal unsafe class AutoRotationController
             if ((timeSinceLastRez != -1f && timeSinceLastRez < 4f) || Player.Object.IsCasting())
                 return;
 
+            if (ExperimentalSelection.RaiseNearbyPlayers && !InPvP())
+                deadPeople = deadPeople.Where(x => x.BattleChara.IfInSightInRangeCanUseOn(resSpell) != null &&
+                    SelectionRuntime.TargetLifeAllowed(resSpell, x.BattleChara))
+                    .OrderByDescending(x => x.BattleChara.IsInParty()).ThenBy(x => GetTargetDistance(x.BattleChara));
             if (deadPeople.Where(CheckRezTarget).FindFirst(x => x is not null, out var member))
             {
                 if (resSpell == OccultCrescent.Revive || resSpell == OccultCrescent.OccultRaise)

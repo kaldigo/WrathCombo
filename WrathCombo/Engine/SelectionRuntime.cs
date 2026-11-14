@@ -385,14 +385,15 @@ internal static class SelectionRuntime
         return null;
     }
 
-    internal static bool TargetLifeAllowed(uint action, IGameObject target) =>
-        action is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper
+    private static bool IsRaise(uint action) =>
+        action is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper || action == Combos.PvE.OccultCrescent.OccultRaise || action == Combos.PvE.OccultCrescent.Revive;
+
+    internal static bool TargetLifeAllowed(uint action, IGameObject target) => IsRaise(action)
             ? target.IsDead() && !target.HasStatus(Combos.PvE.All.Buffs.Raised, true) && !RaiseBeingCast(target.GameObjectId) : !target.IsDead();
 
     private static bool RaiseBeingCast(ulong recipient) => GetPartyMembers().Any(member =>
         member.BattleChara is { IsCasting: true } caster && caster.GameObjectId != Player.Object?.GameObjectId &&
-        caster.CastTargetObjectId == recipient && caster.CastActionId is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or
-            Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper);
+        caster.CastTargetObjectId == recipient && IsRaise(caster.CastActionId));
 
     internal static unsafe TargetDecision SelectAlly(uint action, ulong? explicitRecipient = null, Func<IBattleChara, bool>? eligible = null)
     {
@@ -421,6 +422,10 @@ internal static class SelectionRuntime
             new(ExperimentalSelection.AutomaticAllies, ExperimentalSelection.Fallback, false, true, false), snapshot, snapshot,
             TargetOrder.Apply(requested, ExperimentalSelection.AllyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(input);
+        if (result.Recipient == null && result.Source == TargetSource.Automatic && explicitRecipient == null &&
+            ExperimentalSelection.AutomaticAllies && IsRaise(action) && SimpleTarget.Stack.NearbyRaiseTarget(action) is { } nearby &&
+            (eligible?.Invoke(nearby) ?? true))
+            result = new(nearby.GameObjectId, [nearby.GameObjectId], TargetSource.Automatic, "Eligible nearby player to raise");
         TestingApi.RecordDecision("Target", input, result);
         return result;
     }

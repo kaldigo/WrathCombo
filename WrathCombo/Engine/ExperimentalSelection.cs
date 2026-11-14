@@ -69,6 +69,8 @@ internal static class ExperimentalSelection
     internal static bool IncludeRaise { get; private set; }
     internal static bool IncludeCleanse { get; private set; }
     internal static bool PreventiveHealing { get; private set; } = true;
+    internal static bool AllowPhantomKick { get; private set; } = true;
+    internal static bool RaiseNearbyPlayers { get; private set; }
     internal static bool HardCastRaise { get; private set; } = true;
     internal static bool HealingGcds { get; private set; }
     internal static bool PartyMouseover { get; private set; } = true;
@@ -104,7 +106,7 @@ internal static class ExperimentalSelection
         ["Scholar"] = Scholar, ["Astrologian"] = Astrologian, ["WhiteMage"] = WhiteMage, ["Forecasts"] = Forecasts, ["Bard"] = Bard, ["Dancer"] = Dancer, ["BlueMage"] = BlueMage, ["Beastmaster"] = Beastmaster,
         ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner, ["RedMage"] = RedMage, ["Pictomancer"] = Pictomancer, ["BlackMage"] = BlackMage, ["Samurai"] = Samurai, ["Monk"] = Monk, ["Ninja"] = Ninja,
         ["Warrior"] = Warrior, ["DarkKnight"] = DarkKnight, ["Gunbreaker"] = Gunbreaker, ["PvpMachinist"] = PvpMachinist, ["PvpScheduling"] = PvpScheduling,
-        ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["HardCastRaise"] = HardCastRaise,
+        ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["AllowPhantomKick"] = AllowPhantomKick, ["RaiseNearbyPlayers"] = RaiseNearbyPlayers, ["HardCastRaise"] = HardCastRaise,
         ["IncludeCleanse"] = IncludeCleanse, ["PreventiveHealing"] = PreventiveHealing,
         ["HealingGcds"] = HealingGcds, ["PartyMouseover"] = PartyMouseover, ["WorldMouseover"] = WorldMouseover,
         ["Focus"] = Focus, ["GroundTargets"] = GroundTargets, ["SpaceMitigation"] = SpaceMitigation, ["Fallback"] = Fallback, ["AutomaticAllies"] = AutomaticAllies, ["AutomaticEnemies"] = AutomaticEnemies,
@@ -150,6 +152,8 @@ internal static class ExperimentalSelection
         Scholar = current.Value<bool>("Scholar"); Astrologian = current.Value<bool>("Astrologian"); WhiteMage = current.Value<bool>("WhiteMage");
         CompareDrg = current.Value<bool>("CompareDrg");
         IncludeHealing = current.Value<bool>("IncludeHealing"); PartyMouseover = current.Value<bool>("PartyMouseover");
+        AllowPhantomKick = current.Value<bool>("AllowPhantomKick");
+        RaiseNearbyPlayers = current.Value<bool>("RaiseNearbyPlayers");
         IncludeRaise = current.Value<bool>("IncludeRaise"); HardCastRaise = current.Value<bool>("HardCastRaise");
         IncludeCleanse = current.Value<bool>("IncludeCleanse"); PreventiveHealing = current.Value<bool>("PreventiveHealing");
         HealingGcds = current.Value<bool>("HealingGcds");
