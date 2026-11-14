@@ -200,7 +200,11 @@ internal unsafe class AutoRotationController
         if (ShouldSkipAutorotation())
             return;
 
-        if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat) return;
+        if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat)
+        {
+            RunOutOfCombatRaise();
+            return;
+        }
         if (RotationBehaviour.AllowOpeners == false) WrathOpener.CurrentOpener?.ResetOpener();
         uint _ = 0;
 
@@ -229,7 +233,10 @@ internal unsafe class AutoRotationController
 
         // Only run in combat if required
         if (cfg.InCombatOnly && NotInCombat && !CombatBypass)
+        {
+            RunOutOfCombatRaise();
             return;
+        }
 
         // Check for Pyretic / Reasons to stop
         if (cfg.DPSSettings.UnTargetAndDisableForPenalty && PlayerHasActionPenalty(true))
@@ -306,10 +313,7 @@ internal unsafe class AutoRotationController
                        && actCheck;
 
         // Healer cleanse/rez logic
-        if (isHealer ||
-            (Player.Job is Job.SMN or Job.RDM && cfg.HealerSettings.AutoRezDPSJobs) ||
-            OccultCrescent.CanPhantomRaise() ||
-            Variant.CanRaise())
+        if (CanUseResurrection(isHealer))
         {
             if (ActionManager.Instance()->QueuedActionId == RoleActions.Healer.Esuna ||
                 ActionManager.Instance()->QueuedActionId == BLU.Exuviation)
@@ -656,6 +660,27 @@ internal unsafe class AutoRotationController
                 }
             }
         }
+    }
+
+    private static bool CanUseResurrection(bool isHealer) => isHealer ||
+        (Player.Job is Job.SMN or Job.RDM && cfg.HealerSettings.AutoRezDPSJobs) ||
+        OccultCrescent.CanPhantomRaise() || Variant.CanRaise();
+
+    private static void RunOutOfCombatRaise()
+    {
+        if (InPvP() || Deadtionary.Count == 0 || Player.Object.IsCasting() ||
+            cfg.DPSSettings.UnTargetAndDisableForPenalty && PlayerHasActionPenalty(true))
+            return;
+
+        if (ExperimentalSelection.ActiveHealer && ExperimentalSelection.IncludeRaise && RotationBehaviour.Support != false)
+        {
+            HealerSelection.ExecuteAutomaticRaise();
+            return;
+        }
+
+        if (cfg.HealerSettings.AutoRez && CanUseResurrection(Player.Object.Role is CombatRole.Healer ||
+            Player.Job is Job.BLU && BLU.HasHealerMimicry))
+            RezParty();
     }
 
     // Note: Similar to Kardia, because this has its own set of rules but regarding timings I'm not sure if I want to wire this up to retargeting

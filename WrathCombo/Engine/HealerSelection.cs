@@ -230,11 +230,25 @@ internal static partial class HealerSelection
         return ActionRoutes.Allowed(PartyHeal) && ActionReady(PartyHeal) ? PartyHeal : 0;
     }
 
-    private static SelectionDecision? Raise(uint input)
+    internal static void ExecuteAutomaticRaise()
+    {
+        uint input = RaiseSpell;
+        using var route = new ActionRouteContext(ActionRoutes.For(input));
+        SelectionRuntime.BeginPreview(input);
+        if (Raise(input, restrictAutomaticRecipient: true) is { } decision && decision.Action != All.Cease)
+            SelectionRuntime.ExecuteAutomatic(decision);
+    }
+
+    private static bool AutomaticRaiseRecipient(IGameObject target) =>
+        target.IsInParty() || ExperimentalSelection.RaiseNearbyPlayers && target.IsAPlayer() && !target.IsHostile();
+
+    private static SelectionDecision? Raise(uint input, bool restrictAutomaticRecipient = false)
     {
         if (SelectionRuntime.Commitment is { } accepted)
-            return accepted.PlannedGcd == RaiseSpell ? Continuation(input) : null;
-        var selected = SelectionRuntime.SelectAlly(RaiseSpell);
+            return accepted.PlannedGcd == RaiseSpell && (!restrictAutomaticRecipient ||
+                Svc.Objects.SearchById(accepted.Recipient) is { } target && AutomaticRaiseRecipient(target))
+                ? Continuation(input) : null;
+        var selected = SelectionRuntime.SelectAlly(RaiseSpell, eligible: restrictAutomaticRecipient ? AutomaticRaiseRecipient : null);
         if (selected.Recipient is not { } recipient) return null;
         return RaiseOnRecipient(input, recipient);
     }
