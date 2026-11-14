@@ -509,8 +509,27 @@ internal unsafe class AutoRotationController
         return true;
     }
 
+    // Only automatic damage waits. A player who initiates combat manually owns that pull.
+    internal static bool WaitForPartyTank()
+    {
+        if (InPvP() || InCombat() || Player.Object?.Role == CombatRole.Tank) return false;
+
+        bool waiting = false;
+        foreach (var member in Svc.Party)
+        {
+            if (member.GameObject is not IBattleChara { IsDead: false, IsTargetable: true, Role: CombatRole.Tank } tank)
+                continue;
+            if (tank.Struct()->InCombat) return false;
+            waiting = true;
+        }
+        if (waiting) AccordDiagnostics.DiagnosticLog.Exit("Waiting for party tank to pull");
+        return waiting;
+    }
+
     private static bool ProcessAutoActions(ref uint _, bool canHeal, bool stOnly)
     {
+        if (!canHeal && WaitForPartyTank()) return false;
+
         // Pre-filter and cache attributes to avoid repeated lookups
         var filteredActions = _autoActions
             .Select(x => new { Preset = x.Key, Attributes = x.Key.Attributes() })

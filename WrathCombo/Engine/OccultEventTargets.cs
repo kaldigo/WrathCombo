@@ -136,7 +136,7 @@ internal static class OccultEventTargets
 
         var preset = Presets.GetJobAutorots.Keys.Select(key => key.Attributes()).FirstOrDefault(attr =>
             attr.AutoAction is { IsHeal: false, IsAoE: false } && attr.ReplaceSkill?.ActionIDs.Count > 0);
-        if (preset?.ReplaceSkill == null) return;
+        if (preset?.ReplaceSkill == null || AutoRotation.AutoRotationController.WaitForPartyTank()) return;
 
         // Set the native state explicitly. A toggle would switch it off on the next retry.
         var ui = UIState.Instance();
