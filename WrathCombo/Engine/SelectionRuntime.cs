@@ -239,6 +239,9 @@ internal static class SelectionRuntime
             return true;
         }
         var recipient = Svc.Objects.SearchById(decision.Recipient);
+        if (decision.EncounterHeal && (recipient is not IBattleChara patient ||
+            !OccultEventTargets.PatientStillEligible(result, patient)))
+        { sequence.CancelPress(); return AccordDiagnostics.DiagnosticLog.Reject("Encounter heal recipient or party priority changed"); }
         uint validateAction = decision.Preparation != 0 ? decision.PlannedGcd : decision.Action;
         if (decision.Generation != Generation || Environment.TickCount64 - decision.ObservedAt >= 500 || recipient is null ||
             !recipient.IsTargetable || !TargetLifeAllowed(validateAction, recipient) || !ActionRoutes.Allowed(validateAction) || !ActionRoutes.Allowed(decision.Action) ||

@@ -349,6 +349,16 @@ internal unsafe class AutoRotationController
             RotationBehaviour.Support != false && TryRotationButtonHeal())
             return;
 
+        if (!canHeal && ExperimentalSelection.HealEncounterPlayers && isHealer && RotationBehaviour.Support != false &&
+            !IsMoving() && !Player.Object.IsCasting() && RemainingGCD <= cfg.QueueWindow && OccultEventTargets.CanHelpEncounter() &&
+            _autoActions.Keys.Any(preset => preset.Attributes().AutoAction is { IsHeal: true, IsAoE: false }))
+        {
+            const uint input = All.SingleTargetHeals;
+            using var route = new ActionRouteContext(ActionRoutes.For(input));
+            SelectionRuntime.BeginPreview(input);
+            if (OccultEventTargets.HealPatient(input) is { } patient && SelectionRuntime.ExecuteAutomatic(patient))
+                return;
+        }
         ProcessAutoActions(ref _, canHeal, false);
     }
 

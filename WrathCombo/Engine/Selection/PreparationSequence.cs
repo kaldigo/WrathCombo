@@ -1,7 +1,7 @@
 namespace WrathCombo.Engine.Selection;
 
 internal sealed record SelectionDecision(uint Action, uint PlannedGcd, ulong Recipient, uint Preparation, string Reason, long ObservedAt, long Generation, long PreventionEvent = 0, uint CompletionAction = 0,
-    System.Numerics.Vector3? GroundPosition = null, ulong? EvaluatedEnemy = null, bool ManualDamage = false)
+    System.Numerics.Vector3? GroundPosition = null, ulong? EvaluatedEnemy = null, bool ManualDamage = false, bool EncounterHeal = false)
 {
     internal SelectionDecision PlaceGround(ulong recipient, System.Numerics.Vector3 position, long now, string reason) =>
         this with { Recipient = recipient, GroundPosition = position, ObservedAt = now, Reason = reason };

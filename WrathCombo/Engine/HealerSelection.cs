@@ -74,6 +74,13 @@ internal static partial class HealerSelection
             !GetPartyMembers().Any(member => member.BattleChara is { IsDead: false } ally && GetTargetHPPercent(ally) < 30) &&
             Raise(input) is { } resurrection)
         { action = resurrection.Action; return true; }
+        if (ExperimentalSelection.HealEncounterPlayers && RotationBehaviour.Support != false &&
+            (input == All.SingleTargetHeals && preset.Attributes().AutoAction is { IsHeal: true, IsAoE: false } ||
+             damageInput && ExperimentalSelection.EffectiveHealing && ExperimentalSelection.EffectiveHealingGcds) &&
+            OccultEventTargets.CanHelpEncounter() &&
+            SelectionRuntime.SelectAlly(Job == 40 ? SGE.Diagnosis : BasicHeal).Source == TargetSource.Automatic &&
+            OccultEventTargets.HealPatient(input) is { } encounterHeal)
+        { action = encounterHeal.Action; return true; }
         if (ExperimentalSelection.ActiveSage) return false;
         if (TrySimple(input, preset, out action)) return true;
         if (Job == 28 && preset == Preset.SCH_DeploymentTactics && input == SCH.DeploymentTactics)

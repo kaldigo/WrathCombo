@@ -125,6 +125,65 @@ internal static class OccultEventTargets
         Svc.Targets.Target = next;
         AccordDiagnostics.DiagnosticLog.Event("Runner.VisibleEventEnemy", () => new { Fate = fate, Encounter = encounter, Enemy = next.GameObjectId, next.BaseId });
     }
+    // CE participants carry Hoofing It. Check both players against the same known arena
+    // as well: the status alone does not identify which encounter a player joined.
+    private const uint HoofingIt = 1778;
+    private static DateTime healFrame;
+    private static uint arenaActor;
+    private static DateTime patientFrame;
+    private static uint patientSpell;
+    private static IBattleChara? cachedPatient;
+    internal static bool CanHelpEncounter()
+    {
+        if (!ExperimentalSelection.HealEncounterPlayers || !ExperimentalSelection.AutomaticAllies ||
+            !Active() || encounter == 0 || !Player.Object.HasStatus(HoofingIt, true)) return false;
+        if (healFrame != frame)
+        {
+            healFrame = frame;
+            arenaActor = Svc.Objects.GetBattleCharas().FirstOrDefault(actor => actor is IBattleNpc &&
+                InEncounterArena(duty, actor.BaseId, Player.Position, actor.Position))?.BaseId ?? 0;
+        }
+        return arenaActor != 0 && !GetPartyMembers().Any(member => member.BattleChara is { IsDead: false } ally &&
+            GetTargetHPPercent(ally, forceUsePending: true) <= 70);
+    }
+
+    private static unsafe bool EligiblePatient(uint spell, IBattleChara actor) =>
+        actor.IsAPlayer() && !actor.IsDead && actor.IsTargetable && actor.CurrentHp > 0 &&
+        GetTargetHPPercent(actor, forceUsePending: true) < 50 && !actor.IsInParty() &&
+        actor.GameObjectId != Player.Object!.GameObjectId && actor.HasStatus(HoofingIt, true) &&
+        InEncounterArena(duty, arenaActor, Player.Position, actor.Position) && !actor.IsHostile() &&
+        InActionRange(spell, actor) && IsInLineOfSight(actor) && ActionManager.CanUseActionOnTarget(spell, actor.GameObject());
+
+    internal static bool PatientStillEligible(uint spell, IBattleChara patient) =>
+        CanHelpEncounter() && EligiblePatient(spell, patient);
+
+    internal static SelectionDecision? HealPatient(uint input)
+    {
+        if (SelectionRuntime.Commitment != null || !CanHelpEncounter()) return null;
+        uint spell = Player.Job switch
+        {
+            Job.WHM => ActionLearned(WHM.Cure2) ? WHM.Cure2 : WHM.Cure,
+            Job.SCH => SCH.Physick,
+            Job.AST => ActionLearned(AST.Benefic2) ? AST.Benefic2 : AST.Benefic,
+            Job.SGE => SGE.Diagnosis,
+            _ => 0,
+        };
+        if (spell == 0 || !ActionRoutes.Allowed(spell) || OriginalHook(spell) != spell) return null;
+        if (patientFrame != frame || patientSpell != spell)
+        {
+            patientFrame = frame;
+            patientSpell = spell;
+            cachedPatient = Svc.Objects.GetBattleCharas().Where(actor => EligiblePatient(spell, actor))
+                .MinBy(actor => GetTargetHPPercent(actor, forceUsePending: true));
+        }
+        var patient = cachedPatient;
+        if (patient == null || !ActionReadyForTarget(spell, patient.GameObjectId)) return null;
+        var decision = new SelectionDecision(spell, spell, patient.GameObjectId, 0, "Direct heal for Critical Encounter participant",
+            Environment.TickCount64, SelectionRuntime.Generation, EncounterHeal: true);
+        SelectionRuntime.Publish(input, decision);
+        return decision;
+    }
+
     internal static unsafe void EngageSelected(float range)
     {
         if (!Active() || !ExperimentalSelection.ActiveTargets || InCombat() || PartyInCombat() ||
