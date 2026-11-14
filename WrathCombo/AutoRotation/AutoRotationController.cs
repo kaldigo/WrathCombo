@@ -200,6 +200,8 @@ internal unsafe class AutoRotationController
         if (ShouldSkipAutorotation())
             return;
 
+        OccultEventTargets.AcquireVisible(cfg.DPSSettings.MaxDistance);
+
         if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat)
         {
             RunOutOfCombatRaise();
@@ -1260,10 +1262,10 @@ internal unsafe class AutoRotationController
             !chara.IsInvincible &&
             (RotationBehaviour.Preferences?.Targeting != EnemySelection.PartyCombat || FightingParty(chara)) &&
             !Service.Configuration.IgnoredNPCs.ContainsKey(chara.BaseId) &&
-            ((cfg.DPSSettings.OnlyAttackInCombat && chara.Struct()->InCombat) || !cfg.DPSSettings.OnlyAttackInCombat) &&
+            ((cfg.DPSSettings.OnlyAttackInCombat && chara.Struct()->InCombat) || !cfg.DPSSettings.OnlyAttackInCombat || OccultEventTargets.Matches(chara)) &&
             IsInLineOfSight(chara);
 
-        internal static bool FightingParty(IBattleChara enemy) => enemy.Struct()->InCombat &&
+        internal static bool FightingParty(IBattleChara enemy) => OccultEventTargets.Matches(enemy) || enemy.Struct()->InCombat &&
             (enemy.TargetObjectId == Player.Object.GameObjectId ||
              GetPartyMembers().Any(member => enemy.TargetObjectId == member.GameObjectId ||
                  member.BattleChara is { } ally && ally.Struct()->InCombat && ally.TargetObjectId == enemy.GameObjectId) ||
