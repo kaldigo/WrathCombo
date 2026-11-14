@@ -243,6 +243,23 @@ internal partial class OccultCrescent
         return false;
     }
 
+    private static bool EnragedStrikeCanHitTarget()
+    {
+        if (LocalPlayer is not { } player || CurrentTarget is not { IsTargetable: true, IsDead: false } enemy)
+            return false;
+
+        // Enraged Strike (41593) is a 3-yalm frontal cone. Its sheet row has no
+        // angle, so require the enemy center within 30 degrees of player facing.
+        var delta = enemy.Position - player.Position;
+        float reach = 3f + enemy.HitboxRadius;
+        if (delta.LengthSquared() > reach * reach)
+            return false;
+
+        float forward = delta.X * MathF.Sin(player.Rotation) + delta.Z * MathF.Cos(player.Rotation);
+        float horizontalSquared = delta.X * delta.X + delta.Z * delta.Z;
+        return horizontalSquared > 0 && forward > 0 && forward * forward >= 0.75f * horizontalSquared;
+    }
+
     private static bool TryGetBerserkerAction(ref uint actionID)
     {
         if (!IsEnabled(Preset.Phantom_Berserker))
@@ -255,8 +272,8 @@ internal partial class OccultCrescent
             !Bursting.PlayerIsDamageBuffed)
             return false;
 
-        if (IsEnabledAndUsable(Preset.Phantom_Berserker_Rage, Rage) &&
-            InActionRange(Rage) && CanWeave())
+        if (Engine.ExperimentalSelection.AllowPhantomRage && IsEnabledAndUsable(Preset.Phantom_Berserker_Rage, Rage) &&
+            CanWeave() && EnragedStrikeCanHitTarget())
         {
             actionID = Rage; // buff
             return true;
@@ -267,7 +284,7 @@ internal partial class OccultCrescent
             (CurrentJobLevel < 3 ||
              !IsEnabled(Preset.Phantom_Berserker_Rage) ||
              LocalPlayer.Status(Buffs.PentupRage).RemainingTimeOrZero() <= 3f && LocalPlayer.HasStatus(Buffs.PentupRage) ||
-             !LocalPlayer.HasStatus(Buffs.PentupRage) && !ActionReady(Rage)))
+             !LocalPlayer.HasStatus(Buffs.PentupRage) && (!Engine.ExperimentalSelection.AllowPhantomRage || !ActionReady(Rage))))
         {
             actionID = DeadlyBlow; // better when buff timer is low / Rage on CD
             return true;
