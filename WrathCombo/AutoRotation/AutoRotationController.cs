@@ -204,7 +204,8 @@ internal unsafe class AutoRotationController
 
         if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat)
         {
-            RunOutOfCombatRaise();
+            if (!RunOutOfCombatRaise())
+                OccultEventTargets.EngageSelected(cfg.DPSSettings.MaxDistance);
             return;
         }
         if (RotationBehaviour.AllowOpeners == false) WrathOpener.CurrentOpener?.ResetOpener();
@@ -236,7 +237,8 @@ internal unsafe class AutoRotationController
         // Only run in combat if required
         if (cfg.InCombatOnly && NotInCombat && !CombatBypass)
         {
-            RunOutOfCombatRaise();
+            if (!RunOutOfCombatRaise())
+                OccultEventTargets.EngageSelected(cfg.DPSSettings.MaxDistance);
             return;
         }
 
@@ -668,25 +670,25 @@ internal unsafe class AutoRotationController
         (Player.Job is Job.SMN or Job.RDM && cfg.HealerSettings.AutoRezDPSJobs) ||
         OccultCrescent.CanPhantomRaise() || Variant.CanRaise();
 
-    private static void RunOutOfCombatRaise()
+    private static bool RunOutOfCombatRaise()
     {
         if (InPvP() || Deadtionary.Count == 0 || Player.Object.IsCasting() ||
             cfg.DPSSettings.UnTargetAndDisableForPenalty && PlayerHasActionPenalty(true))
-            return;
+            return false;
 
         if (ExperimentalSelection.ActiveHealer && ExperimentalSelection.IncludeRaise && RotationBehaviour.Support != false)
         {
-            HealerSelection.ExecuteAutomaticRaise();
-            return;
+            return HealerSelection.ExecuteAutomaticRaise();
         }
 
         if (cfg.HealerSettings.AutoRez && CanUseResurrection(Player.Object.Role is CombatRole.Healer ||
             Player.Job is Job.BLU && BLU.HasHealerMimicry))
-            RezParty();
+            return RezParty();
+        return false;
     }
 
     // Note: Similar to Kardia, because this has its own set of rules but regarding timings I'm not sure if I want to wire this up to retargeting
-    private static void RezParty()
+    private static bool RezParty()
     {
         uint resSpell = 0;
 
@@ -717,7 +719,7 @@ internal unsafe class AutoRotationController
         }
 
         if (resSpell == 0)
-            return;
+            return false;
 
         IEnumerable<WrathPartyMember> deadPeople = DeadPeople.Where(x => x.BattleChara.CanUseOn(resSpell));
 
@@ -733,7 +735,7 @@ internal unsafe class AutoRotationController
         {
             var timeSinceLastRez = TimeSinceLastSuccessfulCast(resSpell);
             if ((timeSinceLastRez != -1f && timeSinceLastRez < 4f) || Player.Object.IsCasting())
-                return;
+                return false;
 
             if (ExperimentalSelection.RaiseNearbyPlayers && !InPvP())
                 deadPeople = deadPeople.Where(x => x.BattleChara.IfInSightInRangeCanUseOn(resSpell) != null &&
@@ -743,8 +745,7 @@ internal unsafe class AutoRotationController
             {
                 if (resSpell == OccultCrescent.Revive || resSpell == OccultCrescent.OccultRaise)
                 {
-                    ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
-                    return;
+                    return ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
                 }
 
                 if (resSpell is Variant.Raise)
@@ -756,16 +757,14 @@ internal unsafe class AutoRotationController
                         {
                             if (ActionManager.Instance()->GetActionStatus(ActionType.Action, RoleActions.Magic.Swiftcast) == 0)
                             {
-                                ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
-                                return;
+                                return ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
                             }
                         }
                     }
 
                     if (LocalPlayer.HasStatus(RoleActions.Magic.Buffs.Swiftcast) || LocalPlayer.HasStatus(RDM.Buffs.Dualcast) || !IsMoving())
                     {
-                        ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
-                        return;
+                        return ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
                     }
                 }
 
@@ -773,13 +772,12 @@ internal unsafe class AutoRotationController
                 {
                     if (ActionReady(RoleActions.Magic.Swiftcast) && !LocalPlayer.HasStatus(RDM.Buffs.Dualcast))
                     {
-                        ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
-                        return;
+                        return ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
                     }
 
                     if (ActionManager.GetAdjustedCastTime(ActionType.Action, resSpell) == 0)
                     {
-                        ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
+                        return ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
                     }
 
                 }
@@ -789,8 +787,7 @@ internal unsafe class AutoRotationController
                     {
                         if (ActionManager.Instance()->GetActionStatus(ActionType.Action, RoleActions.Magic.Swiftcast) == 0)
                         {
-                            ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
-                            return;
+                            return ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
                         }
                     }
 
@@ -799,12 +796,13 @@ internal unsafe class AutoRotationController
 
                         if ((cfg is not null) && ((cfg.HealerSettings.AutoRezRequireSwift && ActionManager.GetAdjustedCastTime(ActionType.Action, resSpell) == 0) || !cfg.HealerSettings.AutoRezRequireSwift))
                         {
-                            ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
+                            return ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
                         }
                     }
                 }
             }
         }
+        return false;
     }
 
     private static void CleanseParty()

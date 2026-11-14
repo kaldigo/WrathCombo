@@ -230,12 +230,12 @@ internal static partial class HealerSelection
         return ActionRoutes.Allowed(PartyHeal) && ActionReady(PartyHeal) ? PartyHeal : 0;
     }
 
-    internal static void ExecuteAutomaticRaise()
+    internal static bool ExecuteAutomaticRaise()
     {
         uint input = RaiseSpell;
         using var route = new ActionRouteContext(ActionRoutes.For(input));
         SelectionRuntime.BeginPreview(input);
-        if (Raise(input, restrictAutomaticRecipient: true) is { } decision && decision.Action != All.Cease)
+        return Raise(input, restrictAutomaticRecipient: true) is { } decision && decision.Action != All.Cease &&
             SelectionRuntime.ExecuteAutomatic(decision);
     }
 

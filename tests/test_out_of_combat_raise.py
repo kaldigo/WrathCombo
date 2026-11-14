@@ -15,7 +15,7 @@ class OutOfCombatRaiseTests(unittest.TestCase):
             return runner[pos:runner.index("        }", pos) + 9]
         managed = block("if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat)")
         native = block("if (cfg.InCombatOnly && NotInCombat && !CombatBypass)")
-        dispatch = runner[runner.index("private static void RunOutOfCombatRaise()"):runner.index("    // Note: Similar to Kardia")]
+        dispatch = runner[runner.index("private static bool RunOutOfCombatRaise()"):runner.index("    // Note: Similar to Kardia")]
         predicate = healer[healer.index("private static bool AutomaticRaiseRecipient("):healer.index("    private static SelectionDecision? Raise(")]
         harness = """
 using static Fixture;
@@ -29,7 +29,7 @@ class Fixture {
     public static bool PlayerHasActionPenalty(bool b)=>false;
     public static bool CanUseResurrection(bool h)=>h;
     public static int Damage, Legacy, Managed;
-    public static void RezParty()=>Legacy++;
+    public static bool RezParty(){ Legacy++; return true; }
 }
 enum Job { WHM, BLU }
 enum CombatRole { Healer }
@@ -39,12 +39,13 @@ class Actor { public bool IsCasting()=>false; public CombatRole Role=>CombatRole
 class Pref { public bool CombatOnly; }
 static class RotationBehaviour { public static Pref? Preferences=new(); public static bool? Support=true; }
 static class ExperimentalSelection { public static bool ActiveHealer=true, IncludeRaise=true, RaiseNearbyPlayers; }
-static class HealerSelection { public static void ExecuteAutomaticRaise()=>Managed++; }
+static class HealerSelection { public static bool ExecuteAutomaticRaise(){ Managed++; return true; } }
 static class cfg {
     public static bool InCombatOnly;
-    public static class DPSSettings { public static bool UnTargetAndDisableForPenalty=false; }
+    public static class DPSSettings { public static float MaxDistance=30; public static bool UnTargetAndDisableForPenalty=false; }
     public static class HealerSettings { public static bool AutoRez; }
 }
+static class OccultEventTargets { public static bool Active; public static int Starts; public static void EngageSelected(float range){ if(Active) Starts++; } }
 class Runner {
     static void Tick() { MANAGED_GATE NATIVE_GATE Damage++; }
     DISPATCH
@@ -60,6 +61,9 @@ class Runner {
             Deadtionary.Clear(); Tick(); Check((Damage,Managed,Legacy)==(0,1,1)); Deadtionary.Add(1);
             NotInCombat=false; Tick(); Check(Damage==1); NotInCombat=true;
         }
+        OccultEventTargets.Active=true; NotInCombat=true; cfg.InCombatOnly=true;
+        Deadtionary.Clear(); Tick(); Check(OccultEventTargets.Starts==1);
+        Deadtionary.Add(1); Tick(); Check(OccultEventTargets.Starts==1);
         Check(AutomaticRaiseRecipient(new(true,true)) && !AutomaticRaiseRecipient(new(false,true)));
         ExperimentalSelection.RaiseNearbyPlayers=true;
         Check(AutomaticRaiseRecipient(new(false,true)) && !AutomaticRaiseRecipient(new(false,false)) &&

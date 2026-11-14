@@ -8,7 +8,15 @@ using ECommons.GameHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game.Fate;
 using FFXIVClientStructs.FFXIV.Client.Game.InstanceContent;
 using ECommons.ExcelServices;
+using ECommons.Throttlers;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using WrathCombo.Combos.PvE;
+using WrathCombo.Data;
+using WrathCombo.Engine.Selection;
 using WrathCombo.Extensions;
+using WrathCombo.Window.Functions;
+using WrathFork.Contract;
 using WrathCombo.Services;
 using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
 
@@ -117,4 +125,51 @@ internal static class OccultEventTargets
         Svc.Targets.Target = next;
         AccordDiagnostics.DiagnosticLog.Event("Runner.VisibleEventEnemy", () => new { Fate = fate, Encounter = encounter, Enemy = next.GameObjectId, next.BaseId });
     }
+    internal static unsafe void EngageSelected(float range)
+    {
+        if (!Active() || !ExperimentalSelection.ActiveTargets || InCombat() || PartyInCombat() ||
+            Player.Object is not { IsCasting: false } || SelectionRuntime.Commitment != null ||
+            Svc.Targets.Target is not IBattleNpc { IsTargetable: true, IsDead: false, IsInvincible: false } enemy ||
+            !Matches(enemy) || !enemy.IsHostile() || Service.Configuration.IgnoredNPCs.ContainsKey(enemy.BaseId) ||
+            !IsInRange(enemy, range) || !IsInLineOfSight(enemy) || PlayerHasActionPenalty(true) ||
+            !EzThrottler.Throttle("OccultEventEngage", 1000)) return;
+
+        var preset = Presets.GetJobAutorots.Keys.Select(key => key.Attributes()).FirstOrDefault(attr =>
+            attr.AutoAction is { IsHeal: false, IsAoE: false } && attr.ReplaceSkill?.ActionIDs.Count > 0);
+        if (preset?.ReplaceSkill == null) return;
+
+        // Set the native state explicitly. A toggle would switch it off on the next retry.
+        var ui = UIState.Instance();
+        if (ui != null && !ui->WeaponState.AutoAttackState.Get())
+        {
+            bool enabled = ui->WeaponState.AutoAttackState.Set(true);
+            AccordDiagnostics.DiagnosticLog.Event("Runner.EventAutoAttack", () => new { Enemy = enemy.GameObjectId, enabled });
+        }
+
+        // A caster's weapon swing cannot start combat at spell range. Use one learned,
+        // single-target GCD; leave AoE, movement actions and the opener to the normal runner.
+        uint root = preset.ReplaceSkill.ActionIDs.First();
+        if (!InMeleeRange(enemy))
+            root = Player.Job switch
+            {
+                Job.PLD or Job.GLA => PLD.ShieldLob, Job.WAR or Job.MRD => WAR.Tomahawk,
+                Job.GNB => GNB.LightningShot, Job.DRK => DRK.Unmend, Job.DRG or Job.LNC => DRG.PiercingTalon,
+                Job.NIN or Job.ROG => NIN.ThrowingDaggers, Job.SAM => SAM.Enpi,
+                Job.VPR => VPR.WrithingSnap, Job.RPR => RPR.Harpe, _ => root,
+            };
+        using var route = new ActionRouteContext(ActionRoutes.For(All.SingleTargetDPS));
+        uint action = OriginalHook(root);
+        if (!ActionWatching.ActionSheet.TryGetValue(action, out var row) || !row.CanTargetHostile ||
+            row.CastType != 1 || row.ActionCategory.RowId is not (2 or 3) || !ActionLearned(action) ||
+            !InActionRange(action, enemy) || !ActionReadyForTarget(action, enemy.GameObjectId, true, true) ||
+            IsMoving() && ActionManager.GetAdjustedCastTime(ActionType.Action, action) > 0) return;
+
+        SelectionRuntime.BeginPreview(All.SingleTargetDPS);
+        var decision = new SelectionDecision(action, action, enemy.GameObjectId, 0, "Start combat on selected event enemy",
+            Environment.TickCount64, SelectionRuntime.Generation);
+        SelectionRuntime.Publish(All.SingleTargetDPS, decision);
+        bool submitted = SelectionRuntime.ExecuteAutomatic(decision);
+        AccordDiagnostics.DiagnosticLog.Event("Runner.EventPull", () => new { Action = action, Enemy = enemy.GameObjectId, submitted });
+    }
+
 }
