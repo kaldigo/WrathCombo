@@ -51,6 +51,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
     private readonly MajorChangesWindow _majorChangesWindow;
     internal readonly Engine.SettingsApi SettingsApi;
     private readonly Engine.TestingApi testingApi;
+    private readonly FateStanceRestore fateStance = new();
     private readonly TargetHelper TargetHelper;
     internal static WrathCombo? P;
     private readonly WindowSystem ws;
@@ -324,6 +325,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
     private void ClientState_TerritoryChanged(uint territoryId)
     {
+        fateStance.Reset();
         Engine.IntentRouting.Reset();
         UpdateCaches(false, true, false);
         Task.Run(StancePartner.CheckForIPCControl);
@@ -354,11 +356,15 @@ public sealed partial class WrathCombo : IDalamudPlugin
             if (Player.Object is null ||
                 !GenericHelpers.IsScreenReady() ||
                 !Svc.ClientState.IsLoggedIn)
+            {
+                fateStance.Reset();
                 return;
+            }
 
             #region Checks and Updates that require the Player
 
             JobID = Player.Job;
+            fateStance.Tick();
 
             PresetStorage.HandleCurrentConflicts();
 
