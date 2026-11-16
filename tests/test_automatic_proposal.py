@@ -16,7 +16,7 @@ class AutomaticProposalTests(unittest.TestCase):
         harness = r"""
 using System;
 namespace AccordDiagnostics { static class DiagnosticLog { public static void Event(string kind, Func<object?> data) {} public static bool Reject(string reason) => false; } }
-record SelectionDecision(uint Action, ulong Recipient, uint Preparation, int Generation, ulong? EvaluatedEnemy = null, long ObservedAt = 0);
+record SelectionDecision(uint Action, ulong Recipient, uint Preparation, int Generation, ulong? EvaluatedEnemy = null, long ObservedAt = 0, uint PlannedGcd = 0);
 static class Combos { public static class PvE { public static class All { public const uint SingleTargetDPS = 1000000; } } }
 namespace WrathFork.Contract { sealed class ActionRouteContext(object policy) : IDisposable { public void Dispose() {} } }
 static class ActionRoutes { public static object? For(uint input) => null; }
@@ -42,6 +42,11 @@ static class RotationBehaviour {
         static uint Set(uint action) { var old = Checked; Checked = action; return old; }
         public void Dispose() => Checked = previous;
     }
+}
+static class IncomingRaise {
+    public static bool IsRaise(uint action) => action == 125;
+    public static bool Submit(uint action, ulong patient, ulong nativeTarget) =>
+        action == 7561 && patient == 42 && nativeTarget == Player.Object.GameObjectId && RotationBehaviour.Checked == action;
 }
 static class HealingGroundSelection {
     public static bool Reject;
@@ -104,6 +109,8 @@ METHOD
         Check(RotationBehaviour.Checked == 0);
         automaticDecision = proposal with { Preparation = 100 };
         Check(ExecuteAutomatic(automaticDecision) && ActionManager.Recipient == 9);
+        automaticDecision = proposal with { Action = 7561, Preparation = 7561, PlannedGcd = 125 };
+        Check(ExecuteAutomatic(automaticDecision));
         int before = ActionManager.Calls;
         automaticDecision = proposal; automatic = false; Check(!ExecuteAutomatic(proposal)); automatic = true;
         Generation = 2; Check(!ExecuteAutomatic(proposal)); Generation = 1;
