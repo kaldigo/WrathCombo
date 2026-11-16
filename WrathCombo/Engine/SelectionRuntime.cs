@@ -161,6 +161,9 @@ internal static class SelectionRuntime
     internal static IBattleChara? AutomaticRecipient(uint action) => automaticDecision is { } decision &&
         decision.Action == action && decision.Generation == Generation && Environment.TickCount64 - decision.ObservedAt is >= 0 and < 500
         ? decision.Preparation != 0 ? Player.Object : Svc.Objects.SearchById(decision.Recipient) as IBattleChara : null;
+    internal static ulong PressedRaisePatient(uint action) =>
+        pendingConfirmation is { } decision && decision.Action == action && IncomingRaise.IsRaise(decision.PlannedGcd)
+            ? decision.Recipient : 0;
     internal static bool MaySwitchVisibleTarget(IGameObject target, bool legacy)
     {
         if (target.IsHostile()) return !ExperimentalSelection.ActiveTargets && legacy; // Managed enemies follow accepted actions.
@@ -210,7 +213,9 @@ internal static class SelectionRuntime
         ulong recipient = current.Preparation != 0 ? Player.Object!.GameObjectId : current.Recipient;
         if (!ActionReadyForTarget(action, recipient)) return false;
         using var checkedAction = new RotationBehaviour.ExecuteChecked(action);
-        return ActionManager.Instance()->UseAction(ActionType.Action, action, recipient);
+        return IncomingRaise.IsRaise(current.PlannedGcd) || IncomingRaise.IsRaise(action)
+            ? IncomingRaise.Submit(action, current.Recipient, recipient)
+            : ActionManager.Instance()->UseAction(ActionType.Action, action, recipient);
     }
 
     internal static unsafe bool Press(uint input, uint result, out ulong? boundRecipient, out System.Numerics.Vector3? boundGround)
@@ -388,15 +393,8 @@ internal static class SelectionRuntime
         return null;
     }
 
-    private static bool IsRaise(uint action) =>
-        action is Combos.PvE.WHM.Raise or Combos.PvE.SCH.Resurrection or Combos.PvE.AST.Ascend or Combos.PvE.SGE.Egeiro or Combos.PvE.RDM.Verraise or Combos.PvE.BLU.AngelWhisper || action == Combos.PvE.OccultCrescent.OccultRaise || action == Combos.PvE.OccultCrescent.Revive;
-
-    internal static bool TargetLifeAllowed(uint action, IGameObject target) => IsRaise(action)
-            ? target.IsDead() && !target.HasStatus(Combos.PvE.All.Buffs.Raised, true) && !RaiseBeingCast(target.GameObjectId) : !target.IsDead();
-
-    private static bool RaiseBeingCast(ulong recipient) => GetPartyMembers().Any(member =>
-        member.BattleChara is { IsCasting: true } caster && caster.GameObjectId != Player.Object?.GameObjectId &&
-        caster.CastTargetObjectId == recipient && IsRaise(caster.CastActionId));
+    internal static bool TargetLifeAllowed(uint action, IGameObject target) => IncomingRaise.IsRaise(action)
+        ? IncomingRaise.Available(target) : !target.IsDead();
 
     internal static unsafe TargetDecision SelectAlly(uint action, ulong? explicitRecipient = null, Func<IBattleChara, bool>? eligible = null)
     {
@@ -426,7 +424,7 @@ internal static class SelectionRuntime
             TargetOrder.Apply(requested, ExperimentalSelection.AllyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(input);
         if (result.Recipient == null && result.Source == TargetSource.Automatic && explicitRecipient == null &&
-            ExperimentalSelection.AutomaticAllies && IsRaise(action) && SimpleTarget.Stack.NearbyRaiseTarget(action) is { } nearby &&
+            ExperimentalSelection.AutomaticAllies && IncomingRaise.IsRaise(action) && SimpleTarget.Stack.NearbyRaiseTarget(action) is { } nearby &&
             (eligible?.Invoke(nearby) ?? true))
             result = new(nearby.GameObjectId, [nearby.GameObjectId], TargetSource.Automatic, "Eligible nearby player to raise");
         TestingApi.RecordDecision("Target", input, result);

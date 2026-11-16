@@ -124,7 +124,7 @@ internal static class SimpleTarget
         ///     The Customizable Raise Stack.
         /// </summary>
         public static IGameObject? AllyToRaise =>
-            GetStack(StackOption.RaiseStack, target => target.IfCanUseOn(WHM.Raise)) ?? NearbyRaiseTarget(WHM.Raise);
+            GetStack(StackOption.RaiseStack, target => Engine.IncomingRaise.Available(target) ? target.IfCanUseOn(WHM.Raise) : null) ?? NearbyRaiseTarget(WHM.Raise);
 
         /// <summary>
         /// Same as <see cref="AllyToRaise"/> but for the OC raise actions to account for Forked Tower shenanigans.

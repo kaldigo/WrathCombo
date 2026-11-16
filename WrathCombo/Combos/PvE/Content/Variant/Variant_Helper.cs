@@ -70,7 +70,7 @@ namespace WrathCombo.Combos.PvE
 
         private static bool CheckRaise(Preset preset) =>
             IsEnabled(preset) && ActionReady(Raise) &&
-            TargetIsFriendly() && TargetIsDead();
+            TargetIsFriendly() && Engine.IncomingRaise.Available(CurrentTarget);
 
         private static bool CheckUltimatum(Preset preset) =>
             IsEnabled(preset) && ActionReady(Ultimatum)
