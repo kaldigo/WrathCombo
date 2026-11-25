@@ -1,10 +1,13 @@
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Ipc;
 using ECommons.DalamudServices;
+using ECommons.ExcelServices;
+using ECommons.GameHelpers;
 using ECommons.Throttlers;
 using System;
 using WrathCombo.API;
 using WrathCombo.API.Enum;
+using WrathCombo.Combos.PvE;
 using WrathCombo.CustomComboNS.Functions;
 using WrathCombo.Extensions;
 
@@ -15,6 +18,7 @@ internal static class UpcomingPositionalHintService
 {
     private static PositionalHintSnapshot _current;
     private static long _lastReportTick;
+    private static (Job Job, ulong TargetId, long Tick) _lastPrediction;
 
     internal static ICallGateProvider<object> OnUpcomingPositionalHintProvider { get; } =
         Svc.PluginInterface.GetIpcProvider<object>("OnUpcomingPositionalHint");
@@ -25,6 +29,7 @@ internal static class UpcomingPositionalHintService
             return;
 
         _current = default;
+        _lastPrediction = default;
         NotifySubscribers();
     }
 
@@ -59,6 +64,21 @@ internal static class UpcomingPositionalHintService
         return RefreshExpiry(_current).ToWire();
     }
 
+    internal static PositionalDirection GetMovementPositional(ulong targetId)
+    {
+        // Overlay snapshots may follow a retarget and refresh their expiry without a new prediction.
+        // Movement needs a recent prediction made for this exact job and target.
+        if (!Player.Available || targetId == 0 || _lastPrediction.TargetId != targetId || _lastPrediction.Job != Player.Job ||
+            Environment.TickCount64 - _lastPrediction.Tick > 500 ||
+            _current.GcdsUntil != 1 ||
+            CustomComboFunctions.CurrentTarget is not { IsDead: false } target ||
+            target.GameObjectId != targetId || !CustomComboFunctions.TargetNeedsPositionals(target) ||
+            Player.Object?.HasStatus(RoleActions.Melee.Buffs.TrueNorth) == true)
+            return PositionalDirection.None;
+
+        return _current.Direction;
+    }
+
     internal static void Report(
         PositionalDirection direction,
         uint actionId,
@@ -90,6 +110,7 @@ internal static class UpcomingPositionalHintService
             CurrentAngle = currentAngle,
             IsSatisfied = currentAngle == requiredAngle,
         };
+        _lastPrediction = (Player.Job, target.GameObjectId, Environment.TickCount64);
 
         // Latest combo report is the current step. A 2–3 GCD hint for the *next*
         // positional must replace a leftover 1 GCD hint from the one we just used.
