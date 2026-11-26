@@ -200,6 +200,7 @@ internal unsafe class AutoRotationController
         if (ShouldSkipAutorotation())
             return;
 
+        if (TankPull.Tick()) return;
         OccultEventTargets.AcquireVisible(cfg.DPSSettings.MaxDistance);
 
         if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat)

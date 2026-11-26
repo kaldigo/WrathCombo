@@ -667,6 +667,8 @@ public static class ActionWatching
             AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Submitted = accepted, Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, ManualLimitBreak = true });
             return accepted;
         }
+        if (actionType == ActionType.Action && actionId == Engine.TankPull.Button)
+            return mode != ActionManager.UseActionMode.Queue && Engine.TankPull.Press();
         if (actionType == ActionType.Action && actionId is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area)
             return mode != ActionManager.UseActionMode.Queue && Engine.EmergencyRotation.HotbarPress(actionId);
         if (pendingLimitBreak != null && mode == ActionManager.UseActionMode.None && !Engine.SelectionRuntime.Automatic &&

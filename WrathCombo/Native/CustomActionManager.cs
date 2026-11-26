@@ -440,6 +440,7 @@ public sealed unsafe class CustomActionSetup : IDisposable
             new CustomAction(Engine.PvPIntentRouting.FullRotation,"PvP full rotation","Use the supported rotation; Ninja chooses by enemy count.",1504),
             new CustomAction(Engine.EmergencyRotation.Single, "Wrath backup ST", "Manual single-target damage while Accord backup is active.", 1504, customIconPath: Path.Combine(Svc.PluginInterface.AssemblyLocation.DirectoryName!, "Resources/SingleTargetDPS.png")),
             new CustomAction(Engine.EmergencyRotation.Area, "Wrath backup AoE", "Manual area damage while Accord backup is active.", 1505, customIconPath: Path.Combine(Svc.PluginInterface.AssemblyLocation.DirectoryName!, "Resources/AoEDPS.png")),
+            new CustomAction(Engine.TankPull.Button,"Pull","Tag your selected enemy with a basic area attack, ranged pull or Provoke.",1504),
             new CustomAction(Engine.PveIntentRouting.FullRotation,"Adaptive rotation","Choose the enabled single-target or area rotation using action coverage.",1504));
         Engine.ActionRoutes.RegisterDirectActions(Manager);
     }

@@ -70,6 +70,7 @@ internal static class ExperimentalSelection
     internal static bool IncludeCleanse { get; private set; }
     internal static bool PreventiveHealing { get; private set; } = true;
     internal static bool AllowPhantomKick { get; private set; } = true;
+    internal static bool AutoRoleMechanics { get; private set; }
     internal static bool AllowPhantomRage { get; private set; }
     internal static bool HealEncounterPlayers { get; private set; }
     internal static bool RaiseNearbyPlayers { get; private set; }
@@ -108,7 +109,7 @@ internal static class ExperimentalSelection
         ["Scholar"] = Scholar, ["Astrologian"] = Astrologian, ["WhiteMage"] = WhiteMage, ["Forecasts"] = Forecasts, ["Bard"] = Bard, ["Dancer"] = Dancer, ["BlueMage"] = BlueMage, ["Beastmaster"] = Beastmaster,
         ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner, ["RedMage"] = RedMage, ["Pictomancer"] = Pictomancer, ["BlackMage"] = BlackMage, ["Samurai"] = Samurai, ["Monk"] = Monk, ["Ninja"] = Ninja,
         ["Warrior"] = Warrior, ["DarkKnight"] = DarkKnight, ["Gunbreaker"] = Gunbreaker, ["PvpMachinist"] = PvpMachinist, ["PvpScheduling"] = PvpScheduling,
-        ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["AllowPhantomKick"] = AllowPhantomKick, ["AllowPhantomRage"] = AllowPhantomRage, ["RaiseNearbyPlayers"] = RaiseNearbyPlayers, ["HealEncounterPlayers"] = HealEncounterPlayers, ["HardCastRaise"] = HardCastRaise,
+        ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["AllowPhantomKick"] = AllowPhantomKick, ["AllowPhantomRage"] = AllowPhantomRage, ["AutoRoleMechanics"] = AutoRoleMechanics, ["RaiseNearbyPlayers"] = RaiseNearbyPlayers, ["HealEncounterPlayers"] = HealEncounterPlayers, ["HardCastRaise"] = HardCastRaise,
         ["IncludeCleanse"] = IncludeCleanse, ["PreventiveHealing"] = PreventiveHealing,
         ["HealingGcds"] = HealingGcds, ["PartyMouseover"] = PartyMouseover, ["WorldMouseover"] = WorldMouseover,
         ["Focus"] = Focus, ["GroundTargets"] = GroundTargets, ["SpaceMitigation"] = SpaceMitigation, ["Fallback"] = Fallback, ["AutomaticAllies"] = AutomaticAllies, ["AutomaticEnemies"] = AutomaticEnemies,
@@ -155,6 +156,7 @@ internal static class ExperimentalSelection
         CompareDrg = current.Value<bool>("CompareDrg");
         IncludeHealing = current.Value<bool>("IncludeHealing"); PartyMouseover = current.Value<bool>("PartyMouseover");
         AllowPhantomKick = current.Value<bool>("AllowPhantomKick");
+        AutoRoleMechanics = current.Value<bool>("AutoRoleMechanics");
         AllowPhantomRage = current.Value<bool>("AllowPhantomRage");
         HealEncounterPlayers = current.Value<bool>("HealEncounterPlayers");
         RaiseNearbyPlayers = current.Value<bool>("RaiseNearbyPlayers");

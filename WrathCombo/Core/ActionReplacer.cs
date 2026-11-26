@@ -175,6 +175,7 @@ internal sealed class ActionReplacer : IDisposable
                 (DisabledJobsPVP.Any(x => x == Player.Job) && Svc.ClientState.IsPvP))
                 return OriginalHook(actionID);
 
+            if (actionID == Engine.TankPull.Button) return Engine.TankPull.Preview();
             using var intent = Engine.PvPIntentRouting.Enter(actionID);
             using var adaptive = Engine.PveIntentRouting.Enter(actionID);
             var route = Engine.ActionRoutes.For(actionID);
