@@ -183,7 +183,7 @@ internal partial class RPR
                 return true;
 
             if (!LocalPlayer.HasStatus(Buffs.ArcaneCircle) && !IsDebuffExpiring(5) &&
-                Soul >= 90)
+                Shroud >= 90)
                 return true;
         }
 
@@ -397,14 +397,14 @@ internal partial class RPR
         !LocalPlayer.HasStatus(Buffs.SoulReaver) && !LocalPlayer.HasStatus(Buffs.Executioner) &&
         GetTargetHPPercent() > hpThreshold;
 
+    // Finish earned spenders even at capped Shroud. Their status must clear
+    // before Enshroud can begin, so delaying them also blocks gauge spending.
     private static bool UseGuillotine(bool enshroudEnabled = true) =>
-        !IsShroudOvercapping(enshroudEnabled, true) &&
         (LocalPlayer.HasStatus(Buffs.SoulReaver) || LocalPlayer.HasStatus(Buffs.Executioner)) &&
         !LocalPlayer.HasStatus(Buffs.Enshrouded) && ActionLearned(Guillotine) &&
         InActionRange(OriginalHook(Guillotine));
 
     private static bool UseGibbetGallowsGCD(bool enshroudEnabled = true) =>
-        !IsShroudOvercapping(enshroudEnabled) &&
         ActionLearned(Gibbet) && !LocalPlayer.HasStatus(Buffs.Enshrouded) &&
         (LocalPlayer.HasStatus(Buffs.SoulReaver) || LocalPlayer.HasStatus(Buffs.Executioner));
 
@@ -580,9 +580,6 @@ internal partial class RPR
 
     private static bool UseBloodStalkGrimSwatheSoulReaverGCD(ref uint actionID, bool enshroudEnabled = true)
     {
-        if (IsShroudOvercapping(enshroudEnabled, actionID is GrimSwathe))
-            return false;
-
         if (!LocalPlayer.HasStatus(Buffs.SoulReaver) && !LocalPlayer.HasStatus(Buffs.Executioner))
             return false;
 
