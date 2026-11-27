@@ -25,10 +25,13 @@ internal partial class BRD : PhysicalRanged
 
             const Combo comboFlags = Combo.AoE | Combo.Simple;
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+
+            return OriginalHook(QuickNock);
         }
     }
 
@@ -47,10 +50,13 @@ internal partial class BRD : PhysicalRanged
 
             const Combo comboFlags = Combo.ST | Combo.Simple;
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+
+            return OriginalHook(HeavyShot);
     }
     }
     #endregion
@@ -71,10 +77,13 @@ internal partial class BRD : PhysicalRanged
             
             const Combo comboFlags = Combo.AoE | Combo.Adv;
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+
+            return OriginalHook(QuickNock);
         }
     }
 
@@ -110,10 +119,13 @@ internal partial class BRD : PhysicalRanged
 
             const Combo comboFlags = Combo.ST | Combo.Adv;
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
+                return actionID;
+
+            return OriginalHook(HeavyShot);
         }
     }
     #endregion

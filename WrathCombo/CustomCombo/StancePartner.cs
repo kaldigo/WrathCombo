@@ -140,8 +140,6 @@ public static class StancePartner
 
         callAgain = true;
 
-        if (RotationInterop.ManualLimitBreak.Waiting()) return;
-
         if (CustomComboFunctions.JustUsed(action, 0.5f))
             return;
         if (!CustomComboFunctions.ActionReady(action))

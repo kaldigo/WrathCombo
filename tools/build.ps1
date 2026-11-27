@@ -34,7 +34,6 @@ try {
         Invoke-DotNet @('run','--project','tests/Accord.Tests.csproj','-c','Release','-p:UseSharedCompilation=false',"-p:EngineSourceRoot=$EngineSourceRoot",'--',$dll)
     }
     elseif ($cfg.internal_name -eq 'WrathCombo') {
-        Invoke-DotNet @('run','--project','tests/RotationReview/RotationReview.Tests.csproj','-c','Release','-p:UseSharedCompilation=false')
         if (-not $ClientSourceRoot) { $ClientSourceRoot=Get-PinnedSource 'kaldigo/FFXIVAccord' 'client-validation.ref' '.client-validation' }
         $tests=Join-Path $ClientSourceRoot 'tests/Accord.Tests.csproj'
         $dll=Join-Path $root 'WrathCombo/bin/WrathCombo/Release/WrathCombo.dll'

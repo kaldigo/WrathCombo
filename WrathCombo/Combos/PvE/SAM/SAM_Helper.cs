@@ -333,9 +333,7 @@ internal partial class SAM
         ActionReady(Shoha) &&
         MeditationStacks is 3 &&
         InActionRange(Shoha) &&
-        (!holdForBurst || !ActionLearned(Senei) || GetCooldownRemainingTime(Senei) >= 7f ||
-         Engine.ExperimentalSelection.ActiveSamurai && Engine.SelectionRuntime.PlannedGcd is
-             Higanbana or TenkaGoken or MidareSetsugekka or TendoGoken or TendoSetsugekka or OgiNamikiri);
+        (!holdForBurst || !ActionLearned(Senei) || GetCooldownRemainingTime(Senei) >= 7f);
 
     private static bool ShouldRefreshFugetsu =>
         LocalPlayer.Status(Buffs.Fugetsu).RemainingTimeOrZero() <=

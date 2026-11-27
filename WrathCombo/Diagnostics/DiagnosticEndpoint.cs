@@ -116,9 +116,9 @@ internal sealed class DiagnosticEndpoint : IDisposable
         for (int i = 0; i < 80; i++)
         {
             var recast = manager->GetRecastGroupDetail(i);
-            if (recast != null) result.Add(new JObject { ["Group"] = i, ["Active"] = recast->IsActive, ["Total"] = recast->Total, ["Elapsed"] = recast->Elapsed });
+            if (recast != null) result.Add(new JObject { ["Group"] = i, ["Total"] = recast->Total, ["Elapsed"] = recast->Elapsed });
         }
-        return new { Readiness = WrathCombo.Engine.NativeExecution.Capture(fresh: true), Groups = result, Queued = manager->ActionQueued, QueueAction = manager->QueuedActionId, QueueTarget = manager->QueuedTargetId.Id,
+        return new { Groups = result, Queued = manager->ActionQueued, QueueAction = manager->QueuedActionId, QueueTarget = manager->QueuedTargetId.Id,
             AnimationLock = manager->AnimationLock, Cast = manager->CastActionId, CastElapsed = manager->CastTimeElapsed, CastTotal = manager->CastTimeTotal };
     }
     public void Dispose() { Svc.Framework.Update -= Tick; DiagnosticLog.Stop("Plugin unloaded"); api?.UnregisterFunc(); }

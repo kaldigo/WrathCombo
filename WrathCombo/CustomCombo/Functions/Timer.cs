@@ -1,4 +1,4 @@
-using Dalamud.Game.ClientState.Conditions;
+﻿using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using ECommons.DalamudServices;
 using ECommons.GameFunctions;
@@ -138,12 +138,10 @@ internal abstract partial class CustomComboFunctions
                 if (DateTime.Now < castFinishedAt)
                 {
                     OnCastInterrupted?.Invoke(castId);
-                    Engine.SelectionRuntime.Interrupt(castId);
                     Service.ActionReplacer.EnableActionReplacingIfRequired();
                 }
             }
 
-            if (castFinishedAt is not null) Engine.NativeExecution.Invalidate();
             castFinishedAt = null;
         }
     }

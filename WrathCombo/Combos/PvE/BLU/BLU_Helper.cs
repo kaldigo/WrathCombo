@@ -340,13 +340,8 @@ internal partial class BLU
         var sardine = onAoE ? Preset.BLU_AoE_DPS_FlyingSardine : Preset.BLU_ST_DPS_FlyingSardine;
         var primals = onAoE ? Preset.BLU_AoE_DPS_Primals : Preset.BLU_ST_DPS_Primals;
 
-        if (LocalPlayer!.Status(Buffs.PhantomFlurry).RemainingTimeOrZero() is > 0 and var channel)
-        {
-            uint finish = OriginalHook(PhantomFlurry);
-            return Engine.ExperimentalSelection.ActiveBlueMage && channel <= 1 &&
-                finish != PhantomFlurry && IsSpellActive(PhantomFlurry) && Engine.ActionRoutes.Allowed(finish) &&
-                ActionReady(finish) && InActionRange(finish) ? finish : All.Cease;
-        }
+        if (LocalPlayer!.Status(Buffs.PhantomFlurry).RemainingTimeOrZero() > 0)
+            return All.Cease;
 
         if (LocalPlayer.HasStatus(Buffs.WaningNocturne))
             return actionID;

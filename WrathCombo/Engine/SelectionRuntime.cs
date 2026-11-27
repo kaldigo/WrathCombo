@@ -24,7 +24,6 @@ internal static class SelectionRuntime
     [ThreadStatic] private static bool automatic;
     [ThreadStatic] private static bool refreshOnPress;
     internal static bool Automatic => automatic;
-    internal static bool ScriptedOpener => WrathOpener.CurrentOpener?.CurrentState == Combos.PvE.Enums.OpenerState.InOpener;
     [ThreadStatic] private static EnemyEvaluation? enemyEvaluation;
     private sealed class EnemyEvaluation(EnemyEvaluation? previous) : IDisposable
     {
@@ -107,13 +106,6 @@ internal static class SelectionRuntime
     private static SelectionDecision? automaticDecision;
     private static uint automaticInput;
     private static SelectionDecision? pendingConfirmation;
-    private static uint plannedGcd;
-    internal static uint PlannedGcd => plannedGcd;
-    internal static void Plan(uint input, uint action)
-    {
-        plannedGcd = Data.ActionWatching.ActionSheet.TryGetValue(action, out var row) && row.ActionCategory.RowId is 2 or 3 ? action : 0;
-        AccordDiagnostics.DiagnosticLog.Event("Decision.GcdPlan", () => new { Input = input, Action = plannedGcd, Enemy = EvaluationTarget?.GameObjectId });
-    }
     internal static readonly PreventionBudget Prevention = new();
     internal static readonly PendingHealth PendingHealth = new();
     internal static uint ExpectedHealth(IBattleChara target) => PendingHealth.Project(target.CurrentHp, target.MaxHp, target.GameObjectId, Environment.TickCount64);
@@ -129,9 +121,9 @@ internal static class SelectionRuntime
         bool leftCombat = wasInCombat && !inCombat;
         wasInCombat = inCombat;
         if (value == context && !leftCombat) return;
-        context = value; generation++; previews.Clear(); sequence.Reset(); Prevention.Reset(); PendingHealth.Reset(); pendingConfirmation = null; automaticDecision = null; plannedGcd = 0;
+        context = value; generation++; previews.Clear(); sequence.Reset(); Prevention.Reset(); PendingHealth.Reset(); pendingConfirmation = null; automaticDecision = null;
     }
-    internal static void Reset() { plannedGcd = 0; generation++; previews.Clear(); sequence.Reset(); automaticDecision = null; Prevention.Reset(); PendingHealth.Reset(); pendingConfirmation = null; }
+    internal static void Reset() { generation++; previews.Clear(); sequence.Reset(); automaticDecision = null; Prevention.Reset(); PendingHealth.Reset(); pendingConfirmation = null; }
     internal static SelectionDecision? Commitment => sequence.Current(Environment.TickCount64, Generation);
     internal static SelectionDecision? Preview(uint input) => previews.GetValueOrDefault(input);
     internal static void Tick()
@@ -155,41 +147,20 @@ internal static class SelectionRuntime
             var cast = ObservedRaidwide();
             raidwide = EncounterForecast.Earliest(raidwide, cast.Seconds);
             bool marked = CheckForSharedDamageEffect(out _, out _, 6f);
-            Prevention.Observe("raidwide", marked || raidwide is >= 0 and <= 15,
-                Environment.TickCount64, generation, 0, raidwide, cast.Seconds == raidwide ? cast.SourceKey : "", recoveryGraceMs: 2000);
-            Prevention.ObserveMany("tankbuster", EncounterDamage.Busters(), Environment.TickCount64, generation, recoveryGraceMs: 2000);
+            Prevention.Observe("raidwide", marked || raidwide is >= 0 and <= 6,
+                Environment.TickCount64, generation, 0, raidwide, cast.Seconds == raidwide ? cast.SourceKey : "");
+            bool buster = TryGetTankBusterTarget(out var victim, out var busterKey);
+            Prevention.Observe("tankbuster", buster, Environment.TickCount64, generation, buster ? victim.SafeGameObjectId ?? 0 : 0, null, busterKey);
         }
-        if (Commitment is { } pending && Environment.TickCount64 - pending.ObservedAt >= 1200 &&
-            !IncomingRaise.IsRaise(pending.PlannedGcd) && !NativeExecution.BaseAvailable(pending.PlannedGcd, pending.Recipient))
-            CancelCommitment("Prepared action is no longer usable independently of recast/casting");
-        if (Commitment is { } accepted && (!(PreparedCast.Owns(accepted) ? PreparedCast.StillValid(accepted) : ExperimentalSelection.ActiveDrg ? Combos.PvE.DRG.PreparedWeaponskillStillValid(accepted) : ExperimentalSelection.ActivePvpMachinist ? Combos.PvP.MCHPvP.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveBlueMage ? Combos.PvE.BLU.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveMachinist ? Combos.PvE.MCH.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveSummoner ? Combos.PvE.SMN.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveRedMage ? Combos.PvE.RDM.PreparedRaiseStillValid(accepted) : HealerSelection.CommitmentStillNeeded(accepted)) ||
+        if (Commitment is { } accepted && (!(ExperimentalSelection.ActivePvpMachinist ? Combos.PvP.MCHPvP.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveBlueMage ? Combos.PvE.BLU.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveMachinist ? Combos.PvE.MCH.PreparedToolStillValid(accepted) : ExperimentalSelection.ActiveSummoner ? Combos.PvE.SMN.PreparedSpellStillValid(accepted) : ExperimentalSelection.ActiveRedMage ? Combos.PvE.RDM.PreparedRaiseStillValid(accepted) : HealerSelection.CommitmentStillNeeded(accepted)) ||
             accepted.PreventionEvent != 0 && !Prevention.Contains(accepted.PreventionEvent)))
         {
             TestingApi.Observe("PreparationCanceled:recipient-or-coverage", accepted.Preparation, accepted.PlannedGcd, accepted.Recipient);
             sequence.CancelAccepted();
         }
     }
-    internal static void BeginPreview(uint input) { UpdateContext(); plannedGcd = 0; previews.Remove(input); if (automatic) automaticDecision = null; }
+    internal static void BeginPreview(uint input) { UpdateContext(); previews.Remove(input); if (automatic) automaticDecision = null; }
     internal static void RejectPress() { sequence.CancelPress(); pendingConfirmation = null; }
-    internal static void Interrupt(uint action, bool releaseOnly = false)
-    {
-        NativeExecution.Invalidate();
-        NativeExecution.Interrupted(releaseOnly);
-        // A native release inside the slidecast window is not proof of failure.
-        // Keep the effect confirmation long enough for a successful slidecast;
-        // it does not hold readiness or prevent another selection.
-        if (!releaseOnly) { sequence.CancelPress(); pendingConfirmation = null; }
-        // A real preparation buff can still be used after a cancelled follow-up.
-        // Do not discard it or change the saved runner preference; re-evaluate now.
-        previews.Clear(); automaticDecision = null;
-        AccordDiagnostics.DiagnosticLog.Event(releaseOnly ? "Execution.CastReleased" : "Execution.Interrupted", () => new { Action = action, Readiness = NativeExecution.Capture(fresh: true), Commitment });
-    }
-    internal static void CancelCommitment(string reason)
-    {
-        if (Commitment is not { } old) return;
-        sequence.CancelAccepted();
-        AccordDiagnostics.DiagnosticLog.Event("Preparation.Canceled", () => new { old.Action, old.PlannedGcd, old.Recipient, Reason = reason });
-    }
     internal static IBattleChara? AutomaticRecipient(uint action) => automaticDecision is { } decision &&
         decision.Action == action && decision.Generation == Generation && Environment.TickCount64 - decision.ObservedAt is >= 0 and < 500
         ? decision.Preparation != 0 ? Player.Object : Svc.Objects.SearchById(decision.Recipient) as IBattleChara : null;
@@ -236,14 +207,7 @@ internal static class SelectionRuntime
     // an arbitrary native-action combo here can discard its recipient or preparation.
     internal static unsafe bool ExecuteAutomatic(SelectionDecision decision)
     {
-        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.Execution);
         if (!automatic || automaticDecision != decision || decision.Generation != Generation) return false;
-        if (RotationInterop.ManualLimitBreak.Waiting()) return AccordDiagnostics.DiagnosticLog.Reject("Manual item or limit break owns execution");
-        if (decision.ExecuteAfter > Environment.TickCount64)
-        {
-            AccordDiagnostics.DiagnosticLog.Event("Execution.Wait", () => new { Reason = "Scheduled landing", decision.Action, decision.Recipient, decision.ExecuteAfter, Now = Environment.TickCount64 });
-            return false;
-        }
         uint input = automaticInput;
         using var route = ActionRoutes.For(input) is { } policy ? new WrathFork.Contract.ActionRouteContext(policy) : null;
         uint action = HealingGroundSelection.Select(input, decision.Action);
@@ -251,21 +215,10 @@ internal static class SelectionRuntime
         var current = automaticDecision!;
         ulong recipient = current.Preparation != 0 ? Player.Object!.GameObjectId : current.Recipient;
         if (!ActionReadyForTarget(action, recipient)) return false;
-        var readiness = NativeExecution.Capture(fresh: true);
-        if (!NativeExecution.CanSubmit(action))
-        {
-            AccordDiagnostics.DiagnosticLog.Event("Execution.Wait", () => new { Reason = "Native readiness", Action = action, State = readiness });
-            return false;
-        }
         using var checkedAction = new RotationBehaviour.ExecuteChecked(action);
-        bool accepted = IncomingRaise.IsRaise(current.PlannedGcd) || IncomingRaise.IsRaise(action)
+        return IncomingRaise.IsRaise(current.PlannedGcd) || IncomingRaise.IsRaise(action)
             ? IncomingRaise.Submit(action, current.Recipient, recipient)
             : ActionManager.Instance()->UseAction(ActionType.Action, action, recipient);
-        NativeExecution.Invalidate();
-        var after = NativeExecution.Capture(fresh: true);
-        bool submitted = NativeExecution.Accepted(accepted, action, recipient);
-        AccordDiagnostics.DiagnosticLog.Event("Execution.Submission", () => new { Action = action, Recipient = recipient, Accepted = accepted, Submitted = submitted, Before = readiness, After = after });
-        return submitted;
     }
 
     internal static unsafe bool Press(uint input, uint result, out ulong? boundRecipient, out System.Numerics.Vector3? boundGround)
@@ -311,10 +264,8 @@ internal static class SelectionRuntime
     }
     internal static void Confirm(uint action, bool consumesPreparation, IReadOnlyCollection<ulong>? recipients = null)
     {
-        NativeExecution.Completed(action);
-        AccordDiagnostics.DiagnosticLog.Event("Execution.Completed", () => new { Action = action, Recipients = recipients });
         AccordDiagnostics.DiagnosticLog.Event("Decision.Confirm", () => new { Action = action, consumesPreparation, Recipients = recipients, Pending = pendingConfirmation, Commitment });
-        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction && !ExperimentalSelection.ActiveDrg) return;
+        if (!ExperimentalSelection.ActiveHealer && !ExperimentalSelection.ActivePreparedAction) return;
         var expected = pendingConfirmation?.Action == action ? pendingConfirmation : Commitment?.PlannedGcd == action ? Commitment : null;
         bool confirmedRecipient = expected is null || expected.GroundPosition is not null || expected.Preparation == action || expected.Recipient == Player.Object?.GameObjectId ||
             recipients is null || recipients.Contains(expected.Recipient);
@@ -322,16 +273,12 @@ internal static class SelectionRuntime
         if (!confirmedRecipient) { pendingConfirmation = null; return; }
         if (pendingConfirmation is { } pending && pending.Action == action && pending.Generation == generation && Environment.TickCount64 - pending.ObservedAt < 3000)
         {
-            if (pending.Preparation == action && pending.Purpose == PreventionPurpose.Enhancement)
-                Prevention.Confirm(pending.PreventionEvent, PreventionPurpose.Enhancement);
-            if (pending.Preparation == 0 && pending.CompletionAction == 0) Prevention.Confirm(pending.PreventionEvent, pending.Purpose);
+            if (pending.Preparation == 0 && pending.CompletionAction == 0) Prevention.Confirm(pending.PreventionEvent);
             pendingConfirmation = null;
         }
     }
     internal static unsafe uint RetargetEnemy(uint input, uint action, bool damageRotation)
     {
-        if (automatic && HealerSelection.ReservesDamageGcd && Preview(input)?.Purpose != PreventionPurpose.Recovery && Data.ActionWatching.ActionSheet.TryGetValue(action, out var reserved) &&
-            reserved.CanTargetHostile && reserved.ActionCategory.RowId is 2 or 3) return Combos.PvE.All.Cease;
         // A provider which published an action/recipient decision owns that pair.
         // Press-time validation may reject it, but the fallback pass cannot move it.
         if (Preview(input) is { } retained && retained.Action == action) return action;
@@ -373,7 +320,7 @@ internal static class SelectionRuntime
         ulong? evaluatedEnemy = null;
         if (row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0)
         { evaluatedEnemy = recipient; recipient = Player.Object!.GameObjectId; }
-        return Publish(input, new(action, plannedGcd != 0 ? plannedGcd : row.ActionCategory.RowId is 2 or 3 ? action : 0, recipient, 0, result.Reason, Environment.TickCount64, Generation,
+        return Publish(input, new(action, action, recipient, 0, result.Reason, Environment.TickCount64, Generation,
             EvaluatedEnemy: evaluatedEnemy, ManualDamage: !automatic && !InPvP() && PveIntentRouting.IsDamageButton(input)));
     }
     private sealed record EnemyActor(IBattleChara Actor, ulong Id, System.Numerics.Vector3 Position, float Radius, float Health, bool Engaged);

@@ -304,7 +304,6 @@ internal partial class MNK
 
     private static bool ShouldUsePBAfterBurstHolding(bool onAoE, int perfectBalanceHpThreshold = 0)
     {
-        if (ReplyBeforeBalance) return false;
         if (!IsBurstHoldReleaseReady())
             return false;
 
@@ -345,7 +344,6 @@ internal partial class MNK
         int perfectBalanceHpThreshold = 0,
         bool useFiresReply = true)
     {
-        if (ReplyBeforeBalance) return false;
         if (isBurstHolding && !IsBurstHoldReleaseReady())
             return false;
 

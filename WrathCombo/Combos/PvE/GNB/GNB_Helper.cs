@@ -233,7 +233,7 @@ internal partial class GNB : Tank
     private static bool CanUseBossMits(RotationMode rotationFlags, ref uint actionID)
     {
         #region Initial Bailout
-        if (!InCombat() || (!CanWeave() && !Engine.EncounterDamage.EmergencyAbilityWindow) || !InBossEncounter() || !IsEnabled(Preset.GNB_Mit_Advanced_Boss)) return false;
+        if (!InCombat() || !CanWeave() || !InBossEncounter() || !IsEnabled(Preset.GNB_Mit_Advanced_Boss)) return false;
         #endregion
 
         #region Nebula
@@ -284,7 +284,7 @@ internal partial class GNB : Tank
         bool heartOfStoneOnCD = IsEnabled(Preset.GNB_Mit_Advanced_Boss_HeartOfStone_OnCD) &&
                                 PlayerHealthPercentageHp() <= HeartOfStoneHealthThreshold && IsPlayerTargeted() && HeartOfStoneOnCDInMitigationContent;
         bool heartOfStoneTankBuster = IsEnabled(Preset.GNB_Mit_Advanced_Boss_HeartOfStone_TankBuster) && HeartOfStoneTankBusterInMitigationContent &&
-                                      Engine.EncounterDamage.TankbusterWindow(heartOfStoneDelay, OriginalHook(HeartOfStone) != HeartOfStone ? 4 : 7);
+                                      HasIncomingTankBusterEffect(out var incomingBusterAge) && incomingBusterAge >= heartOfStoneDelay; ;
 
         if (ActionReady(OriginalHook(HeartOfStone)) && (heartOfStoneOnCD || heartOfStoneTankBuster))
         {
@@ -707,7 +707,7 @@ internal partial class GNB : Tank
         if (Engine.ExperimentalSelection.ActiveGunbreaker && plannedGcd != 0 &&
             (plannedGcd == All.Cease || !Engine.ActionRoutes.Allowed(plannedGcd) || !InActionRange(plannedGcd))) return false;
         if (Engine.ExperimentalSelection.ActiveGunbreaker && (HasNM ||
-            !NoMercyPayoffFits(plannedGcd)))
+            !Engine.Selection.ResourceWindow.CanFinish(new(0, false, GCDLength, RemainingGCD, 3, false, Engine.BossForecastProvider.Downtime))))
             return false;
         var condition =
             IsEnabled(preset) && //option enabled

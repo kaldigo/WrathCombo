@@ -87,15 +87,18 @@ internal abstract partial class CustomComboFunctions
     public static uint Action4 => DutyActionManager.GetDutyActionId(3);
     public static uint Action5 => DutyActionManager.GetDutyActionId(4);
 
-    public static float GCDTotal => Engine.NativeExecution.Capture().GcdTotal;
+    private static unsafe RecastDetail* GCD => ActionManager.Instance()->GetRecastGroupDetail(57);
 
-    public static float ElapsedGCD => GCDTotal - RemainingGCD;
+    public static unsafe float GCDTotal => GCD->Total;
+
+    public static unsafe float ElapsedGCD => GCD->Elapsed;
 
     public static unsafe float RemainingGCD
     {
         get
         {
-            return Engine.NativeExecution.Capture().GcdRemaining;
+            var recastGCD = GCD;
+            return recastGCD->Total - recastGCD->Elapsed;
         }
     }
 }

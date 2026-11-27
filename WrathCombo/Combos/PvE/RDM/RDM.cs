@@ -23,54 +23,12 @@ internal partial class RDM : Caster
         {
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, Jolt, Jolt2, Jolt3)) return actionID;
 
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
-                    return OriginalHook(Jolt);
-
-                if (HasManaStacks)
-                    return UseHolyFlare(candidate);
-
-                if ((InMeleeRange() || HasManafication) && (HasEnoughManaForCombo || CanMagickedSwordplay))
-                {
-                    if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
-                        return OriginalHook(Redoublement);
-
-                    if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
-                        return OriginalHook(Zwerchhau);
-
-                    if (ActionReady(EnchantedRiposte) && !HasDualcast && !HasAccelerate && !HasSwiftcast &&
-                        (HasEnoughManaToStart || CanMagickedSwordplay))
-                        return OriginalHook(Riposte);
-                }
-
-                if (ActionLearned(Reprise) && GetTargetDistance() >= 5 && !HasManafication &&
-                    (ComboAction is Zwerchhau or EnchantedZwerchhau && RedoublementRepriseMana ||
-                     ComboAction is Riposte or EnchantedRiposte && ZwerchhauRepriseMana))
-                    return EnchantedReprise;
-
-
-                if (CanInstantCast)
-                    return UseInstantCastST(candidate);
-
-                if (CanGrandImpact)
-                    return GrandImpact;
-
-                if (UseVerStone())
-                    return Verstone;
-
-                if (UseVerFire())
-                    return Verfire;
-
-                return OriginalHook(Jolt);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region OGCDs
             if (CanWeave())
             {
                 if (ActionReady(Manafication) && (EmboldenCD <= 5 || HasEmbolden) && !CanPrefulgence)
@@ -114,7 +72,50 @@ internal partial class RDM : Caster
                     ActionReady(MagickBarrier) && GroupDamageIncoming())
                     return MagickBarrier;
             }
-            return plannedGcd;
+            #endregion
+
+            #region Melee Combo and Finishers 
+            if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
+                return OriginalHook(Jolt);
+
+            if (HasManaStacks)
+                return UseHolyFlare(actionID);
+
+            if ((InMeleeRange() || HasManafication) && (HasEnoughManaForCombo || CanMagickedSwordplay))
+            {
+                if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
+                    return OriginalHook(Redoublement);
+
+                if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
+                    return OriginalHook(Zwerchhau);
+
+                if (ActionReady(EnchantedRiposte) && !HasDualcast && !HasAccelerate && !HasSwiftcast &&
+                    (HasEnoughManaToStart || CanMagickedSwordplay))
+                    return OriginalHook(Riposte);
+            }
+
+            if (ActionLearned(Reprise) && GetTargetDistance() >= 5 && !HasManafication &&
+                (ComboAction is Zwerchhau or EnchantedZwerchhau && RedoublementRepriseMana ||
+                 ComboAction is Riposte or EnchantedRiposte && ZwerchhauRepriseMana))
+                return EnchantedReprise;
+
+            #endregion
+
+            #region GCD Casts
+            if (CanInstantCast)
+                return UseInstantCastST(actionID);
+
+            if (CanGrandImpact)
+                return GrandImpact;
+
+            if (UseVerStone())
+                return Verstone;
+
+            if (UseVerFire())
+                return Verfire;
+
+            return OriginalHook(Jolt);
+            #endregion
         }
     }
 
@@ -126,46 +127,12 @@ internal partial class RDM : Caster
         {
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, Scatter, Impact)) return actionID;
 
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
-                    return OriginalHook(Scatter);
-
-                if (HasManaStacks)
-                    return UseHolyFlare(candidate);
-
-                if (ActionReady(OriginalHook(Moulinet)) &&
-                    !HasDualcast && !HasAccelerate && !HasSwiftcast &&
-                    HasBattleTarget() && InActionRange(OriginalHook(Moulinet)) &&
-                    (CanMagickedSwordplay || HasEnoughManaToStart || ComboAction is EnchantedMoulinet or Moulinet or EnchantedMoulinetDeux && HasEnoughManaForCombo))
-                    return OriginalHook(Moulinet);
-
-                if (!ActionLearned(Moulinet) && InMeleeRange() && HasEnoughManaForCombo)
-                {
-                    if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
-                        return OriginalHook(Redoublement);
-                    if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
-                        return OriginalHook(Zwerchhau);
-                    if (ActionReady(EnchantedRiposte) && !HasDualcast && !HasAccelerate && !HasSwiftcast && HasEnoughManaToStart)
-                        return OriginalHook(Riposte);
-                }
-
-
-                if (CanGrandImpact)
-                    return GrandImpact;
-
-                if (!CanInstantCast)
-                    return UseThunderAeroAoE(candidate);
-
-                return !ActionLearned(Scatter) ? UseInstantCastST(candidate) : OriginalHook(Scatter);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region OGCDs
             if (CanWeave())
             {
                 if (ActionReady(Manafication) && (EmboldenCD <= 5 || HasEmbolden) && !CanPrefulgence)
@@ -201,7 +168,42 @@ internal partial class RDM : Caster
                 if (CanSwiftcast || CanSwiftcastMovement)
                     return Role.Swiftcast;
             }
-            return plannedGcd;
+            #endregion
+
+            #region Melee Combo and Finishers 
+            if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
+                return OriginalHook(Scatter);
+
+            if (HasManaStacks)
+                return UseHolyFlare(actionID);
+
+            if (ActionReady(OriginalHook(Moulinet)) && 
+                !HasDualcast && !HasAccelerate && !HasSwiftcast &&
+                HasBattleTarget() && InActionRange(OriginalHook(Moulinet)) &&
+                (CanMagickedSwordplay || HasEnoughManaToStart || ComboAction is EnchantedMoulinet or Moulinet or EnchantedMoulinetDeux && HasEnoughManaForCombo))
+                return OriginalHook(Moulinet);
+
+            if (!ActionLearned(Moulinet) && InMeleeRange() && HasEnoughManaForCombo)
+            {
+                if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
+                    return OriginalHook(Redoublement);
+                if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
+                    return OriginalHook(Zwerchhau);
+                if (ActionReady(EnchantedRiposte) && !HasDualcast && !HasAccelerate && !HasSwiftcast && HasEnoughManaToStart)
+                    return OriginalHook(Riposte);
+            }
+
+            #endregion
+
+            #region GCD Casts
+            if (CanGrandImpact)
+                return GrandImpact;
+
+            if (!CanInstantCast)
+                return UseThunderAeroAoE(actionID);
+
+            return !ActionLearned(Scatter) ? UseInstantCastST(actionID) : OriginalHook(Scatter);
+            #endregion
         }
     }
     #endregion
@@ -215,6 +217,7 @@ internal partial class RDM : Caster
         {
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, Jolt, Jolt2, Jolt3)) return actionID;
 
+            #region Opener
 
             if (!InCombat() && RDM_Opener_Selection == 2 && HasAccelerate && Opener().OpenerStep == 3)
                 StatusManager.ExecuteStatusOff(Buffs.Acceleration);
@@ -223,76 +226,21 @@ internal partial class RDM : Caster
                 Opener().FullOpener(ref actionID))
                 return actionID;
             
+            #endregion
 
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
             
-
+            #region Variables
             int manaficationThreshold = RDM_ST_Manafication_SubOption == 1 || !InBossEncounter() ? RDM_ST_Manafication_Threshold : 0;
             bool canUseManafication = GetTargetHPPercent() > manaficationThreshold;
             int emboldenThreshold = RDM_ST_Embolden_SubOption == 1 || !InBossEncounter() ? RDM_ST_Embolden_Threshold : 0;
             bool canUseEmbolden = GetTargetHPPercent() > emboldenThreshold;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
-                    return OriginalHook(Jolt);
-
-                if (IsEnabled(Preset.RDM_ST_HolyFlare) && HasManaStacks)
-                    return UseHolyFlare(candidate);
-
-                if (IsEnabled(Preset.RDM_ST_MeleeCombo))
-                {
-
-                    if (IsEnabled(Preset.RDM_ST_MeleeCombo_IncludeReprise) &&
-                        ActionLearned(Reprise) && !HasManafication &&
-                        GetTargetDistance() >= RDM_ST_MeleeCombo_IncludeReprise_Distance &&
-                        (ComboAction is Zwerchhau or EnchantedZwerchhau && RedoublementRepriseMana ||
-                         ComboAction is Riposte or EnchantedRiposte && ZwerchhauRepriseMana))
-                        return EnchantedReprise;
-
-                    if ((InMeleeRange() || IsEnabled(Preset.RDM_ST_MeleeCombo_MeleeCheck) || HasManafication) && (HasEnoughManaForCombo || CanMagickedSwordplay))
-                    {
-                        if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
-                            return OriginalHook(Redoublement);
-                        if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
-                            return OriginalHook(Zwerchhau);
-                    }
-
-                    if (IsEnabled(Preset.RDM_ST_MeleeCombo_IncludeRiposte) && ActionReady(EnchantedRiposte) &&
-                        (InMeleeRange() || HasManafication) &&
-                        !HasDualcast && !HasAccelerate && !HasSwiftcast &&
-                        (HasEnoughManaToStart || CanMagickedSwordplay))
-                        return OriginalHook(Riposte);
-                }
-
-
-
-                if (IsEnabled(Preset.RDM_ST_ThunderAero) && (CanInstantCast || !PartyInCombat() && RDM_ST_ThunderAero_Pull))
-                    return UseInstantCastST(candidate);
-
-                if (CanGrandImpact)
-                    return GrandImpact;
-
-                if (IsEnabled(Preset.RDM_ST_VerCure) && ActionReady(Vercure) &&
-                    PlayerHealthPercentageHp() <= RDM_ST_VerCureThreshold &&
-                    !GetPartyMembers().Any(x => x.GetRole() is CombatRole.Healer))
-                    return Vercure;
-
-                if (IsEnabled(Preset.RDM_ST_FireStone))
-                {
-                    if (UseVerStone())
-                        return Verstone;
-                    if (UseVerFire())
-                        return Verfire;
-                }
-
-                return OriginalHook(Jolt);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region OGCDs
             if (CanWeave() && HasBattleTarget())
             {
                 if (IsEnabled(Preset.RDM_ST_MeleeCombo_GapCloser) && !InMeleeRange() && !HasManafication &&
@@ -353,7 +301,64 @@ internal partial class RDM : Caster
                     ActionReady(MagickBarrier) && GroupDamageIncoming())
                     return MagickBarrier;
             }
-            return plannedGcd;
+            #endregion
+
+            #region Melee Combo and Finishers 
+            if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
+                return OriginalHook(Jolt);
+
+            if (IsEnabled(Preset.RDM_ST_HolyFlare) && HasManaStacks)
+                return UseHolyFlare(actionID);
+
+            if (IsEnabled(Preset.RDM_ST_MeleeCombo))
+            {
+
+                if (IsEnabled(Preset.RDM_ST_MeleeCombo_IncludeReprise) &&
+                    ActionLearned(Reprise) && !HasManafication &&
+                    GetTargetDistance() >= RDM_ST_MeleeCombo_IncludeReprise_Distance &&
+                    (ComboAction is Zwerchhau or EnchantedZwerchhau && RedoublementRepriseMana ||
+                     ComboAction is Riposte or EnchantedRiposte && ZwerchhauRepriseMana))
+                    return EnchantedReprise;
+
+                if ((InMeleeRange() || IsEnabled(Preset.RDM_ST_MeleeCombo_MeleeCheck) || HasManafication) && (HasEnoughManaForCombo || CanMagickedSwordplay))
+                {
+                    if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
+                        return OriginalHook(Redoublement);
+                    if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
+                        return OriginalHook(Zwerchhau);
+                }
+
+                if (IsEnabled(Preset.RDM_ST_MeleeCombo_IncludeRiposte) && ActionReady(EnchantedRiposte) &&
+                    (InMeleeRange() || HasManafication) &&
+                    !HasDualcast && !HasAccelerate && !HasSwiftcast &&
+                    (HasEnoughManaToStart || CanMagickedSwordplay))
+                    return OriginalHook(Riposte);
+            }
+            #endregion
+
+            #region GCD Casts
+            
+            if (IsEnabled(Preset.RDM_ST_ThunderAero) && (CanInstantCast || !PartyInCombat() && RDM_ST_ThunderAero_Pull))
+                return UseInstantCastST(actionID);
+
+            if (CanGrandImpact)
+                return GrandImpact;
+
+            if (IsEnabled(Preset.RDM_ST_VerCure) && ActionReady(Vercure) &&
+                PlayerHealthPercentageHp() <= RDM_ST_VerCureThreshold &&
+                !GetPartyMembers().Any(x => x.GetRole() is CombatRole.Healer))
+                return Vercure;
+
+            if (IsEnabled(Preset.RDM_ST_FireStone))
+            {
+                if (UseVerStone())
+                    return Verstone;
+                if (UseVerFire())
+                    return Verfire;
+            }
+
+            return OriginalHook(Jolt);
+            #endregion
         }
     }
 
@@ -365,60 +370,19 @@ internal partial class RDM : Caster
         {
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, Scatter, Impact)) return actionID;
 
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
             
-
+            #region Variables
             int manaficationThreshold = RDM_AoE_Manafication_SubOption == 1 || !InBossEncounter() ? RDM_AoE_Manafication_Threshold : 0;
             bool canUseManafication = GetTargetHPPercent() > manaficationThreshold;
             int emboldenThreshold = RDM_AoE_Embolden_SubOption == 1 || !InBossEncounter() ? RDM_AoE_Embolden_Threshold : 0;
             bool canUseEmbolden = GetTargetHPPercent() > emboldenThreshold;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
-                    return OriginalHook(Scatter);
-
-                if (IsEnabled(Preset.RDM_AoE_HolyFlare) && HasManaStacks)
-                    return UseHolyFlare(candidate);
-
-                if (IsEnabled(Preset.RDM_AoE_MeleeCombo))
-                {
-                    if (ActionReady(OriginalHook(Moulinet)) &&
-                        !HasDualcast && !HasAccelerate && !HasSwiftcast &&
-                        (IsNotEnabled(Preset.RDM_AoE_MeleeCombo_Target) && !HasBattleTarget() || HasBattleTarget() && InActionRange(OriginalHook(Moulinet)) &&
-                        (CanMagickedSwordplay || HasEnoughManaToStart || ComboAction is EnchantedMoulinet or Moulinet or EnchantedMoulinetDeux && HasEnoughManaForCombo)))
-                        return OriginalHook(Moulinet);
-
-                    if (!ActionLearned(Moulinet) && InMeleeRange() && HasEnoughManaForCombo)
-                    {
-                        if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
-                            return OriginalHook(Redoublement);
-                        if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
-                            return OriginalHook(Zwerchhau);
-                        if (ActionReady(EnchantedRiposte) && !HasDualcast && !HasAccelerate && !HasSwiftcast && HasEnoughManaToStart)
-                            return OriginalHook(Riposte);
-                    }
-                }
-
-
-                if (CanGrandImpact)
-                    return GrandImpact;
-
-                if (IsEnabled(Preset.RDM_AoE_VerCure) && ActionReady(Vercure) &&
-                    PlayerHealthPercentageHp() <= RDM_AoE_VerCureThreshold && !CanInstantCast &&
-                    !GetPartyMembers().Any(x => x.GetRole() is CombatRole.Healer))
-                    return Vercure;
-
-                if (IsEnabled(Preset.RDM_AoE_ThunderAero) && !CanInstantCast)
-                    return UseThunderAeroAoE(candidate);
-
-                return !ActionLearned(Scatter) ? UseInstantCastST(candidate) : OriginalHook(Scatter);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region OGCDs
             if (CanWeave() && HasBattleTarget())
             {
                 if (IsEnabled(Preset.RDM_AoE_MeleeCombo_GapCloser) &&
@@ -468,7 +432,49 @@ internal partial class RDM : Caster
                     (!IsEnabled(Preset.RDM_AoE_SwiftcastMovement) && CanSwiftcast || CanSwiftcastMovement))
                     return Role.Swiftcast;
             }
-            return plannedGcd;
+            #endregion
+
+            #region Melee Combo and Finishers 
+            if (ComboAction is Scorch && ActionLearned(Resolution) || ComboAction is Verholy or Verflare && ActionLearned(Scorch))
+                return OriginalHook(Scatter);
+
+            if (IsEnabled(Preset.RDM_AoE_HolyFlare) && HasManaStacks)
+                return UseHolyFlare(actionID);
+
+            if (IsEnabled(Preset.RDM_AoE_MeleeCombo))
+            {
+                if (ActionReady(OriginalHook(Moulinet)) &&
+                    !HasDualcast && !HasAccelerate && !HasSwiftcast &&
+                    (IsNotEnabled(Preset.RDM_AoE_MeleeCombo_Target) && !HasBattleTarget() || HasBattleTarget() && InActionRange(OriginalHook(Moulinet)) &&
+                    (CanMagickedSwordplay || HasEnoughManaToStart || ComboAction is EnchantedMoulinet or Moulinet or EnchantedMoulinetDeux && HasEnoughManaForCombo)))
+                    return OriginalHook(Moulinet);
+
+                if (!ActionLearned(Moulinet) && InMeleeRange() && HasEnoughManaForCombo)
+                {
+                    if (ComboAction is Zwerchhau or EnchantedZwerchhau && ActionLearned(Redoublement))
+                        return OriginalHook(Redoublement);
+                    if (ComboAction is Riposte or EnchantedRiposte && ActionLearned(Zwerchhau))
+                        return OriginalHook(Zwerchhau);
+                    if (ActionReady(EnchantedRiposte) && !HasDualcast && !HasAccelerate && !HasSwiftcast && HasEnoughManaToStart)
+                        return OriginalHook(Riposte);
+                }
+            }
+            #endregion
+
+            #region GCD Casts
+            if (CanGrandImpact)
+                return GrandImpact;
+
+            if (IsEnabled(Preset.RDM_AoE_VerCure) && ActionReady(Vercure) &&
+                PlayerHealthPercentageHp() <= RDM_AoE_VerCureThreshold && !CanInstantCast &&
+                !GetPartyMembers().Any(x => x.GetRole() is CombatRole.Healer))
+                return Vercure;
+
+            if (IsEnabled(Preset.RDM_AoE_ThunderAero) && !CanInstantCast)
+                return UseThunderAeroAoE(actionID);
+
+            return !ActionLearned(Scatter) ? UseInstantCastST(actionID) : OriginalHook(Scatter);
+            #endregion
         }
     }
     #endregion

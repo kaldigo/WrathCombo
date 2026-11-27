@@ -24,37 +24,6 @@ internal partial class BLM : Caster
             if (UseManaward())
                 return Manaward;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (UseScathe())
-                    return Scathe;
-
-                if (UsePolyglotOvercap())
-                    return PolyglotSpell;
-
-                if (UseThunder())
-                    return OriginalHook(Thunder);
-
-                if (UseAmplifierXeno())
-                    return Xenoglossy;
-
-                if (UseMovementGcd(ref candidate))
-                    return candidate;
-
-                if (IsInFirePhase && UseFirePhaseGcd(ref candidate))
-                    return candidate;
-
-                if (IsInIcePhase && UseIcePhaseGcd(ref candidate))
-                    return candidate;
-
-                if (UseOutOfPhaseGcd(ref candidate))
-                    return candidate;
-
-                return OriginalHook(Blizzard);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseAmplifier())
@@ -72,7 +41,32 @@ internal partial class BLM : Caster
                 if (UseAddle())
                     return Role.Addle;
             }
-            return plannedGcd;
+
+            if (UseScathe())
+                return Scathe;
+
+            if (UsePolyglotOvercap())
+                return PolyglotSpell;
+
+            if (UseThunder())
+                return OriginalHook(Thunder);
+
+            if (UseAmplifierXeno())
+                return Xenoglossy;
+
+            if (UseMovementGcd(ref actionID))
+                return actionID;
+
+            if (IsInFirePhase && UseFirePhaseGcd(ref actionID))
+                return actionID;
+
+            if (IsInIcePhase && UseIcePhaseGcd(ref actionID))
+                return actionID;
+
+            if (UseOutOfPhaseGcd(ref actionID))
+                return actionID;
+
+            return OriginalHook(Blizzard);
         }
     }
 
@@ -88,31 +82,6 @@ internal partial class BLM : Caster
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (UseAoEPolyglotOvercap())
-                    return Foul;
-
-                if (UseAoEPolyglot())
-                    return Foul;
-
-                if (UseAoEThunder())
-                    return OriginalHook(Thunder2);
-
-                if (UseAoEParadoxFiller())
-                    return OriginalHook(Blizzard);
-
-                if (IsInFirePhase && UseAoEFirePhaseGcd(ref candidate))
-                    return candidate;
-
-                if (IsInIcePhase && UseAoEIcePhaseGcd(ref candidate))
-                    return candidate;
-
-                return OriginalHook(Blizzard2);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseAoETriplecastMovement())
@@ -134,7 +103,26 @@ internal partial class BLM : Caster
                     40))
                     return LeyLines;
             }
-            return plannedGcd;
+
+            if (UseAoEPolyglotOvercap())
+                return Foul;
+
+            if (UseAoEPolyglot())
+                return Foul;
+
+            if (UseAoEThunder())
+                return OriginalHook(Thunder2);
+
+            if (UseAoEParadoxFiller())
+                return OriginalHook(Blizzard);
+
+            if (IsInFirePhase && UseAoEFirePhaseGcd(ref actionID))
+                return actionID;
+
+            if (IsInIcePhase && UseAoEIcePhaseGcd(ref actionID))
+                return actionID;
+
+            return OriginalHook(Blizzard2);
         }
     }
 
@@ -166,48 +154,6 @@ internal partial class BLM : Caster
                     BLM_ST_ManawardSolo))
                 return Manaward;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (IsEnabled(Preset.BLM_ST_UsePolyglot) && UsePolyglotOvercap())
-                    return PolyglotSpell;
-
-                if (IsEnabled(Preset.BLM_ST_Thunder) &&
-                    UseThunder(ThunderHPThreshold(), BLM_ST_ThunderRefresh))
-                    return OriginalHook(Thunder);
-
-                if (IsEnabled(Preset.BLM_ST_Amplifier) &&
-                    IsEnabled(Preset.BLM_ST_UsePolyglot) &&
-                    UseAmplifierXeno())
-                    return Xenoglossy;
-
-                if (IsEnabled(Preset.BLM_ST_Movement) &&
-                    UseMovementGcd(ref candidate, true))
-                    return candidate;
-
-                if (IsInFirePhase &&
-                    UseFirePhaseGcd(
-                        ref candidate,
-                        IsEnabled(Preset.BLM_ST_FlareStar),
-                        IsEnabled(Preset.BLM_ST_Despair),
-                        IsEnabled(Preset.BLM_ST_Transpose),
-                        IsEnabled(Preset.BLM_ST_UsePolyglot),
-                        false,
-                        BLM_ST_PolyglotMovement,
-                        BLM_ST_PolyglotSaveUsage))
-                    return candidate;
-
-                if (IsInIcePhase &&
-                    UseIcePhaseGcd(ref candidate, IsEnabled(Preset.BLM_ST_Transpose)))
-                    return candidate;
-
-                if (UseOutOfPhaseGcd(ref candidate))
-                    return candidate;
-
-                return OriginalHook(Blizzard);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (IsEnabled(Preset.BLM_ST_Amplifier) && UseAmplifier())
@@ -245,7 +191,43 @@ internal partial class BLM : Caster
                 if (IsEnabled(Preset.BLM_ST_Addle) && UseAddle())
                     return Role.Addle;
             }
-            return plannedGcd;
+
+            if (IsEnabled(Preset.BLM_ST_UsePolyglot) && UsePolyglotOvercap())
+                return PolyglotSpell;
+
+            if (IsEnabled(Preset.BLM_ST_Thunder) &&
+                UseThunder(ThunderHPThreshold(), BLM_ST_ThunderRefresh))
+                return OriginalHook(Thunder);
+
+            if (IsEnabled(Preset.BLM_ST_Amplifier) &&
+                IsEnabled(Preset.BLM_ST_UsePolyglot) &&
+                UseAmplifierXeno())
+                return Xenoglossy;
+
+            if (IsEnabled(Preset.BLM_ST_Movement) &&
+                UseMovementGcd(ref actionID, true))
+                return actionID;
+
+            if (IsInFirePhase &&
+                UseFirePhaseGcd(
+                    ref actionID,
+                    IsEnabled(Preset.BLM_ST_FlareStar),
+                    IsEnabled(Preset.BLM_ST_Despair),
+                    IsEnabled(Preset.BLM_ST_Transpose),
+                    IsEnabled(Preset.BLM_ST_UsePolyglot),
+                    false,
+                    BLM_ST_PolyglotMovement,
+                    BLM_ST_PolyglotSaveUsage))
+                return actionID;
+
+            if (IsInIcePhase &&
+                UseIcePhaseGcd(ref actionID, IsEnabled(Preset.BLM_ST_Transpose)))
+                return actionID;
+
+            if (UseOutOfPhaseGcd(ref actionID))
+                return actionID;
+
+            return OriginalHook(Blizzard);
         }
     }
 
@@ -266,45 +248,6 @@ internal partial class BLM : Caster
                 UseManaward(BLM_ST_ManawardHPThreshold, false, BLM_ST_ManawardTrigger, BLM_ST_ManawardSolo))
                 return Manaward;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (IsEnabled(Preset.BLM_AoE_UsePolyglot) && UseAoEPolyglotOvercap())
-                    return Foul;
-
-                if (IsEnabled(Preset.BLM_AoE_UsePolyglot) && UseAoEPolyglot())
-                    return Foul;
-
-                if (IsEnabled(Preset.BLM_AoE_Thunder) && UseAoEThunder(BLM_AoE_ThunderHP))
-                    return OriginalHook(Thunder2);
-
-                if (IsEnabled(Preset.BLM_AoE_ParadoxFiller) && UseAoEParadoxFiller())
-                    return OriginalHook(Blizzard);
-
-                bool useTranspose = IsEnabled(Preset.BLM_AoE_Transpose);
-
-                if (IsInFirePhase &&
-                    UseAoEFirePhaseGcd(
-                        ref candidate,
-                        IsEnabled(Preset.BLM_AoE_Triplecast),
-                        BLM_AoE_TriplecastHoldCharges,
-                        useTranspose,
-                        !useTranspose))
-                    return candidate;
-
-                if (IsInIcePhase &&
-                    UseAoEIcePhaseGcd(
-                        ref candidate,
-                        useTranspose,
-                        !useTranspose,
-                        IsEnabled(Preset.BLM_AoE_Blizzard4Sub),
-                        true))
-                    return candidate;
-
-                return OriginalHook(Blizzard2);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (IsEnabled(Preset.BLM_AoE_Movement) && UseAoETriplecastMovement())
@@ -327,7 +270,40 @@ internal partial class BLM : Caster
                         BLM_AoE_LeyLinesOption))
                     return LeyLines;
             }
-            return plannedGcd;
+
+            if (IsEnabled(Preset.BLM_AoE_UsePolyglot) && UseAoEPolyglotOvercap())
+                return Foul;
+
+            if (IsEnabled(Preset.BLM_AoE_UsePolyglot) && UseAoEPolyglot())
+                return Foul;
+
+            if (IsEnabled(Preset.BLM_AoE_Thunder) && UseAoEThunder(BLM_AoE_ThunderHP))
+                return OriginalHook(Thunder2);
+
+            if (IsEnabled(Preset.BLM_AoE_ParadoxFiller) && UseAoEParadoxFiller())
+                return OriginalHook(Blizzard);
+
+            bool useTranspose = IsEnabled(Preset.BLM_AoE_Transpose);
+
+            if (IsInFirePhase &&
+                UseAoEFirePhaseGcd(
+                    ref actionID,
+                    IsEnabled(Preset.BLM_AoE_Triplecast),
+                    BLM_AoE_TriplecastHoldCharges,
+                    useTranspose,
+                    !useTranspose))
+                return actionID;
+
+            if (IsInIcePhase &&
+                UseAoEIcePhaseGcd(
+                    ref actionID,
+                    useTranspose,
+                    !useTranspose,
+                    IsEnabled(Preset.BLM_AoE_Blizzard4Sub),
+                    true))
+                return actionID;
+
+            return OriginalHook(Blizzard2);
         }
     }
 

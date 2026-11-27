@@ -117,9 +117,6 @@ internal partial class DRK : Tank
                 HasBattleTarget())
                 return Unmend;
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-
             if (TryGetAction<Mitigation>(comboFlags, ref newAction))
                 return newAction;
 
@@ -139,10 +136,13 @@ internal partial class DRK : Tank
                 return newAction;
 
             if (IsEnabled(Preset.DRK_ST_Spenders) &&
-                TryGetAction<Spender>(comboFlags, ref newAction, true))
+                TryGetAction<Spender>(comboFlags, ref newAction))
                 return newAction;
 
-            return plannedGcd;
+            if (TryGetAction<Core>(comboFlags, ref newAction))
+                return newAction;
+
+            return HardSlash;
         }
     }
 
@@ -176,19 +176,22 @@ internal partial class DRK : Tank
                 return HardSlash;
             }
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-
             if (TryGetAction<Mitigation>(comboFlags, ref newAction))
                 return newAction;
 
-            if (TryGetAction<Spender>(comboFlags, ref newAction, true))
+            if (TryGetAction<Cooldown>(comboFlags, ref newAction, true))
+                return newAction;
+
+            if (TryGetAction<Spender>(comboFlags, ref newAction))
                 return newAction;
 
             if (TryGetAction<Cooldown>(comboFlags, ref newAction))
                 return newAction;
 
-            return plannedGcd;
+            if (TryGetAction<Core>(comboFlags, ref newAction))
+                return newAction;
+
+            return HardSlash;
         }
     }
 
@@ -215,9 +218,6 @@ internal partial class DRK : Tank
                 return Unleash;
             }
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-
             if (IsEnabled(Preset.DRK_AoE_CDs) &&
                 TryGetAction<Cooldown>(comboFlags, ref newAction))
                 return newAction;
@@ -226,10 +226,13 @@ internal partial class DRK : Tank
                 return newAction;
 
             if (IsEnabled(Preset.DRK_AoE_Spenders) &&
-                TryGetAction<Spender>(comboFlags, ref newAction, true))
+                TryGetAction<Spender>(comboFlags, ref newAction))
                 return newAction;
 
-            return plannedGcd;
+            if (TryGetAction<Core>(comboFlags, ref newAction))
+                return newAction;
+
+            return Unleash;
         }
     }
 
@@ -256,19 +259,19 @@ internal partial class DRK : Tank
                 return Unleash;
             }
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-
             if (TryGetAction<Cooldown>(comboFlags, ref newAction))
                 return newAction;
 
             if (TryGetAction<Mitigation>(comboFlags, ref newAction))
                 return newAction;
 
-            if (TryGetAction<Spender>(comboFlags, ref newAction, true))
+            if (TryGetAction<Spender>(comboFlags, ref newAction))
                 return newAction;
 
-            return plannedGcd;
+            if (TryGetAction<Core>(comboFlags, ref newAction))
+                return newAction;
+
+            return Unleash;
         }
     }
 

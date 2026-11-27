@@ -1,4 +1,4 @@
-using Dalamud.Game.ClientState.Objects.Types;
+﻿using Dalamud.Game.ClientState.Objects.Types;
 using ECommons.DalamudServices;
 using ECommons.ExcelServices;
 using ECommons.GameFunctions;
@@ -321,7 +321,6 @@ internal abstract partial class CustomComboFunctions
     /// </param>
     public static unsafe bool CanWeave(float estimatedWeaveTime = BaseAnimationLock, int? maxWeaves = null)
     {
-        if (Engine.HealerSelection.EmergencyAbilityWindow) return true;
         var player = LocalPlayer;
         var weaveLimit = maxWeaves ?? Service.Configuration.MaximumWeavesPerWindow;
         var remainingCast = player.TotalCastTime - player.CurrentCastTime;
@@ -397,7 +396,6 @@ internal abstract partial class CustomComboFunctions
     }
 
     public static bool GroupDamageIncoming(float? maxTimeRemaining = null) =>
-        Engine.BossForecastProvider.Raidwide is { } forecast && forecast <= (maxTimeRemaining ?? 6) ||
         RaidwideCasting(maxTimeRemaining) ||
         CheckForSharedDamageEffect(out _, out _, 6f);
 
@@ -406,20 +404,12 @@ internal abstract partial class CustomComboFunctions
     {
         isMultiHit = false;
         return CheckForSharedDamageEffect(out isMultiHit, out _, 6f) ||
-               Engine.BossForecastProvider.Raidwide is { } forecast && forecast <= (maxTimeRemaining ?? 6) ||
                RaidwideCasting(maxTimeRemaining);
     }
 
-    private static long raidwideObservedAt;
-    private static uint raidwideTerritory;
-    private static (float? Seconds, string SourceKey) raidwideObservation;
+    private static bool _raidwideInc;
     internal static (float? Seconds, string SourceKey) ObservedRaidwide()
     {
-        long now = Environment.TickCount64;
-        if (!Engine.SelectionRuntime.HandlingPress && raidwideTerritory == Svc.ClientState.TerritoryType &&
-            now - raidwideObservedAt is >= 0 and < 100)
-            return (raidwideObservation.Seconds is { } time ? Math.Max(0, time - (now - raidwideObservedAt) / 1000f) : null,
-                raidwideObservation.SourceKey);
         IBattleChara? first = null;
         float remaining = float.MaxValue;
         foreach (var actor in Svc.Objects)
@@ -430,16 +420,34 @@ internal abstract partial class CustomComboFunctions
             float seconds = caster.TotalCastTime - caster.CurrentCastTime;
             if (seconds >= 0 && seconds < remaining) { first = caster; remaining = seconds; }
         }
-        raidwideObservedAt = now;
-        raidwideTerritory = Svc.ClientState.TerritoryType;
-        return raidwideObservation = first is null ? (null, "") : (remaining, $"cast:{first.GameObjectId}:{first.CastActionId}");
+        return first is null ? (null, "") : (remaining, $"cast:{first.GameObjectId}:{first.CastActionId}");
     }
     public static bool RaidwideCasting(float? maxTimeRemaining = null)
     {
-        var observed = ObservedRaidwide();
-        // Cache the observation, not the answer for another caller's duration.
-        // A six-second query must not make a following three-second shield fire early.
-        return observed.Seconds is { } seconds && (maxTimeRemaining is null || seconds <= maxTimeRemaining);
+        if (!EzThrottler.Throttle("RaidWideCheck", 100))
+            return _raidwideInc;
+
+        foreach (var obj in Svc.Objects)
+        {
+            if (obj is not IBattleChara caster || !caster.IsHostile() || !caster.IsCasting)
+                continue;
+
+            if (BattleData.IgnoreRaidwide(caster.CastActionId)) continue;
+
+            if (ActionSheet.TryGetValue(caster.CastActionId, out var spellSheet))
+            {
+                if ((spellSheet.CastType is 2 or 5 && spellSheet.EffectRange >= 30) || BattleData.IsRaidwide(caster.CastActionId))
+                {
+                    if (maxTimeRemaining is null)
+                        return _raidwideInc = true;
+
+                    if ((caster.TotalCastTime - caster.CurrentCastTime) <= maxTimeRemaining)
+                        return _raidwideInc = true;
+                }
+            }
+        }
+
+        return _raidwideInc = false;
     }
 
     private static bool _beingTargetedHostile;

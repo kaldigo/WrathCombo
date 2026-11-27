@@ -32,10 +32,13 @@ internal partial class WAR
                         ? actionID.Retarget(HeavySwing, SimpleTarget.Self)
                         : actionID;
             }
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            return STCombo;
         }
     }
     
@@ -60,10 +63,13 @@ internal partial class WAR
                         : actionID;
             }
 
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            return AoECombo;
         }
     }
     #endregion
@@ -93,10 +99,13 @@ internal partial class WAR
             if (IsEnabled(Preset.WAR_ST_BalanceOpener) && Opener().FullOpener(ref actionID))
                 return actionID;
             
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            return STCombo;
         }
     }
     
@@ -122,10 +131,13 @@ internal partial class WAR
                         : actionID;
             }
             
-            uint plannedGcd = SelectDamageGcd(comboFlags);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
-            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
-            return plannedGcd;
+            if (TryOGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            if (TryGCDAttacks(comboFlags, ref actionID))
+                return actionID;
+            
+            return AoECombo;
         }
     }
     #endregion

@@ -236,7 +236,7 @@ internal partial class PCT
     
     #region Movement
 
-    private static bool TryMovementOption(Combo flags, ref uint actionID, bool forecast = false)
+    private static bool TryMovementOption(Combo flags, ref uint actionID)
     {
         #region Enables
         bool movementEnabled =
@@ -276,7 +276,7 @@ internal partial class PCT
 
         #endregion
 
-        if (!movementEnabled || !IsMoving() && !forecast || !InCombat()) return false;
+        if (!movementEnabled || !IsMoving() || !InCombat()) return false; //Quick Bailout
         
         if (rainbowDripEnabled && LocalPlayer.HasStatus(Buffs.RainbowBright)) //Needs to be here in case you are moving in back half of Burst window
         {
@@ -322,9 +322,6 @@ internal partial class PCT
     #region GCD Spells
     private static bool TryGCDSpells(Combo flags, ref uint actionID)
     {
-        uint deadline = DeadlineGcd(flags);
-        if (deadline != 0) { actionID = deadline; return true; }
-
         #region Enables
         bool starPrismEnabled =
             flags.HasFlag(Combo.Simple) ||
@@ -406,14 +403,14 @@ internal partial class PCT
     #endregion
     
     #region Motifs
-    private static bool TryDrawMotif(Combo flags, ref uint actionID, bool preparingSwiftcast = false)
+    private static bool TryDrawMotif(Combo flags, ref uint actionID)
     {
         bool CanFinishMotif(uint root)
         {
             if (!Engine.ExperimentalSelection.ActivePictomancer) return true;
             uint spell = OriginalHook(root);
             if (!Engine.ActionRoutes.Allowed(spell)) return false;
-            float cast = !InCombat() || preparingSwiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast) ? 0 : Engine.NativeExecution.CastTime(spell);
+            float cast = !InCombat() || LocalPlayer.HasStatus(Role.Buffs.Swiftcast) ? 0 : GetActionCastTime(spell);
             var snapshot = new Engine.Selection.CastBudgetInput(cast, RemainingGCD, IsMoving(), Engine.BossForecastProvider.MaxCastTime,
                 InCombat() && CurrentTarget is null ? Engine.BossForecastProvider.DowntimeEnd : null);
             bool fits = Engine.Selection.CastBudget.Fits(snapshot);
@@ -487,7 +484,7 @@ internal partial class PCT
             if (creatureEnabled && CreatureMotifReady && CanFinishMotif(CreatureMotif) &&
                 (prepullEnabled && !InCombat() || //Prepull Motifs
                  noTargetEnabled && InCombat() && CurrentTarget == null || //Downtime Motifs
-                 swiftcastEnabled && (preparingSwiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) && creatureHealthCheck || //Swiftcast Motifs
+                 swiftcastEnabled && LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && creatureHealthCheck || //Swiftcast Motifs
                  ActionLearned(ScenicMuse) && ScenicCD <= 20 && creatureHealthCheck || //Burst Prep
                  hasLivingMuseCharges && creatureHealthCheck)) //Standard Use
             {
@@ -498,7 +495,7 @@ internal partial class PCT
             if (weaponEnabled && WeaponMotifReady && CanFinishMotif(WeaponMotif) &&
                 (prepullEnabled && !InCombat() || //Prepull Motifs
                  noTargetEnabled && InCombat() && CurrentTarget == null || //Downtime Motifs
-                 swiftcastEnabled && (preparingSwiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) && weaponHealthCheck || //Swiftcast Motifs
+                 swiftcastEnabled && LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && weaponHealthCheck || //Swiftcast Motifs
                  ActionLearned(ScenicMuse) && ScenicCD <= 20 && weaponHealthCheck || //Burst Prep
                  hasSteelMuseCharges && weaponHealthCheck)) //Standard Use
             {
@@ -509,7 +506,7 @@ internal partial class PCT
             if (landscapeEnabled && LandscapeMotifReady && CanFinishMotif(LandscapeMotif) &&
                 (prepullEnabled && !InCombat() || //Prepull Motifs
                  noTargetEnabled && InCombat() && CurrentTarget == null || //Downtime Motifs
-                 swiftcastEnabled && (preparingSwiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) && landscapeHealthCheck || //Swiftcast Motifs
+                 swiftcastEnabled && LocalPlayer.HasStatus(Role.Buffs.Swiftcast) && landscapeHealthCheck || //Swiftcast Motifs
                  ActionLearned(ScenicMuse) && ScenicCD <= 20 && landscapeHealthCheck)) //Standard Use is Burst prep
             {
                 actionID = OriginalHook(LandscapeMotif);

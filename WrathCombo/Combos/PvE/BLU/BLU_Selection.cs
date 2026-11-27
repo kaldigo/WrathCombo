@@ -10,24 +10,6 @@ namespace WrathCombo.Combos.PvE;
 
 internal partial class BLU
 {
-    internal static uint ReviewCapabilities(uint input, uint result, Preset preset)
-    {
-        if (!ExperimentalSelection.ActiveBlueMage || preset is not (Preset.BLU_ST_DPS or Preset.BLU_AoE_DPS or Preset.BLU_ST_Tank or Preset.BLU_AoE_Tank)) return result;
-        if (LocalPlayer.HasStatus(Buffs.PhantomFlurry) || LocalPlayer.HasStatus(Buffs.ChelonianGate) || LocalPlayer.HasStatus(Buffs.WaningNocturne)) return result;
-        if (result < All.SingleTargetDPS && ActionReady(result)) return result;
-        bool area = preset is Preset.BLU_AoE_DPS or Preset.BLU_AoE_Tank;
-        // Basic equipped fillers only: never infer permission for Moon Flute,
-        // Final Sting, Self-destruct, a new channel or another role's utility.
-        foreach (uint action in area ? new[] { Electrogenesis, Plaincracker, SonicBoom, WaterCannon } : new[] { SonicBoom, WaterCannon })
-            if (IsSpellActive(action) && ActionRoutes.Allowed(action) && ActionReady(action) &&
-                (CurrentTarget is null || InActionRange(action)))
-            {
-                SelectionRuntime.Plan(input, action);
-                return action;
-            }
-        return All.Cease;
-    }
-
     private static bool PrepareTestingDot(ref uint input)
     {
         if (!IsSpellActive(SongOfTorment) || !ActionRoutes.Allowed(SongOfTorment) ||

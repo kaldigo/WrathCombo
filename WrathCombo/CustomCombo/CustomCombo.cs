@@ -1,5 +1,4 @@
 using Dalamud.Game.ClientState.Objects.Types;
-using ECommons.DalamudServices;
 using ECommons.ExcelServices;
 using ECommons.GameHelpers;
 using System.Collections.Generic;
@@ -99,21 +98,15 @@ internal abstract partial class CustomCombo : CustomComboFunctions
             return true;
         }
 
-        if (!Svc.ClientState.IsPvP || Engine.PvPIntentRouting.Enabled || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
+        if (Engine.PvPIntentRouting.Enabled || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction || Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveTargets) Engine.SelectionRuntime.BeginPreview(actionID);
         using var healerScope = Engine.HealerSelection.Enter(Preset);
         using var enemyScope = Engine.SelectionRuntime.EnterEnemyEvaluation(actionID);
         using var mudraScope = NIN.BeginTestingMudra(actionID);
         if (Engine.ExperimentalSelection.ActiveMachinist) MCH.BeginTestingSelection();
-        uint resultingActionID = Engine.ActionRoutes.Filter(Engine.PreparedCast.Continue(actionID, Preset, out var selection) || SMN.TryContinuePreparation(actionID, Preset, out selection) || Engine.HealerSelection.TrySelect(actionID, Preset, out selection) || SGE.TryTestingSelection(actionID, Preset, out selection) || RDM.TryTestingSelection(actionID, Preset, out selection) || DNC.TryTestingDance(actionID, Preset, out selection) ? selection : Invoke(actionID));
+        uint resultingActionID = Engine.ActionRoutes.Filter(Engine.HealerSelection.TrySelect(actionID, Preset, out var selection) || SGE.TryTestingSelection(actionID, Preset, out selection) || RDM.TryTestingSelection(actionID, Preset, out selection) || DNC.TryTestingDance(actionID, Preset, out selection) ? selection : Invoke(actionID));
         Engine.TestingApi.Observe("Provider.Result:" + Preset, actionID, resultingActionID);
-        resultingActionID = PCT.BindSwiftcast(actionID, resultingActionID, Preset);
-        resultingActionID = RDM.BindSwiftcast(actionID, resultingActionID, Preset);
         resultingActionID = BLM.ReviewTestingCast(actionID, resultingActionID, Preset);
-        resultingActionID = BLM.BindInstant(actionID, resultingActionID, Preset);
-        resultingActionID = Engine.ExecutionSafety.Review(actionID, resultingActionID, Preset);
         resultingActionID = MCH.ReviewTestingPreparation(actionID, resultingActionID);
-        resultingActionID = DRG.ReviewPreparation(actionID, resultingActionID, Preset);
-        resultingActionID = BLU.ReviewCapabilities(actionID, resultingActionID, Preset);
         resultingActionID = BLU.ReviewTestingPreparation(actionID, resultingActionID);
         resultingActionID = Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(resultingActionID));
         mudraScope?.Complete(resultingActionID);

@@ -66,7 +66,7 @@ namespace WrathCombo.Combos.PvE
 
         private static bool CheckCure(Preset preset, int healthpercent) =>
             IsEnabled(preset) && ActionReady(Cure) &&
-            Engine.EncounterDamage.ShouldSelfHeal(Cure, healthpercent);
+            PlayerHealthPercentageHp() <= healthpercent;
 
         private static bool CheckRaise(Preset preset) =>
             IsEnabled(preset) && ActionReady(Raise) &&

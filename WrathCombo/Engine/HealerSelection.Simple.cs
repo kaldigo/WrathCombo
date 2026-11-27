@@ -24,7 +24,6 @@ internal static partial class HealerSelection
         bool area = preset is Preset.WHM_Simple_AoEHeals or Preset.SCH_Simple_AoE_Heal or Preset.AST_Simple_AoE_Heals &&
             CustomActionHelper.OneButtonRotationChecker(input, CustomActionType.AoEHeals, Job switch { 24 => WHM.Medica1, 28 => SCH.Succor, _ => AST.Helios }, PartyHeal);
         if (!st && !area) return false;
-        if (UrgentRecovery(input) is { } urgent) { action = urgent.Action; return true; }
         if (Continuation(input) is { } committed) { action = committed.Action; return true; }
         if (Job == 24 && st && ContentSpecificActions.TryGet(ref action, out var content, healing: true))
         { action = content; return true; }

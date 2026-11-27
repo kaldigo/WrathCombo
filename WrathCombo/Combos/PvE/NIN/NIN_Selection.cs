@@ -47,19 +47,6 @@ internal partial class NIN
             var intent = changed.Instance?.CurrentMudra ?? previous.Select(p => p.Intent)
                 .FirstOrDefault(i => i != MudraCasting.MudraState.None);
             if (intent == MudraCasting.MudraState.None) return;
-            uint planned = intent switch
-            {
-                MudraCasting.MudraState.CastingFumaShuriken => FumaShuriken,
-                MudraCasting.MudraState.CastingKaton => Katon,
-                MudraCasting.MudraState.CastingRaiton => Raiton,
-                MudraCasting.MudraState.CastingHuton => Huton,
-                MudraCasting.MudraState.CastingDoton => Doton,
-                MudraCasting.MudraState.CastingSuiton => Suiton,
-                MudraCasting.MudraState.CastingGokaMekkyaku => GokaMekkyaku,
-                MudraCasting.MudraState.CastingHyoshoRanryu => HyoshoRanryu,
-                _ => 0,
-            };
-            SelectionRuntime.Plan(input, planned);
             var proposal = new MudraProposal(action, intent, Environment.TickCount64, mudraGeneration);
             mudraPreviews[input] = proposal;
             if (SelectionRuntime.Automatic) automaticMudra = proposal;

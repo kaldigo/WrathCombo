@@ -594,7 +594,6 @@ internal partial class BRD
         {
             if (x is null)
                 return 0;
-            if (!Engine.TargetLifetime.AllowsDot(x)) return 100;
 
             if (flags.HasFlag(Combo.Simple))
                 return 50;
@@ -688,7 +687,7 @@ internal partial class BRD
         #endregion
 
         #region ST Dot Management
-        if (flags.HasFlag(Combo.ST) && stDotEnabled && Engine.TargetLifetime.AllowsDot(CurrentTarget) && GetTargetHPPercent() > ComputeHpThreshold(CurrentTarget))
+        if (flags.HasFlag(Combo.ST) && stDotEnabled && GetTargetHPPercent() > ComputeHpThreshold(CurrentTarget))
         {
             if (ironjawsEnabled && UseIronJaws())
             {

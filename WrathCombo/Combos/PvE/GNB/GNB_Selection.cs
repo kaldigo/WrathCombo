@@ -1,7 +1,6 @@
 using WrathCombo.CustomComboNS;
 using WrathCombo.Engine;
 using WrathCombo.Engine.Selection;
-using WrathCombo.Extensions;
 using static WrathCombo.CustomComboNS.Functions.CustomComboFunctions;
 using static WrathCombo.Combos.PvE.GNB.Config;
 
@@ -9,24 +8,6 @@ namespace WrathCombo.Combos.PvE;
 
 internal partial class GNB
 {
-    private static bool NoMercyPayoffFits(uint planned)
-    {
-        if (!ExperimentalSelection.ActiveGunbreaker) return true;
-        int actions = planned is GnashingFang or ReignOfBeasts ? 3 : 1;
-        if (planned != GnashingFang && ActionLearned(GnashingFang) && Ammo > 0 && GetCooldownRemainingTime(GnashingFang) <= RemainingGCD + GCDLength)
-            actions += 3;
-        if (planned != ReignOfBeasts && LocalPlayer.HasStatus(Buffs.ReadyToReign)) actions += 3;
-        if (planned != DoubleDown && CanDD) actions++;
-        if (planned != SonicBreak && ActionLearned(SonicBreak)) actions++;
-        // Budget the high-value payload that can occupy the buff window, not
-        // every optional filler in the entire minute-long cycle.
-        actions = System.Math.Clamp(actions, 3, 8);
-        var budget = new BurstDurationInput(0, false, GCDLength, RemainingGCD, actions, false, BossForecastProvider.Downtime);
-        bool fits = ResourceWindow.CanFinish(budget);
-        TestingApi.RecordDecision("GNB.BurstPayoff", budget, fits);
-        return fits;
-    }
-
     private static uint PlanTestingGcd(bool area, bool advanced)
     {
         if (!ExperimentalSelection.ActiveGunbreaker) return 0;

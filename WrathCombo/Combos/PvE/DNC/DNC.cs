@@ -20,6 +20,7 @@ internal partial class DNC : PhysicalRanged
 
             if (TryImprovisationFinish(out uint improvisationFinish)) return improvisationFinish;
 
+            #region Variables
 
             var flow = LocalPlayer.HasStatus(Buffs.SilkenFlow) ||
                        LocalPlayer.HasStatus(Buffs.FlourishingFlow);
@@ -91,7 +92,9 @@ internal partial class DNC : PhysicalRanged
                 !LocalPlayer.HasStatus(Buffs.FinishingMoveReady) &&
                 !ShouldHoldStandardForFinishingMove;
 
+            #endregion
 
+            #region Dance Partner
 
             // Dance Partner
             if (IsEnabled(Preset.DNC_ST_Adv_Partner) && !InCombat() &&
@@ -103,14 +106,18 @@ internal partial class DNC : PhysicalRanged
                 else
                     return ClosedPosition;
 
+            #endregion
 
+            #region Opener
 
             // Opener
             if (IsEnabled(Preset.DNC_ST_BalanceOpener) &&
                 Opener().FullOpener(ref actionID))
                 return actionID;
 
+            #endregion
 
+            #region Pre-pull
 
             if (!InCombat() && HasBattleTarget())
             {
@@ -140,7 +147,9 @@ internal partial class DNC : PhysicalRanged
                     return Peloton;
             }
 
+            #endregion
 
+            #region Dance Fills
 
             // ST Standard (Dance) Steps & Fill
             if (IsEnabled(Preset.DNC_ST_Adv_SS) &&
@@ -156,124 +165,12 @@ internal partial class DNC : PhysicalRanged
                     ? Gauge.NextStep
                     : FinishOrHold(TechnicalFinish4);
 
+            #endregion
 
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TryTestingDeadline(false, false, out uint urgentContinuation)) return urgentContinuation;
-
-                // ST Technical Step
-                if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
-                    return TechnicalStep;
-
-                // ST Last Dance
-                if (IsEnabled(Preset.DNC_ST_Adv_LD) &&
-                    LocalPlayer.HasStatus(Buffs.LastDanceReady) &&
-                    (
-                        // Has Tech and not-capped Esprit
-                        (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                         Gauge.Esprit < 95) ||
-                        // Can't hold it for Tech
-                        !(IsOnCooldown(TechnicalStep) &&
-                          GetCooldownRemainingTime(TechnicalStep) < 20 &&
-                          LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
-                          GetCooldownRemainingTime(TechnicalStep) + 4) ||
-                        // Last second
-                        LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() < 4
-                    ))
-                    return LastDance;
-
-                // ST Standard Step (Finishing Move)
-                if (needToStandardOrFinish && needToFinish && EnemyIn15Yalms)
-                    return OriginalHook(FinishingMove);
-
-                // ST Standard Step
-                if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
-                    return StandardStep;
-
-                // Emergency Starfall usage
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
-                    LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
-                    return StarfallDance;
-
-                // ST Tillana (Emergency Use)
-                if (LocalPlayer.Status(Buffs.FlourishingFinish).RemainingTimeOrNaN() < GCD * 2.5 &&
-                    tillanaDropProtectionActive &&
-                    ActionLearned(Tillana) &&
-                    EnemyIn15Yalms)
-                    return Tillana;
-
-                // ST Dance of the Dawn
-                if (IsEnabled(Preset.DNC_ST_Adv_DawnDance) &&
-                    LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
-                    ActionReady(DanceOfTheDawn) &&
-                    // Tech is up
-                    (GetCooldownRemainingTime(TechnicalStep) > 5 ||
-                     IsOffCooldown(TechnicalStep)) &&
-                    (
-                        // >Esprit threshold use
-                        Gauge.Esprit >= DNC_ST_Adv_SaberThreshold ||
-                        // Will overcap with Tillana if not used
-                        (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                         !tillanaDriftProtectionActive && Gauge.Esprit >= 50) ||
-                        // Emergency use
-                        (LocalPlayer.Status(Buffs.DanceOfTheDawnReady).RemainingTimeOrZero() < 5 &&
-                         Gauge.Esprit >= 50)
-                    ))
-                    return OriginalHook(DanceOfTheDawn);
-
-                // ST Saber Dance (Emergency Use)
-                if (IsEnabled(Preset.DNC_ST_Adv_SaberDance) &&
-                    ActionReady(SaberDance) &&
-                    (Gauge.Esprit >= DNC_ST_Adv_SaberThreshold || // above esprit threshold use
-                     (LocalPlayer.HasStatus(Buffs.TechnicalFinish) && // will overcap with Tillana if not used
-                      !tillanaDriftProtectionActive && Gauge.Esprit >= 50)))
-                    return ActionLearned(DanceOfTheDawn) &&
-                           LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady)
-                        ? OriginalHook(DanceOfTheDawn)
-                        : SaberDance;
-
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
-                    return StarfallDance;
-
-                // ST Tillana
-                if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
-                    IsEnabled(Preset.DNC_ST_Adv_Tillana) &&
-                    ActionLearned(Tillana) &&
-                    EnemyIn15Yalms)
-                    return Tillana;
-
-                // ST Saber Dance
-                if(IsEnabled(Preset.DNC_ST_Adv_SaberDance) &&
-                   ActionReady(SaberDance) &&
-                   Gauge.Esprit >= 50 &&
-                   (Gauge.Esprit >= DNC_ST_Adv_SaberThreshold ||
-                    LocalPlayer.HasStatus(Buffs.TechnicalFinish) ||
-                    JustUsed(TechnicalFinish4)))
-                    return SaberDance;
-
-                // ST combos and burst attacks
-                if (ActionLearned(Fountain) &&
-                    ComboAction is Cascade &&
-                    ComboTimer is < 2 and > 0)
-                    return Fountain;
-
-                if (ActionLearned(Fountainfall) && flow)
-                    return Fountainfall;
-                if (ActionLearned(ReverseCascade) && symmetry)
-                    return ReverseCascade;
-                if (ActionLearned(Fountain) && ComboAction is Cascade &&
-                    ComboTimer > 0)
-                    return Fountain;
-
-
-                return OriginalHook(Cascade);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region Weaves
 
             // ST Devilment
             if (IsEnabled(Preset.DNC_ST_Adv_Devilment) &&
@@ -333,8 +230,6 @@ internal partial class DNC : PhysicalRanged
             if (Role.CanHeadGraze(Preset.DNC_ST_Adv_Interrupt, WeaveTypes.Weave) &&
                 !LocalPlayer.HasStatus(Buffs.TechnicalFinish))
                 return Role.HeadGraze;
-
-
 
             if (CanWeave() && !WasLastWeaponskill(TechnicalFinish4))
             {
@@ -406,7 +301,120 @@ internal partial class DNC : PhysicalRanged
                     AlliesIn8Yalms)
                     return Improvisation;
             }
-            return plannedGcd;
+
+            #endregion
+
+            #region GCD
+
+            if (TryTestingDeadline(false, false, out uint urgentContinuation)) return urgentContinuation;
+
+            // ST Technical Step
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+                return TechnicalStep;
+
+            // ST Last Dance
+            if (IsEnabled(Preset.DNC_ST_Adv_LD) &&
+                LocalPlayer.HasStatus(Buffs.LastDanceReady) &&
+                (
+                    // Has Tech and not-capped Esprit
+                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                     Gauge.Esprit < 95) ||
+                    // Can't hold it for Tech
+                    !(IsOnCooldown(TechnicalStep) &&
+                      GetCooldownRemainingTime(TechnicalStep) < 20 &&
+                      LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
+                      GetCooldownRemainingTime(TechnicalStep) + 4) ||
+                    // Last second
+                    LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() < 4
+                ))
+                return LastDance;
+
+            // ST Standard Step (Finishing Move)
+            if (needToStandardOrFinish && needToFinish && EnemyIn15Yalms)
+                return OriginalHook(FinishingMove);
+
+            // ST Standard Step
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
+                return StandardStep;
+
+            // Emergency Starfall usage
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
+                LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
+                return StarfallDance;
+
+            // ST Tillana (Emergency Use)
+            if (LocalPlayer.Status(Buffs.FlourishingFinish).RemainingTimeOrNaN() < GCD * 2.5 &&
+                tillanaDropProtectionActive &&
+                ActionLearned(Tillana) &&
+                EnemyIn15Yalms)
+                return Tillana;
+
+            // ST Dance of the Dawn
+            if (IsEnabled(Preset.DNC_ST_Adv_DawnDance) &&
+                LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
+                ActionReady(DanceOfTheDawn) &&
+                // Tech is up
+                (GetCooldownRemainingTime(TechnicalStep) > 5 ||
+                 IsOffCooldown(TechnicalStep)) &&
+                (
+                    // >Esprit threshold use
+                    Gauge.Esprit >= DNC_ST_Adv_SaberThreshold ||
+                    // Will overcap with Tillana if not used
+                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                     !tillanaDriftProtectionActive && Gauge.Esprit >= 50) ||
+                    // Emergency use
+                    (LocalPlayer.Status(Buffs.DanceOfTheDawnReady).RemainingTimeOrZero() < 5 &&
+                     Gauge.Esprit >= 50)
+                ))
+                return OriginalHook(DanceOfTheDawn);
+
+            // ST Saber Dance (Emergency Use)
+            if (IsEnabled(Preset.DNC_ST_Adv_SaberDance) &&
+                ActionReady(SaberDance) &&
+                (Gauge.Esprit >= DNC_ST_Adv_SaberThreshold || // above esprit threshold use
+                 (LocalPlayer.HasStatus(Buffs.TechnicalFinish) && // will overcap with Tillana if not used
+                  !tillanaDriftProtectionActive && Gauge.Esprit >= 50)))
+                return ActionLearned(DanceOfTheDawn) &&
+                       LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady)
+                    ? OriginalHook(DanceOfTheDawn)
+                    : SaberDance;
+
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
+                return StarfallDance;
+
+            // ST Tillana
+            if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
+                IsEnabled(Preset.DNC_ST_Adv_Tillana) &&
+                ActionLearned(Tillana) &&
+                EnemyIn15Yalms)
+                return Tillana;
+
+            // ST Saber Dance
+            if(IsEnabled(Preset.DNC_ST_Adv_SaberDance) &&
+               ActionReady(SaberDance) &&
+               Gauge.Esprit >= 50 &&
+               (Gauge.Esprit >= DNC_ST_Adv_SaberThreshold ||
+                LocalPlayer.HasStatus(Buffs.TechnicalFinish) ||
+                JustUsed(TechnicalFinish4)))
+                return SaberDance;
+
+            // ST combos and burst attacks
+            if (ActionLearned(Fountain) &&
+                ComboAction is Cascade &&
+                ComboTimer is < 2 and > 0)
+                return Fountain;
+
+            if (ActionLearned(Fountainfall) && flow)
+                return Fountainfall;
+            if (ActionLearned(ReverseCascade) && symmetry)
+                return ReverseCascade;
+            if (ActionLearned(Fountain) && ComboAction is Cascade &&
+                ComboTimer > 0)
+                return Fountain;
+
+            #endregion
+
+            return OriginalHook(Cascade);
         }
     }
 
@@ -419,6 +427,7 @@ internal partial class DNC : PhysicalRanged
         {
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.SingleTargetDPS, Cascade)) return actionID;
 
+            #region Variables
 
             var flow = LocalPlayer.HasStatus(Buffs.SilkenFlow) ||
                        LocalPlayer.HasStatus(Buffs.FlourishingFlow);
@@ -461,7 +470,9 @@ internal partial class DNC : PhysicalRanged
                  GetCooldownRemainingTime(Flourish) > 5) &&
                 !ShouldHoldStandardForFinishingMove;
 
+            #endregion
 
+            #region Pre-pull
 
             if (!InCombat())
             {
@@ -487,7 +498,9 @@ internal partial class DNC : PhysicalRanged
                 }
             }
 
+            #endregion
 
+            #region Dance Fills
 
             // ST Standard (Dance) Steps & Fill
             if (LocalPlayer.HasStatus(Buffs.StandardStep))
@@ -501,108 +514,12 @@ internal partial class DNC : PhysicalRanged
                     ? Gauge.NextStep
                     : TechnicalFinish4;
 
+            #endregion
 
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TryTestingDeadline(false, true, out uint urgentContinuation)) return urgentContinuation;
-
-                // ST Technical Step
-                if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
-                    return TechnicalStep;
-
-                // ST Last Dance
-                if (LocalPlayer.HasStatus(Buffs.LastDanceReady) &&
-                    (
-                        // Has Tech and not-capped Esprit
-                        (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                         Gauge.Esprit < 95) ||
-                        // Can't hold it for Tech
-                        !(IsOnCooldown(TechnicalStep) &&
-                          GetCooldownRemainingTime(TechnicalStep) < 20 &&
-                          LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
-                          GetCooldownRemainingTime(TechnicalStep) + 4) ||
-                        // Last second
-                        LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() < 4
-                    ))
-                    return LastDance;
-
-                // ST Standard Step (Finishing Move)
-                if (needToStandardOrFinish && needToFinish && EnemyIn15Yalms)
-                    return OriginalHook(FinishingMove);
-
-                // ST Standard Step
-                if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
-                    return StandardStep;
-
-                // Emergency Starfall usage
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
-                    LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
-                    return StarfallDance;
-
-                // ST Tillana (Emergency Use)
-                if (LocalPlayer.Status(Buffs.FlourishingFinish).RemainingTimeOrNaN() < GCD * 1.5 &&
-                    Gauge.Esprit < 100 &&
-                    ActionLearned(Tillana) &&
-                    EnemyIn15Yalms)
-                    return Tillana;
-
-                // ST Dance of the Dawn
-                if (LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
-                    ActionReady(DanceOfTheDawn) &&
-                    (GetCooldownRemainingTime(TechnicalStep) > 5 ||
-                     IsOffCooldown(TechnicalStep)) && // Tech is up
-                    (
-                        // >Esprit threshold use
-                        Gauge.Esprit >= 50 ||
-                        // Will overcap with Tillana if not used
-                        (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                         Gauge.Esprit >= 50) ||
-                        // Emergency use
-                        (LocalPlayer.Status(Buffs.DanceOfTheDawnReady).RemainingTimeOrZero() < 5 &&
-                         Gauge.Esprit >= 50)
-                    ))
-                    return OriginalHook(DanceOfTheDawn);
-
-                // ST Saber Dance
-                if (ActionReady(SaberDance) &&
-                    Gauge.Esprit >= 50)
-                    return ActionLearned(DanceOfTheDawn) &&
-                           LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady)
-                        ? OriginalHook(DanceOfTheDawn)
-                        : SaberDance;
-
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
-                    return StarfallDance;
-
-                // ST Tillana
-                if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
-                    ActionLearned(Tillana) &&
-                    EnemyIn15Yalms)
-                    return Tillana;
-
-                // ST combos and burst attacks
-                if (ActionLearned(Fountain) &&
-                    ComboAction is Cascade &&
-                    ComboTimer is < 2 and > 0)
-                    return Fountain;
-
-                if (ActionLearned(Fountainfall) && flow)
-                    return Fountainfall;
-                if (ActionLearned(ReverseCascade) && symmetry)
-                    return ReverseCascade;
-                if (ActionLearned(Fountain) && ComboAction is Cascade &&
-                    ComboTimer > 0)
-                    return Fountain;
-
-
-                return OriginalHook(Cascade);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region Weaves
 
             // ST Devilment
             if (CanWeave() &&
@@ -657,8 +574,6 @@ internal partial class DNC : PhysicalRanged
                 !LocalPlayer.HasStatus(Buffs.TechnicalFinish))
                 return Role.HeadGraze;
 
-
-
             if (CanWeave() && !WasLastWeaponskill(TechnicalFinish4))
             {
                 if (LocalPlayer.HasStatus(Buffs.ThreeFoldFanDance))
@@ -705,7 +620,104 @@ internal partial class DNC : PhysicalRanged
                 if (Role.CanSecondWind(40))
                     return Role.SecondWind;
             }
-            return plannedGcd;
+
+            #endregion
+
+            #region GCD
+
+            if (TryTestingDeadline(false, true, out uint urgentContinuation)) return urgentContinuation;
+
+            // ST Technical Step
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+                return TechnicalStep;
+
+            // ST Last Dance
+            if (LocalPlayer.HasStatus(Buffs.LastDanceReady) &&
+                (
+                    // Has Tech and not-capped Esprit
+                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                     Gauge.Esprit < 95) ||
+                    // Can't hold it for Tech
+                    !(IsOnCooldown(TechnicalStep) &&
+                      GetCooldownRemainingTime(TechnicalStep) < 20 &&
+                      LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
+                      GetCooldownRemainingTime(TechnicalStep) + 4) ||
+                    // Last second
+                    LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() < 4
+                ))
+                return LastDance;
+
+            // ST Standard Step (Finishing Move)
+            if (needToStandardOrFinish && needToFinish && EnemyIn15Yalms)
+                return OriginalHook(FinishingMove);
+
+            // ST Standard Step
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
+                return StandardStep;
+
+            // Emergency Starfall usage
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
+                LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
+                return StarfallDance;
+
+            // ST Tillana (Emergency Use)
+            if (LocalPlayer.Status(Buffs.FlourishingFinish).RemainingTimeOrNaN() < GCD * 1.5 &&
+                Gauge.Esprit < 100 &&
+                ActionLearned(Tillana) &&
+                EnemyIn15Yalms)
+                return Tillana;
+
+            // ST Dance of the Dawn
+            if (LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
+                ActionReady(DanceOfTheDawn) &&
+                (GetCooldownRemainingTime(TechnicalStep) > 5 ||
+                 IsOffCooldown(TechnicalStep)) && // Tech is up
+                (
+                    // >Esprit threshold use
+                    Gauge.Esprit >= 50 ||
+                    // Will overcap with Tillana if not used
+                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                     Gauge.Esprit >= 50) ||
+                    // Emergency use
+                    (LocalPlayer.Status(Buffs.DanceOfTheDawnReady).RemainingTimeOrZero() < 5 &&
+                     Gauge.Esprit >= 50)
+                ))
+                return OriginalHook(DanceOfTheDawn);
+
+            // ST Saber Dance
+            if (ActionReady(SaberDance) &&
+                Gauge.Esprit >= 50)
+                return ActionLearned(DanceOfTheDawn) &&
+                       LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady)
+                    ? OriginalHook(DanceOfTheDawn)
+                    : SaberDance;
+
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
+                return StarfallDance;
+
+            // ST Tillana
+            if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
+                ActionLearned(Tillana) &&
+                EnemyIn15Yalms)
+                return Tillana;
+
+            // ST combos and burst attacks
+            if (ActionLearned(Fountain) &&
+                ComboAction is Cascade &&
+                ComboTimer is < 2 and > 0)
+                return Fountain;
+
+            if (ActionLearned(Fountainfall) && flow)
+                return Fountainfall;
+            if (ActionLearned(ReverseCascade) && symmetry)
+                return ReverseCascade;
+            if (ActionLearned(Fountain) && ComboAction is Cascade &&
+                ComboTimer > 0)
+                return Fountain;
+
+            #endregion
+
+            return OriginalHook(Cascade);
         }
     }
 
@@ -720,6 +732,7 @@ internal partial class DNC : PhysicalRanged
 
             if (TryImprovisationFinish(out uint improvisationFinish)) return improvisationFinish;
 
+            #region Variables
 
             bool flow = LocalPlayer.HasStatus(Buffs.SilkenFlow) ||
                         LocalPlayer.HasStatus(Buffs.FlourishingFlow);
@@ -756,7 +769,9 @@ internal partial class DNC : PhysicalRanged
                 !LocalPlayer.HasStatus(Buffs.FinishingMoveReady) &&
                 !ShouldHoldStandardForFinishingMove;
 
+            #endregion
 
+            #region Prepull
 
             // Dance Partner
             if (!InCombat() &&
@@ -769,7 +784,9 @@ internal partial class DNC : PhysicalRanged
                 else
                     return ClosedPosition;
 
+            #endregion
 
+            #region Dance Fills
 
             // AoE Standard (Dance) Steps & Fill
             if (IsEnabled(Preset.DNC_AoE_Adv_SS) &&
@@ -785,10 +802,12 @@ internal partial class DNC : PhysicalRanged
                     ? Gauge.NextStep
                     : FinishOrHold(TechnicalFinish4);
 
+            #endregion
 
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            #region Weaves
 
             // Match the configured ST partner policy without interrupting dance steps.
             if (Engine.Options.Enabled(Feature.DncPartnerOnAoe) &&
@@ -797,104 +816,6 @@ internal partial class DNC : PhysicalRanged
                 return LocalPlayer.HasStatus(Buffs.ClosedPosition)
                     ? Ending
                     : ClosedPosition.Retarget(actionID, DancePartnerResolver);
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TryTestingDeadline(true, false, out uint urgentContinuation)) return urgentContinuation;
-
-                // AoE Technical Step
-                if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
-                    return TechnicalStep;
-
-                // AoE Last Dance
-                if (IsEnabled(Preset.DNC_AoE_Adv_LD) && // Enabled
-                    LocalPlayer.HasStatus(Buffs.LastDanceReady) && // Ready
-                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) || // Has Tech
-                     !(IsOnCooldown(TechnicalStep) && // Or can't hold it for tech
-                       GetCooldownRemainingTime(TechnicalStep) < 20 &&
-                       LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
-                       GetCooldownRemainingTime(TechnicalStep) + 4) ||
-                     LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() <
-                     4)) // Or last second
-                    return LastDance;
-
-                // AoE Standard Step (Finishing Move)
-                if (needToStandardOrFinish && needToFinish)
-                    return OriginalHook(FinishingMove);
-
-                // AoE Standard Step
-                if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
-                    return StandardStep;
-
-                // Emergency Starfall usage
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
-                    LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
-                    return StarfallDance;
-
-                // AoE Dance of the Dawn
-                if (IsEnabled(Preset.DNC_AoE_Adv_DawnDance) &&
-                    LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
-                    ActionReady(DanceOfTheDawn) &&
-                    (GetCooldownRemainingTime(TechnicalStep) > 5 ||
-                     IsOffCooldown(TechnicalStep)) && // Tech is up
-                    (Gauge.Esprit >=
-                     DNC_AoE_Adv_SaberThreshold || // above esprit threshold use
-                     (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                      Gauge.Esprit >= 50) || // will overcap with Tillana if not used
-                     (LocalPlayer.Status(Buffs.DanceOfTheDawnReady).RemainingTimeOrZero() < 5 &&
-                      Gauge.Esprit >= 50))) // emergency use
-                    return OriginalHook(DanceOfTheDawn);
-
-                // AoE Saber Dance (Emergency Use)
-                if (IsEnabled(Preset.DNC_AoE_Adv_SaberDance) &&
-                    ActionReady(SaberDance) &&
-                    (Gauge.Esprit >=
-                     DNC_AoE_Adv_SaberThreshold || // above esprit threshold use
-                     (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                      Gauge.Esprit >=
-                      50)) && // will overcap with Tillana if not used
-                    ActionReady(SaberDance))
-                    return SaberDance;
-
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
-                    return StarfallDance;
-
-                // AoE Tillana
-                if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
-                    IsEnabled(Preset.DNC_AoE_Adv_Tillana) &&
-                    ActionLearned(Tillana))
-                    return Tillana;
-
-                // AoE Saber Dance
-                if (IsEnabled(Preset.DNC_AoE_Adv_SaberDance) &&
-                    ActionReady(SaberDance) &&
-                    Gauge.Esprit >=
-                    DNC_ST_Adv_SaberThreshold || // Above esprit threshold use
-                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
-                     Gauge.Esprit >= 50) && // Burst
-                    (GetCooldownRemainingTime(TechnicalStep) > 5 ||
-                     IsOffCooldown(TechnicalStep))) // Tech is up
-                    return SaberDance;
-
-                // AoE combos and burst attacks
-                if (ActionLearned(Bladeshower) &&
-                    ComboAction is Windmill &&
-                    ComboTimer is < 2 and > 0)
-                    return Bladeshower;
-
-                if (ActionLearned(Bloodshower) && flow)
-                    return Bloodshower;
-                if (ActionLearned(RisingWindmill) && symmetry)
-                    return RisingWindmill;
-                if (ActionLearned(Bladeshower) && ComboAction is Windmill &&
-                    ComboTimer > 0)
-                    return Bladeshower;
-
-
-                return OriginalHook(Windmill);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
 
             // AoE Devilment
             if (IsEnabled(Preset.DNC_AoE_Adv_Devilment) &&
@@ -926,8 +847,6 @@ internal partial class DNC : PhysicalRanged
             if (Role.CanHeadGraze(Preset.DNC_AoE_Adv_Interrupt, WeaveTypes.Weave) &&
                 !LocalPlayer.HasStatus(Buffs.TechnicalFinish))
                 return Role.HeadGraze;
-
-
 
             if (CanWeave() && !WasLastWeaponskill(TechnicalFinish4))
             {
@@ -994,7 +913,104 @@ internal partial class DNC : PhysicalRanged
                     InCombat())
                     return Improvisation;
             }
-            return plannedGcd;
+
+            #endregion
+
+            #region GCD
+
+            if (TryTestingDeadline(true, false, out uint urgentContinuation)) return urgentContinuation;
+
+            // AoE Technical Step
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+                return TechnicalStep;
+
+            // AoE Last Dance
+            if (IsEnabled(Preset.DNC_AoE_Adv_LD) && // Enabled
+                LocalPlayer.HasStatus(Buffs.LastDanceReady) && // Ready
+                (LocalPlayer.HasStatus(Buffs.TechnicalFinish) || // Has Tech
+                 !(IsOnCooldown(TechnicalStep) && // Or can't hold it for tech
+                   GetCooldownRemainingTime(TechnicalStep) < 20 &&
+                   LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
+                   GetCooldownRemainingTime(TechnicalStep) + 4) ||
+                 LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() <
+                 4)) // Or last second
+                return LastDance;
+
+            // AoE Standard Step (Finishing Move)
+            if (needToStandardOrFinish && needToFinish)
+                return OriginalHook(FinishingMove);
+
+            // AoE Standard Step
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
+                return StandardStep;
+
+            // Emergency Starfall usage
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
+                LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
+                return StarfallDance;
+
+            // AoE Dance of the Dawn
+            if (IsEnabled(Preset.DNC_AoE_Adv_DawnDance) &&
+                LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
+                ActionReady(DanceOfTheDawn) &&
+                (GetCooldownRemainingTime(TechnicalStep) > 5 ||
+                 IsOffCooldown(TechnicalStep)) && // Tech is up
+                (Gauge.Esprit >=
+                 DNC_AoE_Adv_SaberThreshold || // above esprit threshold use
+                 (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                  Gauge.Esprit >= 50) || // will overcap with Tillana if not used
+                 (LocalPlayer.Status(Buffs.DanceOfTheDawnReady).RemainingTimeOrZero() < 5 &&
+                  Gauge.Esprit >= 50))) // emergency use
+                return OriginalHook(DanceOfTheDawn);
+
+            // AoE Saber Dance (Emergency Use)
+            if (IsEnabled(Preset.DNC_AoE_Adv_SaberDance) &&
+                ActionReady(SaberDance) &&
+                (Gauge.Esprit >=
+                 DNC_AoE_Adv_SaberThreshold || // above esprit threshold use
+                 (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                  Gauge.Esprit >=
+                  50)) && // will overcap with Tillana if not used
+                ActionReady(SaberDance))
+                return SaberDance;
+
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
+                return StarfallDance;
+
+            // AoE Tillana
+            if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
+                IsEnabled(Preset.DNC_AoE_Adv_Tillana) &&
+                ActionLearned(Tillana))
+                return Tillana;
+
+            // AoE Saber Dance
+            if (IsEnabled(Preset.DNC_AoE_Adv_SaberDance) &&
+                ActionReady(SaberDance) &&
+                Gauge.Esprit >=
+                DNC_ST_Adv_SaberThreshold || // Above esprit threshold use
+                (LocalPlayer.HasStatus(Buffs.TechnicalFinish) &&
+                 Gauge.Esprit >= 50) && // Burst
+                (GetCooldownRemainingTime(TechnicalStep) > 5 ||
+                 IsOffCooldown(TechnicalStep))) // Tech is up
+                return SaberDance;
+
+            // AoE combos and burst attacks
+            if (ActionLearned(Bladeshower) &&
+                ComboAction is Windmill &&
+                ComboTimer is < 2 and > 0)
+                return Bladeshower;
+
+            if (ActionLearned(Bloodshower) && flow)
+                return Bloodshower;
+            if (ActionLearned(RisingWindmill) && symmetry)
+                return RisingWindmill;
+            if (ActionLearned(Bladeshower) && ComboAction is Windmill &&
+                ComboTimer > 0)
+                return Bladeshower;
+
+            #endregion
+
+            return OriginalHook(Windmill);
         }
     }
 
@@ -1007,6 +1023,7 @@ internal partial class DNC : PhysicalRanged
         {
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, Windmill)) return actionID;
 
+            #region Variables
 
             bool flow = LocalPlayer.HasStatus(Buffs.SilkenFlow) ||
                         LocalPlayer.HasStatus(Buffs.FlourishingFlow);
@@ -1040,7 +1057,9 @@ internal partial class DNC : PhysicalRanged
                  GetCooldownRemainingTime(Flourish) > 5) &&
                 !ShouldHoldStandardForFinishingMove;
 
+            #endregion
 
+            #region Prepull
 
             // Dance Partner
             if (!InCombat() &&
@@ -1052,7 +1071,9 @@ internal partial class DNC : PhysicalRanged
                 else
                     return ClosedPosition;
 
+            #endregion
 
+            #region Dance Fills
 
             // AoE Standard (Dance) Steps & Fill
             if (LocalPlayer.HasStatus(Buffs.StandardStep))
@@ -1066,83 +1087,12 @@ internal partial class DNC : PhysicalRanged
                     ? Gauge.NextStep
                     : TechnicalFinish4;
 
+            #endregion
 
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TryTestingDeadline(true, true, out uint urgentContinuation)) return urgentContinuation;
-
-                // AoE Technical Step
-                if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
-                    return TechnicalStep;
-
-                // AoE Last Dance
-                if (LocalPlayer.HasStatus(Buffs.LastDanceReady) && // Ready
-                    (LocalPlayer.HasStatus(Buffs.TechnicalFinish) || // Has Tech
-                     !(IsOnCooldown(TechnicalStep) && // Or can't hold it for tech
-                       GetCooldownRemainingTime(TechnicalStep) < 20 &&
-                       LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
-                       GetCooldownRemainingTime(TechnicalStep) + 4) ||
-                     LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() <
-                     4)) // Or last second
-                    return LastDance;
-
-                // AoE Standard Step (Finishing Move)
-                if (needToStandardOrFinish && needToFinish)
-                    return OriginalHook(FinishingMove);
-
-                // AoE Standard Step
-                if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
-                    return StandardStep;
-
-                // Emergency Starfall usage
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
-                    LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
-                    return StarfallDance;
-
-                // AoE Dance of the Dawn
-                if (LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
-                    ActionReady(DanceOfTheDawn) &&
-                    (GetCooldownRemainingTime(TechnicalStep) > 5 ||
-                     IsOffCooldown(TechnicalStep)) && // Tech is up
-                    (Gauge.Esprit >= 50))
-                    return OriginalHook(DanceOfTheDawn);
-
-                // AoE Saber Dance
-                if (ActionReady(SaberDance) &&
-                    Gauge.Esprit >= 50)
-                    return SaberDance;
-
-                if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
-                    return StarfallDance;
-
-                // AoE Tillana
-                if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
-                    ActionLearned(Tillana))
-                    return Tillana;
-
-                // AoE combos and burst attacks
-                if (ActionLearned(Bladeshower) &&
-                    ComboAction is Windmill &&
-                    ComboTimer is < 2 and > 0)
-                    return Bladeshower;
-
-                if (ActionLearned(Bloodshower) && flow)
-                    return Bloodshower;
-                if (ActionLearned(RisingWindmill) && symmetry)
-                    return RisingWindmill;
-                if (ActionLearned(Bladeshower) && ComboAction is Windmill &&
-                    ComboTimer > 0)
-                    return Bladeshower;
-
-
-                return OriginalHook(Windmill);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            #region Weaves
 
             // AoE Devilment
             if (CanWeave() &&
@@ -1172,8 +1122,6 @@ internal partial class DNC : PhysicalRanged
             if (Role.CanHeadGraze(Preset.DNC_AoE_SimpleMode, WeaveTypes.Weave) &&
                 !LocalPlayer.HasStatus(Buffs.TechnicalFinish))
                 return Role.HeadGraze;
-
-
 
             if (CanWeave() && !WasLastWeaponskill(TechnicalFinish4))
             {
@@ -1219,7 +1167,79 @@ internal partial class DNC : PhysicalRanged
                 if (Role.CanSecondWind(40))
                     return Role.SecondWind;
             }
-            return plannedGcd;
+
+            #endregion
+
+            #region GCD
+
+            if (TryTestingDeadline(true, true, out uint urgentContinuation)) return urgentContinuation;
+
+            // AoE Technical Step
+            if (needToTech && CanBeginTestingDance(TechnicalStep, 4) && !LocalPlayer.HasStatus(Buffs.FlourishingFinish))
+                return TechnicalStep;
+
+            // AoE Last Dance
+            if (LocalPlayer.HasStatus(Buffs.LastDanceReady) && // Ready
+                (LocalPlayer.HasStatus(Buffs.TechnicalFinish) || // Has Tech
+                 !(IsOnCooldown(TechnicalStep) && // Or can't hold it for tech
+                   GetCooldownRemainingTime(TechnicalStep) < 20 &&
+                   LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() >
+                   GetCooldownRemainingTime(TechnicalStep) + 4) ||
+                 LocalPlayer.Status(Buffs.LastDanceReady).RemainingTimeOrZero() <
+                 4)) // Or last second
+                return LastDance;
+
+            // AoE Standard Step (Finishing Move)
+            if (needToStandardOrFinish && needToFinish)
+                return OriginalHook(FinishingMove);
+
+            // AoE Standard Step
+            if (needToStandardOrFinish && needToStandard && CanBeginTestingDance(StandardStep, 2))
+                return StandardStep;
+
+            // Emergency Starfall usage
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall) &&
+                LocalPlayer.Status(Buffs.FlourishingStarfall).RemainingTimeOrZero() < 4)
+                return StarfallDance;
+
+            // AoE Dance of the Dawn
+            if (LocalPlayer.HasStatus(Buffs.DanceOfTheDawnReady) &&
+                ActionReady(DanceOfTheDawn) &&
+                (GetCooldownRemainingTime(TechnicalStep) > 5 ||
+                 IsOffCooldown(TechnicalStep)) && // Tech is up
+                (Gauge.Esprit >= 50))
+                return OriginalHook(DanceOfTheDawn);
+
+            // AoE Saber Dance
+            if (ActionReady(SaberDance) &&
+                Gauge.Esprit >= 50)
+                return SaberDance;
+
+            if (LocalPlayer.HasStatus(Buffs.FlourishingStarfall))
+                return StarfallDance;
+
+            // AoE Tillana
+            if (LocalPlayer.HasStatus(Buffs.FlourishingFinish) &&
+                ActionLearned(Tillana))
+                return Tillana;
+
+            // AoE combos and burst attacks
+            if (ActionLearned(Bladeshower) &&
+                ComboAction is Windmill &&
+                ComboTimer is < 2 and > 0)
+                return Bladeshower;
+
+            if (ActionLearned(Bloodshower) && flow)
+                return Bloodshower;
+            if (ActionLearned(RisingWindmill) && symmetry)
+                return RisingWindmill;
+            if (ActionLearned(Bladeshower) && ComboAction is Windmill &&
+                ComboTimer > 0)
+                return Bladeshower;
+
+            #endregion
+
+            return OriginalHook(Windmill);
         }
     }
 

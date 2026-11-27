@@ -21,35 +21,40 @@ internal partial class SMN : Caster
             if (NeedToSummon)
                 return SummonCarbuncle;
 
+            #region Variables
             const Combo comboFlags = Combo.ST | Combo.Simple;
+            #endregion
 
-
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TrySummonSpells(comboFlags, ref candidate))
-                    return candidate;
-
-                uint egi = SelectEgi(false, true);
-                if (egi != 0) return egi;
-
-
-                return OriginalHook(Ruin);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
             
             if (TryMitigation(comboFlags, ref actionID))
                 return actionID;
             
+            if (TrySummonSpells(comboFlags, ref actionID))
+                return actionID;
 
-            return plannedGcd;
+            #region Egi Priority
+            // Egi Order
+            if (!ActionReady(OriginalHook(Aethercharge)) && Gauge.SummonTimerRemaining == 0 && Gauge.AttunementTimerRemaining == 0)
+            {
+                if (Gauge.IsTitanReady)
+                    return OriginalHook(SummonTopaz);
+
+                if (Gauge.IsGarudaReady)
+                    return OriginalHook(SummonEmerald);
+
+                if (Gauge.IsIfritReady)
+                    return OriginalHook(SummonRuby);
+            }
+            #endregion
+
+            return OriginalHook(Ruin);
         }
     }
     internal class SMN_Simple_Combo_AoE : CustomCombo
@@ -62,35 +67,39 @@ internal partial class SMN : Caster
             if (NeedToSummon && ActionReady(SummonCarbuncle))
                 return SummonCarbuncle;
 
+            #region Variables
             const Combo comboFlags = Combo.AoE | Combo.Simple;
+            #endregion
 
-
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TrySummonSpells(comboFlags, ref candidate))
-                    return candidate;
-
-                uint egi = SelectEgi(true, true);
-                if (egi != 0) return egi;
-
-
-                return OriginalHook(Outburst);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
             
             if (TryMitigation(comboFlags, ref actionID))
                 return actionID;
             
+            if (TrySummonSpells(comboFlags, ref actionID))
+                return actionID;
 
-            return plannedGcd;
+            #region Egi Priority
+            if (!ActionReady(OriginalHook(Aethercharge)) && Gauge.SummonTimerRemaining == 0 && Gauge.AttunementTimerRemaining == 0)
+            {
+                if (Gauge.IsTitanReady)
+                    return OriginalHook(SummonTopaz);
+
+                if (Gauge.IsGarudaReady)
+                    return OriginalHook(SummonEmerald);
+
+                if (Gauge.IsIfritReady)
+                    return OriginalHook(SummonRuby);
+            }
+            #endregion
+
+            return OriginalHook(Outburst);
         }
     }
     #endregion
@@ -112,37 +121,41 @@ internal partial class SMN : Caster
             if (NeedToSummon)
                 return SummonCarbuncle;
 
+            #region Opener
             if (IsEnabled(Preset.SMN_ST_Advanced_Combo_Balance_Opener) &&
                 Opener().FullOpener(ref actionID))
                 return actionID;
+            #endregion
 
-
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
             
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TrySummonSpells(comboFlags, ref candidate))
-                    return candidate;
-
-                uint egi = SelectEgi(false, false);
-                if (egi != 0) return egi;
-
-
-                return OriginalHook(Ruin);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
             
             if (TryMitigation(comboFlags, ref actionID))
                 return actionID;
             
+            if (TrySummonSpells(comboFlags, ref actionID))
+                return actionID;
 
-            return plannedGcd;
+            #region Egi Priority
+            foreach (var prio in SMN_ST_Egi_Priority.OrderBy(x => x))
+            {
+                var index = SMN_ST_Egi_Priority.IndexOf(prio);
+                var config = GetMatchingConfigST(index, out var spell,
+                    out var enabled);
+
+                if (!enabled) continue;
+
+                if (!ActionReady(OriginalHook(Aethercharge)) && Gauge.SummonTimerRemaining == 0 && Gauge.AttunementTimerRemaining == 0)
+                    return spell;
+            }
+            #endregion
+            
+            return OriginalHook(Ruin);
         }
     }
 
@@ -156,35 +169,39 @@ internal partial class SMN : Caster
             if (NeedToSummon)
                 return SummonCarbuncle;
 
+            #region Variables
             const Combo comboFlags = Combo.AoE | Combo.Adv;
+            #endregion
 
-
+            #region Special Content
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+            #endregion
 
-
-
-            uint SelectPlannedGcd(uint candidate)
-            {
-                if (TrySummonSpells(comboFlags, ref candidate))
-                    return candidate;
-
-                uint egi = SelectEgi(true, false);
-                if (egi != 0) return egi;
-
-
-                return OriginalHook(Outburst);
-            }
-            uint plannedGcd = SelectPlannedGcd(actionID);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
             
             if (TryMitigation(comboFlags, ref actionID))
                 return actionID;
             
+            if (TrySummonSpells(comboFlags, ref actionID))
+                return actionID;
 
-            return plannedGcd;
+            #region Egi Priority
+            foreach (var prio in SMN_AoE_Egi_Priority.OrderBy(x => x))
+            {
+                var index = SMN_AoE_Egi_Priority.IndexOf(prio);
+                var config = GetMatchingConfigAoE(index, out var spell,
+                    out var enabled);
+
+                if (!enabled) continue;
+
+                if (!ActionReady(OriginalHook(Aethercharge)) && Gauge.SummonTimerRemaining == 0 && Gauge.AttunementTimerRemaining == 0)
+                    return spell;
+            }
+            #endregion
+
+            return OriginalHook(Outburst);
         }
     }
     #endregion

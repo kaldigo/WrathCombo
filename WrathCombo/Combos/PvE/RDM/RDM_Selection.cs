@@ -12,29 +12,6 @@ namespace WrathCombo.Combos.PvE;
 
 internal partial class RDM
 {
-    internal static uint BindSwiftcast(uint input, uint result, Preset preset)
-    {
-        if (!ExperimentalSelection.ActiveRedMage || SelectionRuntime.ScriptedOpener || result != Role.Swiftcast ||
-            preset is not (Preset.RDM_ST_SimpleMode or Preset.RDM_AoE_SimpleMode or Preset.RDM_ST_DPS or Preset.RDM_AoE_DPS)) return result;
-        if (SelectionRuntime.Preview(input) is { } existing && PreparedCast.Owns(existing)) return result;
-        if (CurrentTarget is not { } target) return result;
-        bool area = preset is Preset.RDM_AoE_SimpleMode or Preset.RDM_AoE_DPS;
-        uint next = area ? OriginalHook(Scatter) : UseInstantCastST(OriginalHook(Verthunder));
-        return PreparedCast.Prepare(input, next, target.GameObjectId);
-    }
-    internal static uint ForecastAlternative(uint input, uint blocked, Preset preset)
-    {
-        if (CurrentTarget is not { } enemy || InCombo) return All.Cease;
-        if (CanGrandImpact && ActionRoutes.Allowed(GrandImpact) && ActionReadyForTarget(GrandImpact, enemy.GameObjectId)) return GrandImpact;
-        bool area = preset is Preset.RDM_AoE_SimpleMode or Preset.RDM_AoE_DPS;
-        bool simple = preset is Preset.RDM_ST_SimpleMode or Preset.RDM_AoE_SimpleMode;
-        if (simple || IsEnabled(area ? Preset.RDM_AoE_Swiftcast : Preset.RDM_ST_Swiftcast))
-        {
-            uint followup = area ? OriginalHook(Scatter) : UseInstantCastST(OriginalHook(Verthunder));
-            return PreparedCast.Prepare(input, followup, enemy.GameObjectId);
-        }
-        return All.Cease;
-    }
     internal static bool PreparedRaiseStillValid(SelectionDecision decision)
     {
         var target = Svc.Objects.SearchById(decision.Recipient);
@@ -45,26 +22,12 @@ internal partial class RDM
     internal static bool TryTestingSelection(uint input, Preset preset, out uint action)
     {
         action = input;
-        if (!ExperimentalSelection.ActiveRedMage) return false;
+        if (!ExperimentalSelection.ActiveRedMage || SelectionRuntime.Commitment is not { } prepared) return false;
         bool damage = preset is Preset.RDM_ST_SimpleMode or Preset.RDM_ST_DPS &&
             CustomActionHelper.OneButtonRotationChecker(input, CustomActionType.SingleTargetDPS, Jolt, Jolt2, Jolt3) ||
             preset is Preset.RDM_AoE_SimpleMode or Preset.RDM_AoE_DPS &&
             CustomActionHelper.OneButtonRotationChecker(input, CustomActionType.AoEDPS, Scatter, Impact);
         if (!damage) return false;
-        if (SelectionRuntime.Commitment is not { } prepared)
-        {
-            if (InCombo || SelectionRuntime.ScriptedOpener) return false;
-            bool area = preset is Preset.RDM_AoE_SimpleMode or Preset.RDM_AoE_DPS;
-            bool simple = preset is Preset.RDM_ST_SimpleMode or Preset.RDM_AoE_SimpleMode;
-            bool Ready(uint spell, Preset single, Preset aoe) => (simple || IsEnabled(area ? aoe : single)) &&
-                ActionRoutes.Allowed(spell) && ActionReady(spell) && InActionRange(spell);
-            action = EarnedActionDeadline.Choose([
-                new(GrandImpact, LocalPlayer.Status(Buffs.GrandImpactReady).RemainingTimeOrZero(), ActionRoutes.Allowed(GrandImpact) && CanGrandImpact && ActionReady(GrandImpact)),
-                new(Prefulgence, LocalPlayer.Status(Buffs.PrefulgenceReady).RemainingTimeOrZero(), Ready(Prefulgence, Preset.RDM_ST_Prefulgence, Preset.RDM_AoE_Prefulgence)),
-                new(ViceOfThorns, LocalPlayer.Status(Buffs.ThornedFlourish).RemainingTimeOrZero(), Ready(ViceOfThorns, Preset.RDM_ST_ViceOfThorns, Preset.RDM_AoE_ViceOfThorns)),
-            ], RemainingGCD, GCDTotal > 0 ? GCDTotal : 2.5f);
-            return action != 0;
-        }
         action = ContinueRaise(input, prepared);
         return true;
     }
@@ -78,8 +41,6 @@ internal partial class RDM
 
     private static unsafe uint TestingRaise(uint input)
     {
-        if (SelectionRuntime.Commitment is { } offensive && offensive.PlannedGcd != Verraise)
-            SelectionRuntime.CancelCommitment("Explicit resurrection supersedes offensive preparation");
         if (SelectionRuntime.Commitment is { } prepared) return ContinueRaise(input, prepared);
         var recipient = SelectionRuntime.SelectAlly(Verraise).Recipient;
         if (recipient is null || !ActionLearned(Verraise) || !ActionRoutes.Allowed(Verraise)) return All.Cease;

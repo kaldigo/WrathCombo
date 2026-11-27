@@ -46,7 +46,6 @@ internal partial class GNB : Tank
                 return LightningShot;
 
             uint plannedGcd = PlanTestingGcd(false, false);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
 
             //Continuation (MAX PRIORITY): just clip it - it's better than just losing it altogether
             if (ShouldContinue(Preset.GNB_ST_Simple, CanContinue || CanHV, RemainingGCD < 0.6f))
@@ -163,7 +162,6 @@ internal partial class GNB : Tank
                 return LightningShot;
 
             uint plannedGcd = PlanTestingGcd(false, true);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
 
             //Continuation (MAX PRIORITY): just clip it - it's better than just losing it altogether
             if (ShouldContinue(Preset.GNB_ST_Continuation, CanContinue || CanHV, RemainingGCD < 0.6f))
@@ -273,7 +271,6 @@ internal partial class GNB : Tank
 
             #region Rotation
             uint plannedGcd = PlanTestingGcd(true, false);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
 
             if (InCombat())
             {
@@ -353,7 +350,6 @@ internal partial class GNB : Tank
             #region Rotation
             var aoe = AOECombo(GNB_AoE_Overcap_Choice, GNB_AoE_FatedCircle_BurstStrike);
             uint plannedGcd = PlanTestingGcd(true, true);
-            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
 
             if (InCombat())
             {

@@ -15,8 +15,8 @@ class AutomaticProposalTests(unittest.TestCase):
         follow = source[source.index("    internal static void FollowAcceptedEnemy("):source.index("    internal static uint Publish(")]
         harness = r"""
 using System;
-namespace AccordDiagnostics { enum TimedPath { Execution } static class PerformanceTimings { public static IDisposable? Measure(TimedPath p)=>null; } static class DiagnosticLog { public static void Event(string kind, Func<object?> data) {} public static bool Reject(string reason) => false; } }
-record SelectionDecision(uint Action, ulong Recipient, uint Preparation, int Generation, ulong? EvaluatedEnemy = null, long ObservedAt = 0, uint PlannedGcd = 0, long ExecuteAfter = 0);
+namespace AccordDiagnostics { static class DiagnosticLog { public static void Event(string kind, Func<object?> data) {} public static bool Reject(string reason) => false; } }
+record SelectionDecision(uint Action, ulong Recipient, uint Preparation, int Generation, ulong? EvaluatedEnemy = null, long ObservedAt = 0, uint PlannedGcd = 0);
 static class Combos { public static class PvE { public static class All { public const uint SingleTargetDPS = 1000000; } } }
 namespace WrathFork.Contract { sealed class ActionRouteContext(object policy) : IDisposable { public void Dispose() {} } }
 static class ActionRoutes { public static object? For(uint input) => null; }
@@ -33,14 +33,6 @@ static class Svc {
         public static IBattleChara Boss = new(42, true), Add = new(43, true), Ally = new(44, false), Self = new(9, false);
         public static IBattleChara? SearchById(ulong id) => id switch { 42 => Boss, 43 => Add, 44 => Ally, 9 => Self, _ => null };
     }
-}
-namespace RotationInterop { static class ManualLimitBreak { public static bool Blocked; public static bool Waiting()=>Blocked; } }
-static class NativeExecution {
-    public static bool Ready = true;
-    public static object Capture(bool fresh = false)=>new();
-    public static bool CanSubmit(uint action)=>Ready;
-    public static void Invalidate() {}
-    public static bool Accepted(bool accepted,uint action,ulong recipient)=>accepted;
 }
 enum ActionType { Action }
 static class RotationBehaviour {
@@ -120,12 +112,6 @@ METHOD
         automaticDecision = proposal with { Action = 7561, Preparation = 7561, PlannedGcd = 125 };
         Check(ExecuteAutomatic(automaticDecision));
         int before = ActionManager.Calls;
-        automaticDecision = proposal with { ExecuteAfter = Environment.TickCount64 + 10000 };
-        Check(!ExecuteAutomatic(automaticDecision));
-        automaticDecision = proposal; RotationInterop.ManualLimitBreak.Blocked=true;
-        Check(!ExecuteAutomatic(proposal)); RotationInterop.ManualLimitBreak.Blocked=false;
-        NativeExecution.Ready=false; Check(!ExecuteAutomatic(proposal)); NativeExecution.Ready=true;
-        Check(ActionManager.Calls == before);
         automaticDecision = proposal; automatic = false; Check(!ExecuteAutomatic(proposal)); automatic = true;
         Generation = 2; Check(!ExecuteAutomatic(proposal)); Generation = 1;
         Check(!ExecuteAutomatic(proposal with { Action = 101 }));
