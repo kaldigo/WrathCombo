@@ -56,13 +56,14 @@ using System;
 class State {public bool InCombat=true,IsAllianceMember;}
 class Job {public uint RowId;}
 class IBattleChara {
- public bool IsDead,IsCasting,Boss,Hostile,Party;public ulong GameObjectId;
+ public bool IsDead,IsCasting,Boss,Hostile,Party,IsTargetable=true;public ulong GameObjectId;public System.Numerics.Vector3 Position;
  public IBattleChara? TargetObject;public Job ClassJob=new();public State State=new();
  public State Struct()=>State;public bool IsBoss()=>Boss;public bool IsHostile()=>Hostile;public bool IsInParty()=>Party;
 }
 class Player {public static IBattleChara Object=new(){GameObjectId=1};}
 class Fixture {
 METHODS
+static float AreaRange()=>5;
 static void Check(bool value){if(!value)throw new Exception("Tank ownership regression");}
 static void Main(){
 var ally=new IBattleChara{GameObjectId=2,Party=true};
@@ -76,9 +77,16 @@ ally.ClassJob.RowId=24;enemy.Boss=true;Check(!ThreatensGroup(enemy));enemy.Boss=
 enemy.IsCasting=true;Check(!ThreatensGroup(enemy));enemy.IsCasting=false;
 enemy.State.InCombat=false;Check(!ThreatensGroup(enemy));enemy.State.InCombat=true;
 enemy.TargetObject=Player.Object;Check(ThreatensGroup(enemy));
+var selected=enemy;
+var idle=new IBattleChara{GameObjectId=4,Hostile=true};idle.State.InCombat=false;
+PACK_POLICY
+Check(Eligible(idle));
+selected.TargetObject=ally;ally.ClassJob.RowId=21;Check(!Eligible(idle));
+
 }
 }
-""".replace("METHODS",methods)
+""".replace("METHODS",methods).replace("PACK_POLICY",
+            src[src.index("        bool Eligible("):src.index("        if (AccordDiagnostics.DiagnosticLog.Active")].replace("->", "."))
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)
             (p/"Test.csproj").write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup></Project>')

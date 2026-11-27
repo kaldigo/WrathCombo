@@ -85,10 +85,12 @@ internal static class TankPull
         var selected = Svc.Targets.Target as IBattleChara;
         var enemies = Svc.Objects.GetBattleCharas().Where(e => e.IsHostile() && !e.IsDead && e.IsTargetable &&
             !e.IsInvincible && !Service.Configuration.IgnoredNPCs.ContainsKey(e.BaseId)).ToArray();
-        // Selected idle enemies authorize a pull. Active bosses and other tanks' enemies are excluded.
+        // Keep collecting the selected pack after its first member enters combat.
+        // Bosses and enemies held by another tank remain excluded.
         bool Eligible(IBattleChara e) => !Protected(e) && (ThreatensGroup(e) ||
             !e.Struct()->InCombat && selected is { IsDead: false, IsTargetable: true } &&
-            selected.IsHostile() && !selected.Struct()->InCombat &&
+            selected.IsHostile() && !Protected(selected) &&
+            (!selected.Struct()->InCombat || ThreatensGroup(selected)) &&
             System.Numerics.Vector3.Distance(e.Position, selected.Position) <= AreaRange());
         if (AccordDiagnostics.DiagnosticLog.Active && now >= nextDiagnostic)
         {
