@@ -84,3 +84,37 @@ enemy.TargetObject=Player.Object;Check(ThreatensGroup(enemy));
             (p/"Test.csproj").write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup></Project>')
             (p/"Program.cs").write_text(fixture)
             subprocess.run(["dotnet","run","--project",str(p/"Test.csproj")],check=True,timeout=120)
+
+
+    def test_pull_requires_native_ready_status(self):
+        src=(Path(__file__).resolve().parents[1]/"WrathCombo/Engine/TankPull.cs").read_text(encoding="utf-8-sig")
+        method=src[src.index("    private static unsafe bool Usable("):src.index("    internal static uint Preview()")]
+        method=method.replace("unsafe ", "").replace("->", ".")
+        fixture="""
+using System;
+class IBattleChara {public ulong GameObjectId=1;}
+enum ActionType {Action}
+class ActionManager {
+ public static uint Status;
+ public static ActionManager Instance()=>new();
+ public uint GetActionStatus(ActionType type,uint action,ulong target)=>Status;
+}
+class Fixture {
+ static bool ActionLearned(uint action)=>true;
+ static bool InActionRange(uint action,IBattleChara target)=>true;
+ static bool ActionReadyForTarget(uint action,ulong target,bool recast,bool cast)=>true;
+ METHOD
+ static void Main(){
+ var target=new IBattleChara();
+ foreach(uint status in new uint[]{582,580,0}){
+ ActionManager.Status=status;
+ if(Usable(16143,target)!=(status==0))throw new Exception("Pull accepted an unavailable native action");
+ }
+ }
+}
+""".replace("METHOD",method)
+        with tempfile.TemporaryDirectory() as tmp:
+            p=Path(tmp)
+            (p/"Test.csproj").write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>')
+            (p/"Program.cs").write_text(fixture)
+            subprocess.run(["dotnet","run","--project",str(p/"Test.csproj")],check=True,timeout=120)

@@ -119,7 +119,8 @@ internal static class ExperimentalSelection
         ["AcquireVisibleEnemy"] = AcquireVisibleEnemy, ["SwitchEnemyTarget"] = SwitchEnemyTarget, ["SwitchAllyTarget"] = SwitchAllyTarget };
     internal static void Apply(JObject request, bool restoring = false)
     {
-        if (!restoring && (CustomComboFunctions.InCombat() || AutomationOwnership.Busy || SelectionRuntime.Commitment is not null))
+        bool roleOnly = request.Properties().All(p => p.Name == "AutoRoleMechanics");
+        if (!restoring && !roleOnly && (CustomComboFunctions.InCombat() || AutomationOwnership.Busy || SelectionRuntime.Commitment is not null))
             throw new InvalidOperationException("Saved changes will apply outside combat after the current action finishes.");
         var current = Read();
         foreach (var property in request.Properties())
@@ -176,7 +177,10 @@ internal static class ExperimentalSelection
         EnemyOverrideOrder = current["EnemyOverrideOrder"]!.Values<string>().Select(item => item!).ToArray();
         AcquireVisibleEnemy = current.Value<bool>("AcquireVisibleEnemy");
         SwitchEnemyTarget = current.Value<bool>("SwitchEnemyTarget"); SwitchAllyTarget = current.Value<bool>("SwitchAllyTarget");
-        SelectionRuntime.Reset();
-        BossForecastProvider.Reset();
+        if (!roleOnly)
+        {
+            SelectionRuntime.Reset();
+            BossForecastProvider.Reset();
+        }
     }
 }

@@ -15,7 +15,7 @@ namespace WrathCombo.Engine;
 internal static class TankPull
 {
     internal const uint Button = 1_000_019;
-    private static long manualUntil, gatheringUntil;
+    private static long manualUntil, gatheringUntil, nextDiagnostic;
     private static ulong approaching;
     internal static bool IsTank => (uint)Player.Job is 19 or 21 or 32 or 37;
     private static (uint Area, uint Ranged, uint Basic) Actions => (uint)Player.Job switch
@@ -30,9 +30,10 @@ internal static class TankPull
         AreaRange() > 0 && GetTargetDistance(enemy) <= AreaRange();
     private static float AreaRange() =>
         Data.ActionWatching.ActionSheet.TryGetValue(Actions.Area, out var row) ? row.EffectRange : 0;
-    private static bool Usable(uint action, IBattleChara target) =>
+    private static unsafe bool Usable(uint action, IBattleChara target) =>
         action != 0 && ActionLearned(action) && InActionRange(action, target) &&
-        ActionReadyForTarget(action, target.GameObjectId, true, true);
+        ActionReadyForTarget(action, target.GameObjectId, true, true) &&
+        ActionManager.Instance()->GetActionStatus(ActionType.Action, action, target.GameObjectId) == 0;
     internal static uint Preview()
     {
         if (!Player.Available || !IsTank || InPvP()) return All.Cease;
@@ -89,6 +90,18 @@ internal static class TankPull
             !e.Struct()->InCombat && selected is { IsDead: false, IsTargetable: true } &&
             selected.IsHostile() && !selected.Struct()->InCombat &&
             System.Numerics.Vector3.Distance(e.Position, selected.Position) <= AreaRange());
+        if (AccordDiagnostics.DiagnosticLog.Active && now >= nextDiagnostic)
+        {
+            nextDiagnostic = now + 1000;
+            AccordDiagnostics.DiagnosticLog.Event("Tank.Pull.Candidates", () => new {
+                Selected = selected?.GameObjectId, Moving = IsMoving(),
+                Enemies = enemies.Where(e => GetTargetDistance(e) <= 30).Select(e => new {
+                    Id = e.GameObjectId, e.BaseId, Target = e.TargetObjectId,
+                    Distance = GetTargetDistance(e), e.IsCasting, BossOrOtherTank = Protected(e),
+                    ThreatensGroup = ThreatensGroup(e), Eligible = Eligible(e), InArea = InArea(e)
+                }).ToArray()
+            });
+        }
         var candidates = enemies.Where(Eligible).ToArray();
         var nearby = candidates.Where(InArea).ToArray();
         if (nearby.Length >= 2 && (IsMoving() || nearby.Any(e => e.TargetObjectId != Player.Object!.GameObjectId)) && !enemies.Any(e => InArea(e) && !Eligible(e)))
@@ -113,7 +126,8 @@ internal static class TankPull
     }
     private static unsafe bool Submit(uint action, ulong target, string reason)
     {
-        if (!ActionLearned(action) || AutomationOwnership.Busy || !ActionReadyForTarget(action, target, true, true)) return false;
+        if (!ActionLearned(action) || AutomationOwnership.Busy || !ActionReadyForTarget(action, target, true, true) ||
+            ActionManager.Instance()->GetActionStatus(ActionType.Action, action, target) != 0) return false;
         using var native = AutomationOwnership.QueuedExternalScope();
         bool accepted = ActionManager.Instance()->UseAction(ActionType.Action, action, target);
         AccordDiagnostics.DiagnosticLog.Event("Tank.Pull.Automatic", () => new { action, target, reason, accepted });
