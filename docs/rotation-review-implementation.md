@@ -1,8 +1,12 @@
 # Rotation review implementation and acceptance
 
-Authorized scope: the complete 27 November 2026 rotation review, plus manual Phoenix Down execution protection. Work stays on `testing`; stable source and feeds remain untouched. Review source pins: Wrath `e7586437`, RSR `a946eb10`. The full source assessment is in the workspace `docs/rotation-review-2026-11-27.md`.
+Authorized scope: the complete 27 November 2026 rotation review, plus manual Phoenix Down execution protection. Wrath work is held on `codex/rotation-review` at the user's request; `testing` was restored to its previous code. Stable source and feeds remain untouched. Review source pins: Wrath `e7586437`, RSR `a946eb10`. The full source assessment is in the workspace `docs/rotation-review-2026-11-27.md`.
 
 Completion requires implementation, focused behavioral tests, build/client compatibility checks and a final code/requirement audit. In-game outcomes must be identified separately from automated evidence. A partial milestone must not be described as completion of this list.
+
+## Publication status
+
+Wrath is not released. Its proposed 1.0.4.81 release was cancelled before publication and the unpublished tag was removed. The install feed remains on 1.0.4.80. The implementation and validated tests are saved on this branch for a later merge into `testing`, when the user is ready to test or authorizes combining it with other testing work. Publishing RSR 7.5.7.23 was separately authorized because it only contains the manual-item guard.
 
 ## Stage A: readiness and execution
 
