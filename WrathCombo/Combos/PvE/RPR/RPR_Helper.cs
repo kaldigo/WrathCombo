@@ -141,7 +141,8 @@ internal partial class RPR
     private static bool InNormalRotation =>
         !LocalPlayer.HasStatus(Buffs.Enshrouded) && !LocalPlayer.HasStatus(Buffs.SoulReaver) &&
         !LocalPlayer.HasStatus(Buffs.Executioner) && !LocalPlayer.HasStatus(Buffs.ImmortalSacrifice) &&
-        !LocalPlayer.HasStatus(Buffs.IdealHost) && !LocalPlayer.HasStatus(Buffs.PerfectioParata);
+        (!LocalPlayer.HasStatus(Buffs.IdealHost) || !ActionLearned(Enshroud)) &&
+        !LocalPlayer.HasStatus(Buffs.PerfectioParata);
 
     private static bool UseEnshroud(bool onAoE = false)
     {
@@ -193,8 +194,10 @@ internal partial class RPR
     private static bool IsShroudCapped =>
         Shroud >= MaxShroud;
 
+    // A locked Enshroud cannot drain Shroud. Continue spending Soul instead
+    // of allowing both gauges to cap and reducing the rotation to basic attacks.
     private static bool IsShroudOvercapping(bool enshroudEnabled = true, bool onAoE = false) =>
-        IsShroudCapped && (!enshroudEnabled || !UseEnshroud(onAoE));
+        IsShroudCapped && ActionLearned(Enshroud) && (!enshroudEnabled || !UseEnshroud(onAoE));
 
     #endregion
 

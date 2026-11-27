@@ -25,7 +25,12 @@ class ReaperResourceTests(unittest.TestCase):
 
         methods = "\n".join(method(name) for name in (
             "UseEnshroud", "UseGuillotine", "UseGibbetGallowsGCD",
-            "UseBloodStalkGrimSwatheSoulReaverGCD"))
+            "UseBloodStalkGrimSwatheSoulReaverGCD", "UseSoulOverflow",
+            "UseBloodstalk", "UseGrimSwathe", "UseGluttony",
+            "ShouldSpendSoulOvercapST", "ShouldSpendSoulOvercapAoE"))
+        for name in ("IsShroudCapped", "IsShroudOvercapping", "InNormalRotation"):
+            start = source.index("    private static bool " + name)
+            methods += "\n" + source[start:source.index(";", start) + 1]
         window = (root / "Engine/Selection/ResourceWindow.cs").read_text().replace(
             "namespace WrathCombo.Engine.Selection;", "")
         harness = """
@@ -42,13 +47,19 @@ namespace Engine {
  }
 }
 class Replay {
- const uint Enshroud=1,Communio=2,PlentifulHarvest=3,VoidReaping=4,Guillotine=5,Gibbet=6,Gallows=7,GrimSwathe=8,BloodStalk=9;
+ const uint Enshroud=1,Communio=2,PlentifulHarvest=3,VoidReaping=4,Guillotine=5,Gibbet=6,Gallows=7,GrimSwathe=8,BloodStalk=9,Gluttony=10;
+ const byte MaxShroud=100;
  static byte Soul,Shroud;
  static float GCD=2.5f,RemainingGCD=.5f,AcCD=30;
- static bool Expiring,Learned=true,InRange=true;
- static bool ActionLearned(uint action)=>Learned;
- static bool ActionReady(uint action)=>action!=Enshroud||Shroud>=50;
+ static bool Expiring,Learned=true,InRange=true,EnshroudLearned=true;
+ static bool ActionLearned(uint action)=>Learned && (action!=Enshroud||EnshroudLearned);
+ static bool ActionReady(uint action)=>ActionLearned(action) && (action!=Enshroud||Shroud>=50);
  static bool HasBattleTarget()=>true;
+ static bool InPostBurstSequence=>false;
+ static bool ShouldHoldSoulOverflowWeave=>false;
+ static bool IsOnCooldown(uint action)=>false;
+ static float GetCooldownRemainingTime(uint action)=>0;
+ static bool UseBurstGluttony(bool enabled,bool area)=>false;
  static bool JustUsed(uint action,float seconds)=>false;
  static bool IsComboExpiring(float count)=>Expiring;
  static bool IsDebuffExpiring(float count)=>false;
@@ -57,7 +68,7 @@ class Replay {
  static float GetActionCastTime(uint action)=>1.3f;
  record Cooldown(float CooldownTotal);
  static Cooldown GetCooldown(uint action)=>new(1.5f);
- static class Buffs {public const int Enshrouded=1,SoulReaver=2,Executioner=3,PerfectioParata=4,IdealHost=5,ArcaneCircle=6,EnhancedGibbet=7,EnhancedGallows=8;}
+ static class Buffs {public const int Enshrouded=1,SoulReaver=2,Executioner=3,PerfectioParata=4,IdealHost=5,ArcaneCircle=6,EnhancedGibbet=7,EnhancedGallows=8,ImmortalSacrifice=9;}
  class Actor {public HashSet<int> Statuses=new();public bool HasStatus(int status)=>Statuses.Contains(status);}
  static Actor LocalPlayer=new();
  METHODS
@@ -83,6 +94,21 @@ class Replay {
  Check(UseEnshroud(),"Enshroud failed after the spender cleared");
  }
  }
+ foreach(bool enshroudEnabled in new[]{false,true}){
+ Shroud=100;Soul=100;EnshroudLearned=false;
+ Check(!IsShroudOvercapping(enshroudEnabled),"Locked Enshroud blocked Soul spending");
+ Check(UseBloodstalk(true,enshroudEnabled)&&UseGrimSwathe(true,enshroudEnabled)&&UseGluttony(enshroudEnabled),
+       "Locked Enshroud blocked a ready Soul spender");
+ LocalPlayer.Statuses.Add(Buffs.IdealHost);
+ Check(UseBloodstalk(true,enshroudEnabled)&&UseGluttony(enshroudEnabled),
+       "Unusable Ideal Host blocked Soul spending");
+ LocalPlayer.Statuses.Clear();EnshroudLearned=true;
+ LocalPlayer.Statuses.Add(Buffs.IdealHost);Check(!InNormalRotation,"Unlocked Ideal Host lost preparation protection");
+ LocalPlayer.Statuses.Clear();
+ Shroud=0;EnshroudLearned=false;Check(UseBloodstalk(true,enshroudEnabled),"Below-80 Soul spending failed");
+ EnshroudLearned=true;Shroud=100;
+ }
+ Check(IsShroudOvercapping(false),"Learned manually held Enshroud lost overcap protection");
  Engine.ExperimentalSelection.ActiveReaper=true;
  Engine.BossForecastProvider.Downtime=2;Check(!UseEnshroud(),"Forecast entry protection failed");
  Engine.BossForecastProvider.Downtime=null;Expiring=true;Check(!UseEnshroud(),"Combo protection failed");Expiring=false;
