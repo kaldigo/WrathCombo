@@ -27,10 +27,15 @@ class ReaperResourceTests(unittest.TestCase):
             "UseEnshroud", "UseGuillotine", "UseGibbetGallowsGCD",
             "UseBloodStalkGrimSwatheSoulReaverGCD", "UseSoulOverflow",
             "UseBloodstalk", "UseGrimSwathe", "UseGluttony",
-            "ShouldSpendSoulOvercapST", "ShouldSpendSoulOvercapAoE"))
-        for name in ("IsShroudCapped", "IsShroudOvercapping", "InNormalRotation"):
+            "ShouldSpendSoulOvercapST", "ShouldSpendSoulOvercapAoE",
+            "MaintainsDeathsDesign", "NeedsDeathsDesignFor", "NeedsCommittedDeathsDesign",
+            "ProtectBurstFinishers", "UseShadowOfDeath", "UseWhorlOfDeath",
+            "UseSacrificium", "IsDebuffExpiring"))
+        for name in ("IsShroudCapped", "IsShroudOvercapping", "InNormalRotation", "SacrificiumDeadline"):
             start = source.index("    private static bool " + name)
             methods += "\n" + source[start:source.index(";", start) + 1]
+        start = source.index("    private static float EnshroudFinishDuration(")
+        methods += "\n" + source[start:source.index(";", start) + 1]
         window = (root / "Engine/Selection/ResourceWindow.cs").read_text().replace(
             "namespace WrathCombo.Engine.Selection;", "")
         harness = """
@@ -47,10 +52,22 @@ namespace Engine {
  }
 }
 class Replay {
- const uint Enshroud=1,Communio=2,PlentifulHarvest=3,VoidReaping=4,Guillotine=5,Gibbet=6,Gallows=7,GrimSwathe=8,BloodStalk=9,Gluttony=10;
+ const uint Enshroud=1,Communio=2,PlentifulHarvest=3,VoidReaping=4,Guillotine=5,Gibbet=6,Gallows=7,GrimSwathe=8,BloodStalk=9,Gluttony=10,ShadowOfDeath=11,WhorlOfDeath=12,Perfectio=13,ArcaneCircle=14,CrossReaping=15;
  const byte MaxShroud=100;
  static byte Soul,Shroud;
  static float GCD=2.5f,RemainingGCD=.5f,AcCD=30;
+ static int Lemure=4,VoidShroud=0;
+ static bool Maintain=false,Boss=true,Simple=true,DesignEnabled=true,CanApply=true;
+ static int Hp=100;
+ static int RPR_WoDHPThreshold=0,RPR_SoDHPThreshold=0;
+ enum Preset {RPR_AoE_SimpleMode,RPR_AoE_WoD,RPR_ST_SimpleMode,RPR_ST_SoD}
+ static bool IsEnabled(Preset preset)=>Maintain && (Simple
+     ? preset is Preset.RPR_AoE_SimpleMode or Preset.RPR_ST_SimpleMode
+     : DesignEnabled && preset is Preset.RPR_AoE_WoD or Preset.RPR_ST_SoD);
+ static int GetTargetHPPercent()=>Hp;
+ static bool InBossEncounter()=>Boss;
+ static bool UsesBurstAlignment=>Boss;
+ static bool JustUsed(uint action)=>false;
  static bool Expiring,Learned=true,InRange=true,EnshroudLearned=true;
  static bool ActionLearned(uint action)=>Learned && (action!=Enshroud||EnshroudLearned);
  static bool ActionReady(uint action)=>ActionLearned(action) && (action!=Enshroud||Shroud>=50);
@@ -58,19 +75,27 @@ class Replay {
  static bool InPostBurstSequence=>false;
  static bool ShouldHoldSoulOverflowWeave=>false;
  static bool IsOnCooldown(uint action)=>false;
- static float GetCooldownRemainingTime(uint action)=>0;
+ static bool IsOffCooldown(uint action)=>GetCooldownRemainingTime(action)<=0;
+ static float GetCooldownRemainingTime(uint action)=>action==ArcaneCircle?AcCD:0;
  static bool UseBurstGluttony(bool enabled,bool area)=>false;
  static bool JustUsed(uint action,float seconds)=>false;
  static bool IsComboExpiring(float count)=>Expiring;
- static bool IsDebuffExpiring(float count)=>false;
  static bool InActionRange(uint action)=>InRange;
  static uint OriginalHook(uint action)=>action;
  static float GetActionCastTime(uint action)=>1.3f;
  record Cooldown(float CooldownTotal);
  static Cooldown GetCooldown(uint action)=>new(1.5f);
- static class Buffs {public const int Enshrouded=1,SoulReaver=2,Executioner=3,PerfectioParata=4,IdealHost=5,ArcaneCircle=6,EnhancedGibbet=7,EnhancedGallows=8,ImmortalSacrifice=9;}
- class Actor {public HashSet<int> Statuses=new();public bool HasStatus(int status)=>Statuses.Contains(status);}
- static Actor LocalPlayer=new();
+ static class Buffs {public const int Enshrouded=1,SoulReaver=2,Executioner=3,PerfectioParata=4,IdealHost=5,ArcaneCircle=6,EnhancedGibbet=7,EnhancedGallows=8,ImmortalSacrifice=9,Oblatio=10;}
+ static class Debuffs {public const int DeathsDesign=100;}
+ record StatusTime(float Time) {public float RemainingTimeOrZero()=>Time;}
+ class Actor {
+ public HashSet<int> Statuses=new(); public Dictionary<int,float> Times=new();
+ public bool HasStatus(int status)=>Statuses.Contains(status);
+ public StatusTime Status(int status)=>new(HasStatus(status)?Times.GetValueOrDefault(status):0);
+ public bool CanApplyStatus(int status)=>CanApply;
+ public void Set(int status,float seconds){Statuses.Add(status);Times[status]=seconds;}
+ }
+ static Actor LocalPlayer=new(),CurrentTarget=new();
  METHODS
  static void Check(bool yes,string message){if(!yes)throw new Exception(message);}
  static void Main(){
@@ -114,6 +139,49 @@ class Replay {
  Engine.BossForecastProvider.Downtime=null;Expiring=true;Check(!UseEnshroud(),"Combo protection failed");Expiring=false;
  LocalPlayer.Statuses.Add(Buffs.SoulReaver);InRange=false;Check(!UseGuillotine(),"AoE ignored range");
  InRange=true;Learned=false;Check(!UseGuillotine()&&!UseGibbetGallowsGCD(),"Spender ignored level availability");
+ Learned=true;LocalPlayer.Statuses.Clear();Maintain=true;Soul=100;Shroud=100;
+ // Missing Design must refresh before any automatic Soul spender or Enshroud.
+ Check(IsDebuffExpiring(5),"Missing Design was treated as safe");
+ Check(!UseEnshroud()&&!UseEnshroud(true),"Entered Enshroud without Design");
+ Check(!UseGluttony()&&!UseGluttony(onAoE:true)&&!UseBloodstalk()&&!UseGrimSwathe(true),"Started spender chain without Design");
+ Expiring=true;Check(UseShadowOfDeath()&&UseWhorlOfDeath(),"Combo protection suppressed urgent Design");Expiring=false;
+ Soul=0;Expiring=true;
+ Check(UseShadowOfDeath()&&UseWhorlOfDeath(),"Empty Soul hid the capped-Shroud Design commitment behind combo protection");
+ Soul=100;Expiring=false;
+ CurrentTarget.Set(Debuffs.DeathsDesign,30);
+ Check(UseEnshroud()&&UseGluttony(),"Healthy Design blocked rotation");
+ Check(!UseShadowOfDeath()&&!UseWhorlOfDeath(),"Healthy Design refreshed unnecessarily");
+ CurrentTarget.Set(Debuffs.DeathsDesign,4);
+ LocalPlayer.Statuses.Add(Buffs.Executioner);
+ Check(!UseShadowOfDeath()&&!UseWhorlOfDeath(),"Design discarded earned spender");LocalPlayer.Statuses.Clear();
+ LocalPlayer.Set(Buffs.Enshrouded,25);CurrentTarget.Set(Debuffs.DeathsDesign,2);
+ Check(UseShadowOfDeath()&&UseWhorlOfDeath(),"Manual Enshroud did not recover Design before expiry");
+ // Sacrificium is held early for Circle, but released before the phase ends.
+ LocalPlayer.Set(Buffs.Oblatio,25);AcCD=0;Lemure=4;
+ Check(!UseSacrificium(),"Early Sacrificium ignored buff alignment");
+ Lemure=2;Check(UseSacrificium()&&UseSacrificium(true),"Circle hold lost Sacrificium at phase deadline");
+ Lemure=1;Check(UseSacrificium()&&UseSacrificium(true),"Last-GCD Sacrificium recovery failed");
+ Lemure=4;LocalPlayer.Set(Buffs.Oblatio,1);Check(UseSacrificium(),"Expiring Oblatio ignored deadline");
+ LocalPlayer.Statuses.Clear();Lemure=4;AcCD=30;CurrentTarget.Set(Debuffs.DeathsDesign,40);
+ // Captured inter-Enshroud case: a filler costs finishers their raid buff.
+ LocalPlayer.Statuses.Add(Buffs.IdealHost);LocalPlayer.Set(Buffs.ArcaneCircle,11);Expiring=true;
+ Check(EnshroudFinishDuration(true)<11&&EnshroudFinishDuration(true)+GCD>11,"Burst fixture did not cross the filler deadline");
+ Check(ProtectBurstFinishers()&&UseEnshroud()&&UseEnshroud(true),"Combo filler delayed buffed finishers");
+ LocalPlayer.Set(Buffs.ArcaneCircle,20);
+ Check(!ProtectBurstFinishers()&&!UseEnshroud(),"Healthy buff window discarded combo protection");
+ // The feature gate and disabled maintenance retain their existing behavior.
+ Engine.ExperimentalSelection.ActiveReaper=false;Check(!ProtectBurstFinishers(),"Scheduling leaked outside v2");
+ Engine.ExperimentalSelection.ActiveReaper=true;Maintain=false;CurrentTarget.Statuses.Clear();Expiring=false;
+ Check(!NeedsDeathsDesignFor(10)&&UseEnshroud(),"Disabled maintenance blocked Enshroud");
+ Maintain=true;Simple=false;LocalPlayer.Statuses.Clear();Soul=100;Shroud=100;
+ Check(NeedsDeathsDesignFor(10)&&NeedsDeathsDesignFor(10,true),"Advanced maintenance was ignored");
+ DesignEnabled=false;Check(!NeedsDeathsDesignFor(10)&&!NeedsDeathsDesignFor(10,true)&&UseEnshroud(),"Disabled advanced maintenance blocked rotation");
+ DesignEnabled=true;RPR_SoDHPThreshold=25;RPR_WoDHPThreshold=25;Hp=20;
+ Check(!NeedsDeathsDesignFor(10)&&!NeedsDeathsDesignFor(10,true),"Configured HP cutoff was overridden");
+ Hp=100;CanApply=false;Check(!NeedsDeathsDesignFor(10)&&!NeedsDeathsDesignFor(10,true),"Unapplicable Design blocked rotation");CanApply=true;
+ LocalPlayer.Set(Buffs.Enshrouded,25);LocalPlayer.Set(Buffs.Oblatio,25);AcCD=0;Lemure=2;
+ Engine.ExperimentalSelection.ActiveReaper=false;Check(!UseSacrificium(),"Deadline leaked into baseline Sacrificium hold");
+
  }
 }
 """.replace("WINDOW", window.replace("using System;", "")).replace("METHODS", methods)

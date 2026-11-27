@@ -17,16 +17,61 @@ internal partial class RPR
 {
     #region SoD
 
+    private static bool MaintainsDeathsDesign(bool onAoE) =>
+        Engine.ExperimentalSelection.ActiveReaper &&
+        ActionLearned(onAoE ? WhorlOfDeath : ShadowOfDeath) &&
+        CurrentTarget.CanApplyStatus(Debuffs.DeathsDesign) &&
+        (onAoE
+            ? IsEnabled(Preset.RPR_AoE_SimpleMode) ||
+              IsEnabled(Preset.RPR_AoE_WoD) && GetTargetHPPercent() > RPR_WoDHPThreshold
+            : IsEnabled(Preset.RPR_ST_SimpleMode) ||
+              IsEnabled(Preset.RPR_ST_SoD) && GetTargetHPPercent() > RPR_SoDHPThreshold);
+
+    private static float EnshroudFinishDuration(bool perfectio = false) =>
+        RemainingGCD + GetCooldown(VoidReaping).CooldownTotal * 4 +
+        (perfectio && ActionLearned(Perfectio) ? GCD :
+            ActionLearned(Communio) ? GetActionCastTime(Communio) : 0) + .7f;
+
+    private static bool NeedsDeathsDesignFor(float duration, bool onAoE = false) =>
+        MaintainsDeathsDesign(onAoE) &&
+        CurrentTarget.Status(Debuffs.DeathsDesign).RemainingTimeOrZero() <= duration;
+
+    private static bool NeedsCommittedDeathsDesign(bool onAoE = false)
+    {
+        if (!MaintainsDeathsDesign(onAoE) || LocalPlayer.HasStatus(Buffs.SoulReaver) ||
+            LocalPlayer.HasStatus(Buffs.Executioner) || LocalPlayer.HasStatus(Buffs.ImmortalSacrifice) ||
+            LocalPlayer.HasStatus(Buffs.PerfectioParata))
+            return false;
+
+        if (LocalPlayer.HasStatus(Buffs.Enshrouded))
+        {
+            // Manual Enshroud can begin with too little Design remaining. Refresh
+            // before it drops, while preserving the planned pre-Circle insertion.
+            return NeedsDeathsDesignFor(RemainingGCD + GCD + .7f, onAoE);
+        }
+
+        if (UseEnshroud(onAoE, checkDeathsDesign: false) &&
+            NeedsDeathsDesignFor(EnshroudFinishDuration(), onAoE))
+            return true;
+
+        return Soul >= 50 && NeedsDeathsDesignFor(RemainingGCD +
+            GCD * (ActionReady(Gluttony) ? 2 : 1) + .7f, onAoE);
+    }
+
     private static bool UseShadowOfDeath(int dotRefresh = 8, bool trashOnly = true, bool arcaneCircleEnabled = true)
     {
+        bool committedRefresh = NeedsCommittedDeathsDesign();
         if (ActionLearned(ShadowOfDeath) && !LocalPlayer.HasStatus(Buffs.SoulReaver) &&
             !LocalPlayer.HasStatus(Buffs.Executioner) && !LocalPlayer.HasStatus(Buffs.PerfectioParata) &&
-            !LocalPlayer.HasStatus(Buffs.ImmortalSacrifice) && !IsComboExpiring(3) &&
+            !LocalPlayer.HasStatus(Buffs.ImmortalSacrifice) && (!IsComboExpiring(3) || committedRefresh) &&
             CurrentTarget.CanApplyStatus(Debuffs.DeathsDesign) &&
             !JustUsed(ShadowOfDeath) && InActionRange(ShadowOfDeath))
         {
             float ddRemaining = CurrentTarget.Status(Debuffs.DeathsDesign).RemainingTimeOrZero();
             bool deathsDesignMissing = !CurrentTarget.HasStatus(Debuffs.DeathsDesign);
+
+            if (committedRefresh)
+                return true;
 
             if (trashOnly && !InBossEncounter() &&
                 !LocalPlayer.HasStatus(Buffs.Enshrouded) &&
@@ -144,7 +189,12 @@ internal partial class RPR
         (!LocalPlayer.HasStatus(Buffs.IdealHost) || !ActionLearned(Enshroud)) &&
         !LocalPlayer.HasStatus(Buffs.PerfectioParata);
 
-    private static bool UseEnshroud(bool onAoE = false)
+    private static bool ProtectBurstFinishers() =>
+        Engine.ExperimentalSelection.ActiveReaper &&
+        LocalPlayer.HasStatus(Buffs.IdealHost) && LocalPlayer.HasStatus(Buffs.ArcaneCircle) &&
+        LocalPlayer.Status(Buffs.ArcaneCircle).RemainingTimeOrZero() <= EnshroudFinishDuration(true) + GCD;
+
+    private static bool UseEnshroud(bool onAoE = false, bool checkDeathsDesign = true)
     {
         if (Engine.ExperimentalSelection.ActiveReaper)
         {
@@ -155,10 +205,15 @@ internal partial class RPR
                 5, LocalPlayer.HasStatus(Buffs.Enshrouded), Engine.BossForecastProvider.Downtime,
                 ActionLearned(Communio) ? GetActionCastTime(Communio) : 0);
             bool canEnter = Engine.Selection.ResourceWindow.CanFinish(window);
-            Engine.TestingApi.RecordDecision("RPR.PhaseDuration", window, canEnter);
-            if (!canEnter || IsComboExpiring((phaseGcd * 4 + RemainingGCD + GetActionCastTime(Communio) + .7f) / GCD)) return false;
+            if (checkDeathsDesign)
+                Engine.TestingApi.RecordDecision("RPR.PhaseDuration", window, canEnter);
+            if (!canEnter || checkDeathsDesign && !ProtectBurstFinishers() &&
+                IsComboExpiring((phaseGcd * 4 + RemainingGCD + GetActionCastTime(Communio) + .7f) / GCD)) return false;
+            if (checkDeathsDesign && NeedsDeathsDesignFor(EnshroudFinishDuration(), onAoE))
+                return false;
         }
-        if (onAoE && IsComboExpiring(6))
+        if (onAoE && IsComboExpiring(6) && !ProtectBurstFinishers() &&
+            (!Engine.ExperimentalSelection.ActiveReaper || checkDeathsDesign))
             return false;
 
         if ((ActionReady(Enshroud) || LocalPlayer.HasStatus(Buffs.IdealHost)) &&
@@ -179,11 +234,13 @@ internal partial class RPR
                 JustUsed(PlentifulHarvest, 5))
                 return true;
 
-            if (!LocalPlayer.HasStatus(Buffs.ArcaneCircle) && !IsDebuffExpiring(5) &&
+            if (!LocalPlayer.HasStatus(Buffs.ArcaneCircle) &&
+                (Engine.ExperimentalSelection.ActiveReaper && !checkDeathsDesign || !IsDebuffExpiring(5)) &&
                 AcCD.InRange(49, 66))
                 return true;
 
-            if (!LocalPlayer.HasStatus(Buffs.ArcaneCircle) && !IsDebuffExpiring(5) &&
+            if (!LocalPlayer.HasStatus(Buffs.ArcaneCircle) &&
+                (Engine.ExperimentalSelection.ActiveReaper && !checkDeathsDesign || !IsDebuffExpiring(5)) &&
                 Shroud >= 90)
                 return true;
         }
@@ -208,10 +265,11 @@ internal partial class RPR
         (onAoE || ActionLearned(Enshroud) && JustUsed(ShadowOfDeath) || !ActionLearned(Enshroud));
 
     private static bool UseGluttony(bool enshroudEnabled = true, bool onAoE = false) =>
-        UseBurstGluttony(enshroudEnabled, onAoE) ||
+        !NeedsDeathsDesignFor(RemainingGCD + GCD * 2 + .7f, onAoE) &&
+        (UseBurstGluttony(enshroudEnabled, onAoE) ||
         !IsShroudOvercapping(enshroudEnabled, onAoE) &&
         ActionReady(Gluttony) && InNormalRotation && !IsComboExpiring(3) &&
-        !(InPostBurstSequence && Soul < 50);
+        !(InPostBurstSequence && Soul < 50));
 
     private static bool UseTrueNorthForGluttony(bool advanced = false, int tnChargePool = 0) =>
         !InPostBurstSequence &&
@@ -244,17 +302,24 @@ internal partial class RPR
         GetCooldownRemainingTime(Gluttony) > GCD * 5;
 
     private static bool UseBloodstalk(bool gluttonyEnabled = true, bool enshroudEnabled = true) =>
+        !NeedsDeathsDesignFor(RemainingGCD + GCD + .7f) &&
         !IsShroudOvercapping(enshroudEnabled) &&
         UseSoulOverflow() &&
         ActionReady(OriginalHook(BloodStalk)) &&
         ShouldSpendSoulOvercapST(gluttonyEnabled);
 
     private static bool UseGrimSwathe(bool onAoE = false, bool enshroudEnabled = true) =>
+        !NeedsDeathsDesignFor(RemainingGCD + GCD + .7f, onAoE) &&
         !IsShroudOvercapping(enshroudEnabled, onAoE) &&
         UseSoulOverflow() &&
         ActionReady(GrimSwathe) &&
         InActionRange(onAoE ? OriginalHook(GrimSwathe) : GrimSwathe) &&
         ShouldSpendSoulOvercapAoE();
+
+    private static bool SacrificiumDeadline =>
+        Engine.ExperimentalSelection.ActiveReaper &&
+        (Lemure <= 2 || LocalPlayer.Status(Buffs.Oblatio).RemainingTimeOrZero() <= RemainingGCD + GCD + .7f ||
+         LocalPlayer.Status(Buffs.Enshrouded).RemainingTimeOrZero() <= RemainingGCD + GCD + .7f);
 
     private static bool UseSacrificium(
         bool onAoE = false,
@@ -262,10 +327,10 @@ internal partial class RPR
         bool arcaneCircleEnabled = true,
         int arcaneCircleBossOption = 0) =>
         LocalPlayer.HasStatus(Buffs.Enshrouded) && LocalPlayer.HasStatus(Buffs.Oblatio) &&
-        (onAoE
+        (SacrificiumDeadline || (onAoE
             ? Lemure is 2 && VoidShroud is 1
-            : Lemure <= 4) &&
-        (!useArcaneCircleBoss || onAoE ||
+            : Lemure <= 4)) &&
+        (SacrificiumDeadline || !useArcaneCircleBoss || onAoE ||
          GetCooldownRemainingTime(ArcaneCircle) > GCD * 3 && !JustUsed(ArcaneCircle, 2) &&
          (arcaneCircleBossOption == 0 ||
           InBossEncounter() ||
@@ -329,6 +394,7 @@ internal partial class RPR
             : ComboAction == OriginalHook(Slice) || ComboAction == OriginalHook(WaxingSlice));
 
     private static bool UseBurstGluttony(bool enshroudEnabled = true, bool onAoE = false) =>
+        !NeedsDeathsDesignFor(RemainingGCD + GCD * 2 + .7f, onAoE) &&
         !IsShroudOvercapping(enshroudEnabled) &&
         InPostBurstSequence && Soul >= 50 && ActionReady(Gluttony) &&
         !HasBurstComboContinue(onAoE);
@@ -396,7 +462,8 @@ internal partial class RPR
     private static bool UseWhorlOfDeath(int refreshThreshold = 6, int hpThreshold = 0) =>
         ActionLearned(WhorlOfDeath) && InActionRange(WhorlOfDeath) &&
         CurrentTarget.CanApplyStatus(Debuffs.DeathsDesign) &&
-        CurrentTarget.Status(Debuffs.DeathsDesign).RemainingTimeOrZero() < refreshThreshold &&
+        (CurrentTarget.Status(Debuffs.DeathsDesign).RemainingTimeOrZero() < refreshThreshold ||
+         NeedsCommittedDeathsDesign(true)) &&
         !LocalPlayer.HasStatus(Buffs.SoulReaver) && !LocalPlayer.HasStatus(Buffs.Executioner) &&
         GetTargetHPPercent() > hpThreshold;
 
@@ -681,7 +748,8 @@ internal partial class RPR
     {
         float gcd = GCD * times;
 
-        return CurrentTarget.HasStatus(Debuffs.DeathsDesign) && CurrentTarget.Status(Debuffs.DeathsDesign).RemainingTimeOrZero() < gcd;
+        return (MaintainsDeathsDesign(false) || CurrentTarget.HasStatus(Debuffs.DeathsDesign)) &&
+               CurrentTarget.Status(Debuffs.DeathsDesign).RemainingTimeOrZero() < gcd;
     }
 
     #endregion
