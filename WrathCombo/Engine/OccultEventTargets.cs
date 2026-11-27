@@ -148,10 +148,11 @@ internal static class OccultEventTargets
     }
 
     private static unsafe bool EligiblePatient(uint spell, IBattleChara actor) =>
+        SelectionRuntime.CurrentFriendlyActor(actor) != null &&
         actor.IsAPlayer() && !actor.IsDead && actor.IsTargetable && actor.CurrentHp > 0 &&
         GetTargetHPPercent(actor, forceUsePending: true) < 50 && !actor.IsInParty() &&
         actor.GameObjectId != Player.Object!.GameObjectId && actor.HasStatus(HoofingIt, true) &&
-        InEncounterArena(duty, arenaActor, Player.Position, actor.Position) && !actor.IsHostile() &&
+        InEncounterArena(duty, arenaActor, Player.Position, actor.Position) &&
         InActionRange(spell, actor) && IsInLineOfSight(actor) && ActionManager.CanUseActionOnTarget(spell, actor.GameObject());
 
     internal static bool PatientStillEligible(uint spell, IBattleChara patient) =>

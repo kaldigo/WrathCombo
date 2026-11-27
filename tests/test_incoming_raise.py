@@ -27,6 +27,10 @@ class Caster : Actor {
 class Objects : List<Actor> { public Actor? SearchById(ulong id) => Find(a=>a.GameObjectId==id); }
 class Svc {public static Objects Objects=new(); public class Framework {public static DateTime LastUpdateUTC=DateTime.UtcNow;} }
 class Player {public static Caster Object=new(){GameObjectId=1};}
+static class SelectionRuntime {
+    public static bool Available=true;
+    public static Actor? CurrentFriendlyActor(Actor? actor)=>Available && actor is not Caster {Hostile:true} ? actor : null;
+}
 enum ActionType { Action }
 unsafe struct ActionManager {
     public static ActionManager* Ptr; public static ActionManager* Instance()=>Ptr;
@@ -65,6 +69,8 @@ unsafe class Replay {
         patient.HasRaiseStatus=true;Check(!IncomingRaise.Submit(125,5,5));
         patient.HasRaiseStatus=false;patient.IsDead=false;Check(!IncomingRaise.Submit(125,5,5));
         Check(IncomingRaise.DispatchPatient==0);
+        patient.IsDead=true;SelectionRuntime.Available=false;
+        Check(!IncomingRaise.Available(patient,true)&&!IncomingRaise.Submit(125,5,5));
     }
 }
 """

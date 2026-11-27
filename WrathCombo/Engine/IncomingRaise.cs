@@ -22,7 +22,7 @@ internal static class IncomingRaise
     private static DateTime frame;
     internal static bool Available(IGameObject? target, bool fresh = false)
     {
-        if (target is not IBattleChara { IsDead: true, IsTargetable: true } patient ||
+        if (SelectionRuntime.CurrentFriendlyActor(target) is not { IsDead: true, IsTargetable: true } patient ||
             patient.HasRaiseStatus || patient.HasStatus(All.Buffs.Raised, true)) return false;
 
         if (fresh || frame != Svc.Framework.LastUpdateUTC)
@@ -30,8 +30,8 @@ internal static class IncomingRaise
             recipients.Clear();
             var self = Player.Object?.GameObjectId;
             foreach (var obj in Svc.Objects)
-                if (obj is IPlayerCharacter { IsCasting: true } caster && IsRaise(caster.CastActionId) &&
-                    caster.GameObjectId != self && !caster.IsHostile())
+                if (obj is IPlayerCharacter caster && SelectionRuntime.CurrentFriendlyActor(caster) != null &&
+                    caster.IsCasting && IsRaise(caster.CastActionId) && caster.GameObjectId != self)
                     recipients.Add(caster.CastTargetObjectId);
             frame = Svc.Framework.LastUpdateUTC;
         }

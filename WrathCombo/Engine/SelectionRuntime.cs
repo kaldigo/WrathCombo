@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using Dalamud.Game.ClientState.Conditions;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.ClientState.Objects.Types;
+using ECommons;
 using ECommons.DalamudServices;
 using ECommons.GameFunctions;
 using ECommons.GameHelpers;
@@ -396,30 +399,53 @@ internal static class SelectionRuntime
     internal static bool TargetLifeAllowed(uint action, IGameObject target) => IncomingRaise.IsRaise(action)
         ? IncomingRaise.Available(target) : !target.IsDead();
 
+    internal static bool AllySelectionAvailable =>
+        Player.Available && Svc.ClientState.IsLoggedIn &&
+        !Svc.Condition[ConditionFlag.BetweenAreas] && !Svc.Condition[ConditionFlag.BetweenAreas51] &&
+        GenericHelpers.IsScreenReady() && Player.Object is { } self && self.IsValid() && self.Address != 0 &&
+        self.GameObjectId is not (0 or 0xE0000000) &&
+        self.ObjectIndex < Svc.Objects.Length && Svc.Objects[self.ObjectIndex] is IBattleChara current &&
+        current.IsValid() && current.Address == self.Address && current.GameObjectId == self.GameObjectId;
+
+    internal static IBattleChara? CurrentFriendlyActor(IGameObject? candidate)
+    {
+        if (!AllySelectionAvailable || candidate is null || !candidate.IsValid() || candidate.Address == 0 ||
+            candidate.ObjectIndex >= Svc.Objects.Length || candidate.GameObjectId is 0 or 0xE0000000 ||
+            Svc.Objects[candidate.ObjectIndex] is not IBattleChara actor || !actor.IsValid() ||
+            actor.Address != candidate.Address || actor.GameObjectId != candidate.GameObjectId)
+            return null;
+
+        // Nameplate colour calls can dereference unavailable native state during
+        // duty transitions. Known PvE players need no native faction query; NPCs
+        // and PvP players use the existing action-target relationship check.
+        return actor.GameObjectId == Player.Object!.GameObjectId || actor is IPlayerCharacter && !InPvP() ||
+            TargetIsFriendly(actor) ? actor : null;
+    }
+
     internal static unsafe TargetDecision SelectAlly(uint action, ulong? explicitRecipient = null, Func<IBattleChara, bool>? eligible = null)
     {
-        if (!Player.Available) return TargetDecision.None("No player");
-        var party = GetPartyMembers().Select(m => m.BattleChara).Where(a => a is not null).Cast<IBattleChara>().ToArray();
+        if (!AllySelectionAvailable || CurrentFriendlyActor(Player.Object) is not { } self)
+            return TargetDecision.None("Ally selection unavailable during player or area transition");
+        var party = GetPartyMembers().Select(m => CurrentFriendlyActor(m.BattleChara)).Where(a => a is not null).Cast<IBattleChara>().ToArray();
         var overrides = new List<(TargetSource Source, IBattleChara? Actor)>();
         if (explicitRecipient is { } id)
-            overrides.Add((TargetSource.Explicit, Svc.Objects.SearchById(id) as IBattleChara));
+            overrides.Add((TargetSource.Explicit, CurrentFriendlyActor(Svc.Objects.SearchById(id))));
         else
         {
-            if ((!automatic || ExperimentalSelection.OverridesInAutomation) && ExperimentalSelection.PartyMouseover) overrides.Add((TargetSource.PartyMouseover, SimpleTarget.UIMouseOverTarget));
-            if ((!automatic || ExperimentalSelection.OverridesInAutomation) && ExperimentalSelection.WorldMouseover) overrides.Add((TargetSource.WorldMouseover, SimpleTarget.ModelMouseOverTarget as IBattleChara));
-            var selectedAlly = SimpleTarget.SoftTarget as IBattleChara;
-            if (selectedAlly is null || selectedAlly.IsHostile()) selectedAlly = SimpleTarget.HardTarget as IBattleChara;
+            if ((!automatic || ExperimentalSelection.OverridesInAutomation) && ExperimentalSelection.PartyMouseover) overrides.Add((TargetSource.PartyMouseover, CurrentFriendlyActor(SimpleTarget.UIMouseOverTarget)));
+            if ((!automatic || ExperimentalSelection.OverridesInAutomation) && ExperimentalSelection.WorldMouseover) overrides.Add((TargetSource.WorldMouseover, CurrentFriendlyActor(SimpleTarget.ModelMouseOverTarget)));
+            var selectedAlly = CurrentFriendlyActor(SimpleTarget.SoftTarget) ?? CurrentFriendlyActor(SimpleTarget.HardTarget);
             overrides.Add((TargetSource.Selected, selectedAlly));
-            if (ExperimentalSelection.Focus) overrides.Add((TargetSource.Focus, SimpleTarget.FocusTarget as IBattleChara));
+            if (ExperimentalSelection.Focus) overrides.Add((TargetSource.Focus, CurrentFriendlyActor(SimpleTarget.FocusTarget)));
         }
-        var actors = party.Concat(overrides.Where(o => o.Actor is not null).Select(o => o.Actor!)).Append(Player.Object!)
-            .DistinctBy(a => a.GameObjectId).Where(a => !a.IsHostile()).ToArray();
+        var actors = party.Concat(overrides.Where(o => o.Actor is not null).Select(o => o.Actor!)).Append(self)
+            .DistinctBy(a => a.GameObjectId).ToArray();
         var snapshot = actors.Select(a => new TargetActor(a.GameObjectId, a.Position, a.HitboxRadius,
             TargetLifeAllowed(action, a) && a.IsTargetable && (eligible?.Invoke(a) ?? true) && ActionManager.CanUseActionOnTarget(action, a.GameObject()) && InActionRange(action, a),
             party.Any(p => p.GameObjectId == a.GameObjectId), GetTargetHPPercent(a) / 100f)).ToImmutableArray();
         var requested = explicitRecipient is { } requestedId ? ImmutableArray.Create(new TargetOverride(TargetSource.Explicit, requestedId))
-            : overrides.Where(o => o.Actor is not null && !o.Actor.IsHostile()).Select(o => new TargetOverride(o.Source, o.Actor!.GameObjectId)).ToImmutableArray();
-        var input = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius, new(ActionManager.GetActionRange(action), 0),
+            : overrides.Where(o => o.Actor is not null).Select(o => new TargetOverride(o.Source, o.Actor!.GameObjectId)).ToImmutableArray();
+        var input = new TargetSelectionInput(self.Position, self.HitboxRadius, new(ActionManager.GetActionRange(action), 0),
             new(ExperimentalSelection.AutomaticAllies, ExperimentalSelection.Fallback, false, true, false), snapshot, snapshot,
             TargetOrder.Apply(requested, ExperimentalSelection.AllyOverrideOrder).ToImmutableArray());
         var result = TargetSelection.Select(input);

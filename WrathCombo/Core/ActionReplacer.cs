@@ -130,7 +130,8 @@ internal sealed class ActionReplacer : IDisposable
                 UpdateFilteredCombos();
 
             // Bail if not wanting to replace actions in this manner
-            if (!Player.Available)
+            if (!Player.Available || !Svc.ClientState.IsLoggedIn || !GenericHelpers.IsScreenReady() ||
+                Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51])
                 return OriginalHook(actionID);
 
             // Only refresh every so often

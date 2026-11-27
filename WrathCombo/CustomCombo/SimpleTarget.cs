@@ -137,10 +137,11 @@ internal static class SimpleTarget
 
         internal static IBattleChara? NearbyRaiseTarget(uint action)
         {
-            if (!Engine.ExperimentalSelection.RaiseNearbyPlayers || InPvP()) return null;
+            if (!Engine.ExperimentalSelection.RaiseNearbyPlayers || InPvP() || !Engine.SelectionRuntime.AllySelectionAvailable) return null;
             return Svc.Objects.GetBattleCharas()
-                .Where(actor => actor.IsDead && actor.IsTargetable && actor.IsAPlayer() && !actor.IsInParty() &&
-                    !actor.IsHostile() && Engine.SelectionRuntime.TargetLifeAllowed(action, actor) &&
+                .Where(actor => Engine.SelectionRuntime.CurrentFriendlyActor(actor) != null &&
+                    actor.IsDead && actor.IsTargetable && actor.IsAPlayer() && !actor.IsInParty() &&
+                    Engine.SelectionRuntime.TargetLifeAllowed(action, actor) &&
                     actor.IfInSightInRangeCanUseOn(action) != null)
                 .MinBy(actor => GetTargetDistance(actor));
         }

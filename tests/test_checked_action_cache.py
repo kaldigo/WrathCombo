@@ -41,7 +41,10 @@ namespace AccordDiagnostics {
 }
 enum Job { GNB, WHM }
 static class Player { public static bool Available = true; public static Job Job; public static int Level=100; }
-static class Svc { public static class ClientState { public static uint TerritoryType=100; } }
+enum ConditionFlag {BetweenAreas,BetweenAreas51}
+class Conditions { public HashSet<ConditionFlag> Flags=new(); public bool this[ConditionFlag f]=>Flags.Contains(f); }
+static class GenericHelpers {public static bool Screen=true;public static bool IsScreenReady()=>Screen;}
+static class Svc { public static Conditions Condition=new(); public static class ClientState { public static uint TerritoryType=100; public static bool IsLoggedIn=true; } }
 static class Service { public static class Configuration { public static int Throttle = 50; } }
 static class EzThrottler { public static bool Throttle(string key, int interval) => false; }
 static class Logs { public static void Log(this Exception e) => throw e; }
@@ -67,6 +70,16 @@ class Program {
     static void Main() {
         var hook = new Hook();
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 200) throw new Exception("Normal cache changed");
+        foreach(var flag in new[]{ConditionFlag.BetweenAreas,ConditionFlag.BetweenAreas51}) {
+            Svc.Condition.Flags.Add(flag);
+            if(hook.GetAdjustedActionDetour(IntPtr.Zero,100)!=100)throw new Exception("Transition used a cached replacement");
+            Svc.Condition.Flags.Clear();
+        }
+        GenericHelpers.Screen=false;
+        if(hook.GetAdjustedActionDetour(IntPtr.Zero,100)!=100)throw new Exception("Loading screen used a cached replacement");
+        GenericHelpers.Screen=true;Svc.ClientState.IsLoggedIn=false;
+        if(hook.GetAdjustedActionDetour(IntPtr.Zero,100)!=100)throw new Exception("Logout used a cached replacement");
+        Svc.ClientState.IsLoggedIn=true;
         foreach (var backup in new[] { Engine.EmergencyRotation.Single, Engine.EmergencyRotation.Area }) {
             hook.LastActionInvokeFor[backup] = 123;
             if (hook.GetAdjustedActionDetour(IntPtr.Zero, backup) != backup) throw new Exception("Backup hotbar action reused a cached rotation");

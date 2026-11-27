@@ -39,6 +39,7 @@ class Actor { public bool IsCasting()=>false; public CombatRole Role=>CombatRole
 class Pref { public bool CombatOnly; }
 static class RotationBehaviour { public static Pref? Preferences=new(); public static bool? Support=true; }
 static class ExperimentalSelection { public static bool ActiveHealer=true, IncludeRaise=true, RaiseNearbyPlayers; }
+static class SelectionRuntime {public static IGameObject? CurrentFriendlyActor(IGameObject actor)=>actor.Hostile?null:actor;}
 static class HealerSelection { public static bool ExecuteAutomaticRaise(){ Managed++; return true; } }
 static class cfg {
     public static bool InCombatOnly;

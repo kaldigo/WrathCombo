@@ -30,6 +30,7 @@ static class Player { public static IBattleChara Object=new(){GameObjectId=1,Cur
 static class Svc { public static class Objects { public static List<IBattleChara> GetBattleCharas()=>[new IBattleNpc()]; } }
 static class ExperimentalSelection { public static bool AutomaticAllies=true, HealEncounterPlayers; }
 static class ActionManager { public static bool CanUseActionOnTarget(uint spell,IBattleChara a)=>a.Legal; }
+static class SelectionRuntime {public static IBattleChara? CurrentFriendlyActor(IBattleChara actor)=>actor.Hostile?null:actor;}
 static class Runtime {
  public static DateTime frame=DateTime.UtcNow; public static ushort encounter=1; public static uint duty=1;
  public static bool Active()=>true;
@@ -52,6 +53,7 @@ BODY
   other.Party=true; Check(false); other.Party=false; other.Marked=false; Check(false); other.Marked=true;
   other.Position=new(100,0,0); Check(false); other.Position=default;
   other.Visible=false; Check(false); other.Visible=true; other.Legal=false; Check(false); other.Legal=true;
+  other.Hostile=true; Check(false); other.Hostile=false;
   Player.Object.Marked=false; Check(false); Player.Object.Marked=true;
   encounter=0; Check(false);
  }

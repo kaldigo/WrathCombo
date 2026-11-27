@@ -247,7 +247,8 @@ internal static partial class HealerSelection
     }
 
     private static bool AutomaticRaiseRecipient(IGameObject target) =>
-        target.IsInParty() || ExperimentalSelection.RaiseNearbyPlayers && target.IsAPlayer() && !target.IsHostile();
+        SelectionRuntime.CurrentFriendlyActor(target) != null &&
+        (target.IsInParty() || ExperimentalSelection.RaiseNearbyPlayers && target.IsAPlayer());
 
     private static SelectionDecision? Raise(uint input, bool restrictAutomaticRecipient = false)
     {
