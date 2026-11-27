@@ -108,10 +108,22 @@ internal partial class MCH
              FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(
                  FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, OriginalHook(Heatblast)) / 1000f,
              RemainingGCD, 5, false, Engine.BossForecastProvider.Downtime))) &&
-        (onAoE
+        (ShouldDumpHeatBeforeDowntime(onAoE, hpThreshold) || (onAoE
             ? UseHyperchargeAoE(useAirAnchor, toolHoldThreshold, hpThreshold)
             : UseHyperchargeST(hpThreshold, skipExcavatorHold, skipHyperchargeHold, wildfireHyperchargeCutoff,
-                wildfireBossOnlyOption));
+                wildfireBossOnlyOption)));
+
+    private static bool ShouldDumpHeatBeforeDowntime(bool area, int hpThreshold)
+    {
+        if (!Engine.ExperimentalSelection.ActiveMachinist || !Engine.SelectionRuntime.Automatic ||
+            Engine.BossForecastProvider.Downtime is not (> 0 and <= 15) || !IsHyperchargeReady() ||
+            Heat < 50 || GetTargetHPPercent() <= hpThreshold || LocalPlayer.HasStatus(Buffs.FullMetalMachinist)) return false;
+        float phase = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(
+            FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, OriginalHook(Heatblast)) / 1000f * 4 + RemainingGCD + .7f;
+        if (ComboTimer > 0 && ComboTimer <= phase) return false;
+        uint tool = PlannedReassembleGcd(area);
+        return tool is not (Drill or AirAnchor or Chainsaw or Excavator or FullMetalField) || !ActionReady(tool);
+    }
 
     private static bool IsHyperchargeReady() =>
         (ActionReady(Hypercharge) || LocalPlayer.HasStatus(Buffs.Hypercharged)) && !IsOverheated;
@@ -223,6 +235,7 @@ internal partial class MCH
         int bossOnlyOption = 1,
         bool requireBoss = false) =>
         ActionReady(BarrelStabilizer) && !LocalPlayer.HasStatus(Buffs.FullMetalMachinist) &&
+        (!Engine.ExperimentalSelection.ActiveMachinist || !Engine.SelectionRuntime.Automatic || Engine.BossForecastProvider.Downtime is not { } downtime || downtime > GCD * 2) &&
         (onAoE
             ? GetTargetHPPercent() > hpThreshold
             : (requireBoss
@@ -238,6 +251,7 @@ internal partial class MCH
         float? hyperchargeWindow = null) =>
         CurrentTarget.CanApplyStatus(Debuffs.Wildfire) &&
         ActionReady(Wildfire) &&
+        (!Engine.ExperimentalSelection.ActiveMachinist || !Engine.SelectionRuntime.Automatic || Engine.BossForecastProvider.Downtime is not { } downtime || downtime > 10) &&
         JustUsed(Hypercharge, hyperchargeWindow ?? GCD + 0.9f) &&
         !LocalPlayer.HasStatus(Buffs.Wildfire) &&
         (requireBoss

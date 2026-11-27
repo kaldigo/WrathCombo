@@ -205,12 +205,17 @@ internal partial class VPR
     {
         if (Engine.ExperimentalSelection.ActiveViper)
         {
-            var window = new Engine.Selection.BurstDurationInput(
-                Math.Min(LocalPlayer.Status(Buffs.Swiftscaled).RemainingTimeOrZero(), LocalPlayer.Status(Buffs.HuntersInstinct).RemainingTimeOrZero()),
-                true, GCD, RemainingGCD, ActionLearned(Ouroboros) ? 6 : 5,
-                LocalPlayer.HasStatus(Buffs.Reawakened), Engine.BossForecastProvider.Downtime);
-            bool canEnter = Engine.Selection.ResourceWindow.CanFinish(window) && !IsComboExpiring(ActionLearned(Ouroboros) ? 6 : 5);
-            Engine.TestingApi.RecordDecision("VPR.PhaseDuration", window, Engine.Selection.ResourceWindow.CanFinish(window));
+            // Reawaken and Generations do not use the ordinary weaponskill GCD.
+            // Budget the actual intervals before the final hit, not six base GCDs.
+            float Recast(uint action) => FFXIVClientStructs.FFXIV.Client.Game.ActionManager.GetAdjustedRecastTime(
+                FFXIVClientStructs.FFXIV.Client.Game.ActionType.Action, action) / 1000f;
+            Span<float> intervals = stackalloc float[] { Recast(Reawaken), Recast(FirstGeneration), Recast(SecondGeneration), Recast(ThirdGeneration), Recast(FourthGeneration) };
+            float duration = Engine.Selection.ResourceWindow.Duration(RemainingGCD, ActionLearned(Ouroboros) ? intervals : intervals[..4]);
+            float buff = Math.Min(LocalPlayer.Status(Buffs.Swiftscaled).RemainingTimeOrZero(), LocalPlayer.Status(Buffs.HuntersInstinct).RemainingTimeOrZero());
+            bool comboFits = ComboTimer <= 0 || ComboTimer > duration;
+            bool canEnter = !LocalPlayer.HasStatus(Buffs.Reawakened) && comboFits &&
+                Engine.Selection.ResourceWindow.Covers(duration, Engine.BossForecastProvider.Downtime, buff);
+            Engine.TestingApi.RecordDecision("VPR.PhaseDuration", new { Duration = duration, Buff = buff, Combo = ComboTimer, Downtime = Engine.BossForecastProvider.Downtime }, canEnter);
             if (!canEnter) return false;
         }
         if (onAoE)

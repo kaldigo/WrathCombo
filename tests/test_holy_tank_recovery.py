@@ -23,6 +23,13 @@ static class Replay {
     const uint BasicHeal = 135, PartyHeal = 124, Holy = 139, Input = 1000016;
     const ulong Tank = 268581823, Healer = 268761923;
     static float tankHP = 100f * 3472 / 7168, otherHP = 100;
+    static uint Job = 24;
+    const ulong Self = Healer;
+    static class RotationBehaviour { public static bool? Support = true; }
+    static class AST { public const uint Macrocosmos = 400, MicroCosmos = 401; public static class Buffs { public const ushort Macrocosmos = 1; } }
+    static class LocalPlayer { public static bool Macro; public static bool HasStatus(ushort id) => Macro; }
+    static float GetPartyAvgHPPercent() => (tankHP + 3 * otherHP) / 4;
+    static uint OriginalHook(uint action) => action == AST.Macrocosmos && LocalPlayer.Macro ? AST.MicroCosmos : action;
     static bool allowed = true;
     static bool RecipientFor(uint spell, ulong id, out ulong target) { target = spell == PartyHeal ? Healer : id; return true; }
     static SelectionDecision? Ready(uint input, uint action, ulong target, string reason) =>
@@ -41,6 +48,9 @@ static class Replay {
         allowed = false; Check(Recovery(Input, true, true, false) == null); allowed = true;
         otherHP = 60; Check(Recovery(Input, true, true, false) == new SelectionDecision(PartyHeal, Healer));
         otherHP = tankHP = 100; Check((Recovery(Input, true, true, false)?.Action ?? Holy) == Holy);
+        Job = 33; LocalPlayer.Macro = true; otherHP = tankHP = 40;
+        Check(Recovery(Input, true, false, false) == new SelectionDecision(AST.MicroCosmos, Healer));
+        RotationBehaviour.Support = false; Check(Recovery(Input, true, false, false) == null);
     }
 }
 """.replace('ROUTING', routing).replace('FALLBACK', fallback)

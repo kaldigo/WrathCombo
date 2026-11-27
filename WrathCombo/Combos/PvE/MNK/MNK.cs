@@ -27,6 +27,30 @@ internal partial class MNK : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                uint reply = RuminationDeadline(false, true);
+                if (reply != 0) return reply;
+                if (UseMasterfulBlitz(false))
+                    return OriginalHook(MasterfulBlitz);
+
+                if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
+                    ForceSecondOpo(false))
+                    return ForcedOpoGCD(false);
+
+                if (UseFiresReply())
+                    return FiresReply;
+
+                if (UseWindsReply())
+                    return WindsReply;
+
+                return DoPerfectBalanceCombo(ref candidate)
+                    ? candidate
+                    : DoBasicCombo();
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave() && (InCombat() || ComboAction > 0))
             {
                 if (ShouldUsePBAfterBurstHolding(false))
@@ -56,23 +80,7 @@ internal partial class MNK : Melee
                 if (Role.CanBloodBath(40))
                     return Role.Bloodbath;
             }
-
-            if (UseMasterfulBlitz(false))
-                return OriginalHook(MasterfulBlitz);
-
-            if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
-                ForceSecondOpo(false))
-                return ForcedOpoGCD(false);
-
-            if (UseFiresReply())
-                return FiresReply;
-
-            if (UseWindsReply())
-                return WindsReply;
-
-            return DoPerfectBalanceCombo(ref actionID)
-                ? actionID
-                : DoBasicCombo();
+            return plannedGcd;
         }
     }
 
@@ -94,6 +102,30 @@ internal partial class MNK : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                uint reply = RuminationDeadline(true, true);
+                if (reply != 0) return reply;
+                if (UseMasterfulBlitz(true))
+                    return OriginalHook(MasterfulBlitz);
+
+                if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
+                    ForceSecondOpo(true))
+                    return ForcedOpoGCD(true);
+
+                if (UseFiresReply(true))
+                    return FiresReply;
+
+                if (UseWindsReply())
+                    return WindsReply;
+
+                return DoPerfectBalanceCombo(ref candidate, true)
+                    ? candidate
+                    : DoBasicCombo(onAoE: true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave() && (InCombat() || ComboAction > 0))
             {
                 if (ShouldUsePBAfterBurstHolding(true))
@@ -120,23 +152,7 @@ internal partial class MNK : Melee
                 if (Role.CanBloodBath(40))
                     return Role.Bloodbath;
             }
-
-            if (UseMasterfulBlitz(true))
-                return OriginalHook(MasterfulBlitz);
-
-            if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
-                ForceSecondOpo(true))
-                return ForcedOpoGCD(true);
-
-            if (UseFiresReply(true))
-                return FiresReply;
-
-            if (UseWindsReply())
-                return WindsReply;
-
-            return DoPerfectBalanceCombo(ref actionID, true)
-                ? actionID
-                : DoBasicCombo(onAoE: true);
+            return plannedGcd;
         }
     }
 
@@ -169,6 +185,33 @@ internal partial class MNK : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                uint reply = RuminationDeadline(false, false);
+                if (reply != 0) return reply;
+                if (IsEnabled(Preset.MNK_STUseMasterfulBlitz) &&
+                    UseMasterfulBlitz(false))
+                    return OriginalHook(MasterfulBlitz);
+
+                if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
+                    ForceSecondOpo(false, IsEnabled(Preset.MNK_STUseFiresReply)))
+                    return ForcedOpoGCD(false);
+
+                if (IsEnabled(Preset.MNK_STUseFiresReply) &&
+                    UseFiresReply())
+                    return FiresReply;
+
+                if (IsEnabled(Preset.MNK_STUseWindsReply) &&
+                    UseWindsReply())
+                    return WindsReply;
+
+                return DoPerfectBalanceCombo(ref candidate)
+                    ? candidate
+                    : DoBasicCombo(IsEnabled(Preset.MNK_STUseTrueNorth), trueNorthCharges: MNK_ManualTN);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave() && (InCombat() || ComboAction > 0))
             {
                 bool burstHolding = IsEnabled(Preset.MNK_STUsePerfectBalance) &&
@@ -234,26 +277,7 @@ internal partial class MNK : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.MNK_STUseMasterfulBlitz) &&
-                UseMasterfulBlitz(false))
-                return OriginalHook(MasterfulBlitz);
-
-            if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
-                ForceSecondOpo(false, IsEnabled(Preset.MNK_STUseFiresReply)))
-                return ForcedOpoGCD(false);
-
-            if (IsEnabled(Preset.MNK_STUseFiresReply) &&
-                UseFiresReply())
-                return FiresReply;
-
-            if (IsEnabled(Preset.MNK_STUseWindsReply) &&
-                UseWindsReply())
-                return WindsReply;
-
-            return DoPerfectBalanceCombo(ref actionID)
-                ? actionID
-                : DoBasicCombo(IsEnabled(Preset.MNK_STUseTrueNorth), trueNorthCharges: MNK_ManualTN);
+            return plannedGcd;
         }
     }
 
@@ -276,6 +300,33 @@ internal partial class MNK : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                uint reply = RuminationDeadline(true, false);
+                if (reply != 0) return reply;
+                if (IsEnabled(Preset.MNK_AoEUseMasterfulBlitz) &&
+                    UseMasterfulBlitz(true))
+                    return OriginalHook(MasterfulBlitz);
+
+                if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
+                    ForceSecondOpo(true, IsEnabled(Preset.MNK_AoEUseFiresReply)))
+                    return ForcedOpoGCD(true);
+
+                if (IsEnabled(Preset.MNK_AoEUseFiresReply) &&
+                    UseFiresReply(true))
+                    return FiresReply;
+
+                if (IsEnabled(Preset.MNK_AoEUseWindsReply) &&
+                    UseWindsReply())
+                    return WindsReply;
+
+                return DoPerfectBalanceCombo(ref candidate, true)
+                    ? candidate
+                    : DoBasicCombo(onAoE: true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave() && (InCombat() || ComboAction > 0))
             {
                 bool burstHolding = IsEnabled(Preset.MNK_AoEUsePerfectBalance) &&
@@ -338,26 +389,7 @@ internal partial class MNK : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.MNK_AoEUseMasterfulBlitz) &&
-                UseMasterfulBlitz(true))
-                return OriginalHook(MasterfulBlitz);
-
-            if (LocalPlayer.HasStatus(Buffs.FormlessFist) ||
-                ForceSecondOpo(true, IsEnabled(Preset.MNK_AoEUseFiresReply)))
-                return ForcedOpoGCD(true);
-
-            if (IsEnabled(Preset.MNK_AoEUseFiresReply) &&
-                UseFiresReply(true))
-                return FiresReply;
-
-            if (IsEnabled(Preset.MNK_AoEUseWindsReply) &&
-                UseWindsReply())
-                return WindsReply;
-
-            return DoPerfectBalanceCombo(ref actionID, true)
-                ? actionID
-                : DoBasicCombo(onAoE: true);
+            return plannedGcd;
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using Dalamud.Game.ClientState.Objects.Types;
+using Dalamud.Game.ClientState.Objects.Types;
 using System;
 using WrathCombo.Core;
 using WrathCombo.CustomComboNS;
@@ -36,13 +36,10 @@ internal partial class PLD : Tank
                     return actionID;
             }
             
-            if (TryOGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-
-            return STCombo;
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
+            return plannedGcd;
         }
     }
 
@@ -69,13 +66,10 @@ internal partial class PLD : Tank
                 if (TryUseMits(RotationMode.Simple, ref actionID))
                     return actionID;
             }
-            if (TryOGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-
-            return AoECombo;
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
+            return plannedGcd;
         }
     }
 
@@ -110,13 +104,10 @@ internal partial class PLD : Tank
                     return actionID;
             }
             
-            if (TryOGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-
-            return STCombo;
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
+            return plannedGcd;
         }
     }
 
@@ -142,13 +133,10 @@ internal partial class PLD : Tank
                     return actionID;
             }
            
-            if (TryOGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID))
-                return actionID;
-
-            return AoECombo;
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID)) return actionID;
+            return plannedGcd;
         }
     }
 

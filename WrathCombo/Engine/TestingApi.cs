@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Dalamud.Plugin.Ipc;
 using ECommons.DalamudServices;
 using ECommons.GameHelpers;
@@ -87,7 +88,10 @@ internal sealed class TestingApi : IDisposable
         return new { AutomationOwnership.Allowed, AutomationOwnership.ExternalAction, SelectionRuntime.Automatic,
             PartyMouseover = global::WrathCombo.CustomComboNS.SimpleTarget.UIMouseOverTarget?.GameObjectId,
             Commitment = SelectionRuntime.Commitment, Experimental = ExperimentalSelection.Read(),
-            Encounter = BossForecastProvider.Current, AutoPaused = AutoRotation.AutoRotationController.Paused,
+            Encounter = BossForecastProvider.Current,
+            DamageRecipients = Player.Available && !Svc.ClientState.IsPvP ? EncounterDamage.Busters() : null,
+            RaidwideEvents = SelectionRuntime.Prevention.Active("raidwide").ToArray(),
+            TankbusterEvents = SelectionRuntime.Prevention.Active("tankbuster").ToArray(), AutoPaused = AutoRotation.AutoRotationController.Paused,
             Queue = manager == null ? null : new { ActionQueued = manager->ActionQueued, QueuedActionId = manager->QueuedActionId, Target = manager->QueuedTargetId.Id, AnimationLock = manager->AnimationLock, CastActionId = manager->CastActionId, CastTimeElapsed = manager->CastTimeElapsed, CastTimeTotal = manager->CastTimeTotal } };
     }
     private static long normalWindow;
@@ -111,6 +115,9 @@ internal sealed class TestingApi : IDisposable
             lastInput = lastSend = 0;
         }
         if (ExperimentalSelection.Forecasts) BossForecastProvider.Tick();
+        TargetLifetime.Tick();
+        NativeExecution.ObserveCast();
+        ExecutionSafety.Tick();
         SelectionRuntime.Tick();
         lock (Gate) { if (Trace.Active) Trace.Check(Environment.TickCount64, Context); }
     }

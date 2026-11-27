@@ -30,6 +30,11 @@ internal static unsafe class ManualLimitBreak
         return found;
     }
 
+    // Deliberate item use (including Phoenix Down) owns its native queue and cast.
+    // Do not guess item IDs or cast durations; follow the game's actual item state.
+    private static bool IsProtected(ActionType type, uint id) =>
+        id != 0 && (type == ActionType.Item || IsLimitBreak(type, id));
+
     // Snapshot the existing action lock once. Rechecking the deadline on each frame
     // would keep an invalid click alive indefinitely.
     internal static long InputDeadline(ActionManager* am, long now)
@@ -44,22 +49,22 @@ internal static unsafe class ManualLimitBreak
     internal static bool Input(ActionManager* am, ActionType type, uint id, bool queueReplay)
     {
         if (am == null || runnerDepth != 0) return false;
-        if (queueReplay) return IsLimitBreak(type, id);
-        if (!IsLimitBreak(type, id)) { runnerQueue = default; return false; }
+        if (queueReplay) return IsProtected(type, id);
+        if (!IsProtected(type, id)) { runnerQueue = default; return false; }
         var now = Environment.TickCount64;
         var queued = Queue(am);
-        bool clear = queued.Id != 0 && queued == runnerQueue && now < queueExpires && !IsLimitBreak(queued.Type, queued.Id);
+        bool clear = queued.Id != 0 && queued == runnerQueue && now < queueExpires && !IsProtected(queued.Type, queued.Id);
         if (clear) am->ActionQueued = false;
         runnerQueue = default;
         holdUntil = InputDeadline(am, now);
-        AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Input", () => new { Action = id, ClearedRunnerQueue = clear, PreviousAction = queued.Id });
+        AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Input", () => new { Action = id, Item = type == ActionType.Item, ClearedRunnerQueue = clear, PreviousAction = queued.Id });
         return true;
     }
 
     // Includes native placement of a ground LB and a job-specific action reached through a replacement.
     internal static void Placement(ActionType type, uint id)
     {
-        if (IsLimitBreak(type, id)) holdUntil = Environment.TickCount64 + 1800;
+        if (runnerDepth == 0 && IsProtected(type, id)) holdUntil = Environment.TickCount64 + 1800;
     }
 
     internal static bool Waiting()
@@ -68,8 +73,10 @@ internal static unsafe class ManualLimitBreak
         if (am == null) { holdUntil = 0; runnerQueue = default; return false; }
         long now = Environment.TickCount64;
         var queued = Queue(am);
-        if (IsLimitBreak(am->CastActionType, am->CastActionId) || IsLimitBreak(queued.Type, queued.Id)
-            || IsLimitBreak(am->AreaTargetingActionType, am->AreaTargetingActionId))
+        bool protectedQueue = IsProtected(queued.Type, queued.Id) &&
+            (queued.Type != ActionType.Item || queued != runnerQueue || now >= queueExpires || holdUntil != 0);
+        if (holdUntil != 0 && am->CastActionId != 0 || IsProtected(am->CastActionType, am->CastActionId) || protectedQueue
+            || IsProtected(am->AreaTargetingActionType, am->AreaTargetingActionId))
             holdUntil = Math.Max(holdUntil, now + 500);
         if (holdUntil == 0) return false;
         if (am->AnimationLock > 0) holdUntil = Math.Max(holdUntil, now + 100);
@@ -77,6 +84,12 @@ internal static unsafe class ManualLimitBreak
         holdUntil = 0;
         AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Resume", () => new { });
         return false;
+    }
+
+    internal static bool HasManualQueue()
+    {
+        var queued = Queue(ActionManager.Instance());
+        return queued.Id != 0 && (queued != runnerQueue || Environment.TickCount64 >= queueExpires);
     }
 
     internal static RunnerScope TrackRunner() => new(Queue(ActionManager.Instance()));

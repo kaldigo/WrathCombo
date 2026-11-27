@@ -106,7 +106,7 @@ internal partial class DRG
     private static bool UseLifeSurge(bool onAoE = false)
     {
         if (!Engine.ExperimentalSelection.ActiveDrg && !Engine.ExperimentalSelection.CompareDrg) return UseLifeSurgeLegacy(onAoE);
-        uint plannedGcd = DoBasicCombo(onAoE: onAoE, includeDisembowel: onAoE);
+        uint plannedGcd = Engine.SelectionRuntime.PlannedGcd != 0 ? Engine.SelectionRuntime.PlannedGcd : PlannedWeaponskill(onAoE);
         var snapshot = new Engine.Selection.DrgPreparationInput(plannedGcd,
             OriginalHook(FullThrust), OriginalHook(VorpalThrust), OriginalHook(Disembowel), OriginalHook(ChaosThrust), OriginalHook(DoomSpike),
             ActionLearned(Drakesbane), ActionLearned(FullThrust), ActionLearned(SonicThrust), ActionLearned(CoerthanTorment), onAoE,
