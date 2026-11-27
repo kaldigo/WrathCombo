@@ -225,7 +225,9 @@ internal partial class WAR : Tank
             if (Engine.ExperimentalSelection.ActiveWarrior)
             {
                 var snapshot = new Engine.Selection.BurstDurationInput(LocalPlayer.Status(Buffs.SurgingTempest).RemainingTimeOrZero(),
-                    ActionLearned(StormsEye), GetCooldown(HeavySwing).CooldownTotal, RemainingGCD, 3,
+                    ActionLearned(StormsEye), GetCooldown(HeavySwing).CooldownTotal, RemainingGCD,
+                    3 + ((flags.HasFlag(Combo.Simple) || IsSTEnabled(flags, Preset.WAR_ST_PrimalRend) ||
+                        IsAoEEnabled(flags, Preset.WAR_AoE_PrimalRend)) && ActionLearned(PrimalRend) ? ActionLearned(PrimalRuination) ? 2 : 1 : 0),
                     HasIR.Stacks || HasNascentChaos, Engine.BossForecastProvider.Downtime);
                 canFinishBurst = Engine.Selection.ResourceWindow.CanFinish(snapshot);
                 Engine.TestingApi.RecordDecision("WAR.BurstDuration", snapshot, canFinishBurst);
@@ -656,7 +658,7 @@ internal partial class WAR : Tank
     private static bool CanUseBossMits(RotationMode rotationFlags, ref uint actionID)
     {
         #region Initial Bailout
-        if (!InCombat() || !CanWeave() || !InBossEncounter() || !IsEnabled(Preset.WAR_Mitigation_Boss)) return false;
+        if (!InCombat() || (!CanWeave() && !Engine.EncounterDamage.EmergencyAbilityWindow) || !InBossEncounter() || !IsEnabled(Preset.WAR_Mitigation_Boss)) return false;
         #endregion
 
         #region Vengeance
@@ -706,7 +708,7 @@ internal partial class WAR : Tank
 
         bool rawIntuitionOnCD = IsEnabled(Preset.WAR_Mitigation_Boss_RawIntuition_OnCD) &&  PlayerHealthPercentageHp() <= RawIntuitionHealthThreshold && IsPlayerTargeted() && RawIntuitionOnCDInMitigationContent;
         bool rawIntuitionTankbuster = IsEnabled(Preset.WAR_Mitigation_Boss_RawIntuition_TankBuster) && RawIntuitionTankBusterInMitigationContent &&
-                                      HasIncomingTankBusterEffect(out var incomingBusterAge) && incomingBusterAge >= rawIntuitionDelay;
+                                      Engine.EncounterDamage.TankbusterWindow(rawIntuitionDelay, ActionLearned(Bloodwhetting) ? 4 : 6);
 
         if (ActionReady(OriginalHook(RawIntuition)) && (rawIntuitionOnCD || rawIntuitionTankbuster))
         {

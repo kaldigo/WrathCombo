@@ -60,7 +60,7 @@ internal partial class OccultCrescent
             return false;
 
         if (IsEnabledAndUsable(Preset.Phantom_Freelancer_OccultResuscitation, OccultResuscitation) &&
-            PlayerHP <= Phantom_Freelancer_Resuscitation_Health && !CanWeave())
+            Engine.EncounterDamage.ShouldSelfHeal(OccultResuscitation, Phantom_Freelancer_Resuscitation_Health) && !CanWeave())
         {
             actionID = OccultResuscitation; // self-heal
             return true;
@@ -93,7 +93,7 @@ internal partial class OccultCrescent
         }
 
         if (IsEnabledAndUsable(Preset.Phantom_Knight_OccultHeal, OccultHeal) &&
-            PlayerHP <= Phantom_Knight_OccultHeal_Health && PlayerMP >= 5000)
+            Engine.EncounterDamage.ShouldSelfHeal(OccultHeal, Phantom_Knight_OccultHeal_Health) && PlayerMP >= 5000)
         {
             actionID = OccultHeal; // heal
             return true;

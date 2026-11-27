@@ -22,6 +22,33 @@ internal partial class VPR : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (UseVicewinderCombo(ref candidate, preferRangedWhenOor: true))
+                    return candidate;
+
+                if (UseReawaken())
+                    return Reawaken;
+
+                if (OvercapUncoiledFuryProtection(false))
+                    return UncoiledFury;
+
+                if (UseVicewinder())
+                    return DoVicewinder();
+
+                if (UseUncoiledFury())
+                    return UncoiledFury;
+
+                if (ActionReady(WrithingSnap) &&
+                    !InMeleeRange() && HasBattleTarget() &&
+                    !HasRattlingCoilStacks)
+                    return WrithingSnap;
+
+                return UseCombo(candidate, false, true, true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseSerpentsTailWeave(false, true, true))
@@ -46,28 +73,7 @@ internal partial class VPR : Melee
                 if (RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (UseVicewinderCombo(ref actionID, preferRangedWhenOor: true))
-                return actionID;
-
-            if (UseReawaken())
-                return Reawaken;
-
-            if (OvercapUncoiledFuryProtection(false))
-                return UncoiledFury;
-
-            if (UseVicewinder())
-                return DoVicewinder();
-
-            if (UseUncoiledFury())
-                return UncoiledFury;
-
-            if (ActionReady(WrithingSnap) &&
-                !InMeleeRange() && HasBattleTarget() &&
-                !HasRattlingCoilStacks)
-                return WrithingSnap;
-
-            return UseCombo(actionID, false, true, true);
+            return plannedGcd;
         }
     }
 
@@ -83,6 +89,27 @@ internal partial class VPR : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (UseVicepitCombo(ref candidate))
+                    return candidate;
+
+                if (UseReawaken(true) && InActionRange(Reawaken))
+                    return Reawaken;
+
+                if (OvercapUncoiledFuryProtection(true))
+                    return UncoiledFury;
+
+                if (UseVicepit())
+                    return Vicepit;
+
+                return UseUncoiledFury(true)
+                    ? UncoiledFury
+                    : UseCombo(candidate, true, true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseSerpentsTailWeave(true, true, true))
@@ -104,22 +131,7 @@ internal partial class VPR : Melee
                 if (RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (UseVicepitCombo(ref actionID))
-                return actionID;
-
-            if (UseReawaken(true) && InActionRange(Reawaken))
-                return Reawaken;
-
-            if (OvercapUncoiledFuryProtection(true))
-                return UncoiledFury;
-
-            if (UseVicepit())
-                return Vicepit;
-
-            return UseUncoiledFury(true)
-                ? UncoiledFury
-                : UseCombo(actionID, true, true);
+            return plannedGcd;
         }
     }
 
@@ -140,6 +152,49 @@ internal partial class VPR : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (IsEnabled(Preset.VPR_ST_VicewinderCombo) &&
+                    UseVicewinderCombo(ref candidate, VPR_VicewinderBuffPrio,
+                        IsEnabled(Preset.VPR_ST_UncoiledFury) ||
+                        IsEnabled(Preset.VPR_ST_RangedUptime)))
+                    return candidate;
+
+                if (IsEnabled(Preset.VPR_ST_Reawaken) &&
+                    UseReawaken(hpThresholdUsage: ReawakenHPThreshold(), hpThresholdDontSave: VPR_ST_ReAwakenAlwaysUse))
+                    return Reawaken;
+
+                if (IsEnabled(Preset.VPR_ST_UncoiledFury) &&
+                    OvercapUncoiledFuryProtection(false))
+                    return UncoiledFury;
+
+                if (IsEnabled(Preset.VPR_ST_Vicewinder) &&
+                    UseVicewinder())
+                    return DoVicewinder(
+                        false,
+                        IsEnabled(Preset.VPR_TrueNorthDynamic),
+                        VPR_ManualTN);
+
+                if (IsEnabled(Preset.VPR_ST_UncoiledFury) &&
+                    UseUncoiledFury(stHoldCharges: VPR_ST_UncoiledFuryHoldCharges, stHpThreshold: VPR_ST_UncoiledFuryAlwaysUse))
+                    return UncoiledFury;
+
+                if (!InMeleeRange() && HasBattleTarget() &&
+                    IsEnabled(Preset.VPR_ST_RangedUptime) &&
+                    ActionReady(WrithingSnap) &&
+                    (IsEnabled(Preset.VPR_ST_UncoiledFury) && !HasRattlingCoilStacks ||
+                     !IsEnabled(Preset.VPR_ST_UncoiledFury)))
+                    return WrithingSnap;
+
+                return UseCombo(candidate, false,
+                    IsEnabled(Preset.VPR_ST_GenerationCombo),
+                    IsEnabled(Preset.VPR_TrueNorthDynamic),
+                    VPR_ManualTN,
+                    VPR_ST_TrueNorthDynamicHoldCharge);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseSerpentsTailWeave(false,
@@ -172,44 +227,7 @@ internal partial class VPR : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.VPR_ST_VicewinderCombo) &&
-                UseVicewinderCombo(ref actionID, VPR_VicewinderBuffPrio,
-                    IsEnabled(Preset.VPR_ST_UncoiledFury) ||
-                    IsEnabled(Preset.VPR_ST_RangedUptime)))
-                return actionID;
-
-            if (IsEnabled(Preset.VPR_ST_Reawaken) &&
-                UseReawaken(hpThresholdUsage: ReawakenHPThreshold(), hpThresholdDontSave: VPR_ST_ReAwakenAlwaysUse))
-                return Reawaken;
-
-            if (IsEnabled(Preset.VPR_ST_UncoiledFury) &&
-                OvercapUncoiledFuryProtection(false))
-                return UncoiledFury;
-
-            if (IsEnabled(Preset.VPR_ST_Vicewinder) &&
-                UseVicewinder())
-                return DoVicewinder(
-                    false,
-                    IsEnabled(Preset.VPR_TrueNorthDynamic),
-                    VPR_ManualTN);
-
-            if (IsEnabled(Preset.VPR_ST_UncoiledFury) &&
-                UseUncoiledFury(stHoldCharges: VPR_ST_UncoiledFuryHoldCharges, stHpThreshold: VPR_ST_UncoiledFuryAlwaysUse))
-                return UncoiledFury;
-
-            if (!InMeleeRange() && HasBattleTarget() &&
-                IsEnabled(Preset.VPR_ST_RangedUptime) &&
-                ActionReady(WrithingSnap) &&
-                (IsEnabled(Preset.VPR_ST_UncoiledFury) && !HasRattlingCoilStacks ||
-                 !IsEnabled(Preset.VPR_ST_UncoiledFury)))
-                return WrithingSnap;
-
-            return UseCombo(actionID, false,
-                IsEnabled(Preset.VPR_ST_GenerationCombo),
-                IsEnabled(Preset.VPR_TrueNorthDynamic),
-                VPR_ManualTN,
-                VPR_ST_TrueNorthDynamicHoldCharge);
+            return plannedGcd;
         }
     }
 
@@ -225,6 +243,34 @@ internal partial class VPR : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (IsEnabled(Preset.VPR_AoE_VicepitCombo) &&
+                    UseVicepitCombo(ref candidate, VPR_AoE_VicepitComboRangeCheck == 1))
+                    return candidate;
+
+                if (IsEnabled(Preset.VPR_AoE_Reawaken) &&
+                    UseReawaken(true, hpThresholdUsageAoE: VPR_AoE_ReawakenHPThreshold) &&
+                    (InActionRange(Reawaken) || VPR_AoE_ReawakenRangecheck == 1))
+                    return Reawaken;
+
+                if (IsEnabled(Preset.VPR_AoE_UncoiledFury) &&
+                    OvercapUncoiledFuryProtection(true))
+                    return UncoiledFury;
+
+                if (IsEnabled(Preset.VPR_AoE_Vicepit) &&
+                    UseVicepit(VPR_AoE_VicepitRangeCheck == 1))
+                    return Vicepit;
+
+                if (IsEnabled(Preset.VPR_AoE_UncoiledFury) &&
+                    UseUncoiledFury(true, aoeHoldCharges: VPR_AoE_UncoiledFuryHoldCharges, aoeHpThreshold: VPR_AoE_UncoiledFuryAlwaysUse))
+                    return UncoiledFury;
+
+                return UseCombo(candidate, true, IsEnabled(Preset.VPR_AoE_ReawakenCombo));
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseSerpentsTailWeave(true,
@@ -253,29 +299,7 @@ internal partial class VPR : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.VPR_AoE_VicepitCombo) &&
-                UseVicepitCombo(ref actionID, VPR_AoE_VicepitComboRangeCheck == 1))
-                return actionID;
-
-            if (IsEnabled(Preset.VPR_AoE_Reawaken) &&
-                UseReawaken(true, hpThresholdUsageAoE: VPR_AoE_ReawakenHPThreshold) &&
-                (InActionRange(Reawaken) || VPR_AoE_ReawakenRangecheck == 1))
-                return Reawaken;
-
-            if (IsEnabled(Preset.VPR_AoE_UncoiledFury) &&
-                OvercapUncoiledFuryProtection(true))
-                return UncoiledFury;
-
-            if (IsEnabled(Preset.VPR_AoE_Vicepit) &&
-                UseVicepit(VPR_AoE_VicepitRangeCheck == 1))
-                return Vicepit;
-
-            if (IsEnabled(Preset.VPR_AoE_UncoiledFury) &&
-                UseUncoiledFury(true, aoeHoldCharges: VPR_AoE_UncoiledFuryHoldCharges, aoeHpThreshold: VPR_AoE_UncoiledFuryAlwaysUse))
-                return UncoiledFury;
-
-            return UseCombo(actionID, true, IsEnabled(Preset.VPR_AoE_ReawakenCombo));
+            return plannedGcd;
         }
     }
 

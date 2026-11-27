@@ -271,7 +271,7 @@ internal partial class PLD
     {
         #region Initial Bailout
 
-        if (!InCombat() || !CanWeave() || !InBossEncounter() || !IsEnabled(Preset.PLD_Mitigation_Boss)) return false;
+        if (!InCombat() || (!CanWeave() && !Engine.EncounterDamage.EmergencyAbilityWindow) || !InBossEncounter() || !IsEnabled(Preset.PLD_Mitigation_Boss)) return false;
 
         #endregion
 
@@ -330,7 +330,7 @@ internal partial class PLD
         bool sheltronOvercap = IsEnabled(Preset.PLD_Mitigation_Boss_SheltronOvercap) && 
                                Gauge.OathGauge >= sheltronOathThreshold && IsPlayerTargeted() && PlayerHealthPercentageHp() <= sheltronHealthThreshold;
         bool sheltronTankbuster = IsEnabled(Preset.PLD_Mitigation_Boss_SheltronTankbuster) && Gauge.OathGauge >= 50 && sheltronInMitigationContent &&
-                                  HasIncomingTankBusterEffect(out var incomingBusterAge) && incomingBusterAge >= sheltronDelay;
+                                  Engine.EncounterDamage.TankbusterWindow(sheltronDelay, ActionLearned(HolySheltron) ? 4 : 6);
 
         if (ActionReady(OriginalHook(Sheltron)) &&
             !LocalPlayer.HasStatus(Buffs.Sheltron) &&
@@ -554,8 +554,7 @@ internal partial class PLD
             bool burstWindow = CombatEngageDuration().TotalSeconds >= 8;
             if (Engine.ExperimentalSelection.ActivePaladin)
             {
-                uint planned = flags.HasFlag(Combo.AoE) ? AoECombo : STCombo;
-                TryGCDAttacks(flags, ref planned);
+                uint planned = Engine.SelectionRuntime.PlannedGcd != 0 ? Engine.SelectionRuntime.PlannedGcd : SelectDamageGcd(flags);
                 bool proc = HasDivineMight || LocalPlayer.HasStatus(Buffs.AtonementReady) ||
                     LocalPlayer.HasStatus(Buffs.SupplicationReady) || LocalPlayer.HasStatus(Buffs.SepulchreReady);
                 var snapshot = new Engine.Selection.PldBurstInput(planned,

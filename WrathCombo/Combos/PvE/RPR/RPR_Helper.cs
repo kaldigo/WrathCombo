@@ -722,7 +722,7 @@ internal partial class RPR
 
     private static bool UseArcaneCrest() =>
         ActionReady(ArcaneCrest) && InCombat() &&
-        (GroupDamageIncoming(3f) ||
+        Engine.EncounterDamage.ShortDefense(5, GroupDamageIncoming(3f) ||
          !IsInParty() && IsPlayerTargeted());
 
     private static int BossHpThreshold(int hpBossOption, int hpOption, bool isBoss) =>

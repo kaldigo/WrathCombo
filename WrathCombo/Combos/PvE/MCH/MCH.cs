@@ -20,6 +20,7 @@ internal partial class MCH : PhysicalRanged
                 ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: false) : PlannedReassembleGcd(false));
             if (CanWeave())
             {
                 if (OvercapGaussRicochetProtection(ref actionID))
@@ -97,6 +98,7 @@ internal partial class MCH : PhysicalRanged
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: true) : PlannedReassembleGcd(true));
             if (CanWeave())
             {
                 if (OvercapGaussRicochetProtection(ref actionID))
@@ -169,6 +171,7 @@ internal partial class MCH : PhysicalRanged
                 ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: false) : PlannedReassembleGcd(false));
             if (CanWeave())
             {
                 if (IsEnabled(Preset.MCH_ST_Adv_GaussRicochet) &&
@@ -310,6 +313,7 @@ internal partial class MCH : PhysicalRanged
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: true) : PlannedReassembleGcd(true));
             if (CanWeave())
             {
                 if (Engine.Options.Enabled(Feature.MchWildfireOnAoe) &&

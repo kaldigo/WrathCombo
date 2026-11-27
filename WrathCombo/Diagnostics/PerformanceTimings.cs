@@ -4,7 +4,7 @@ using ECommons.DalamudServices;
 
 namespace AccordDiagnostics;
 
-internal enum TimedPath { Framework, LiveLayout, Plan, HotbarApply, SettingsStamp, SettingsRead, SettingsApply, BackupWrite, SlotWrite, SlotVerify, ConfigSave, RunnerStart, RunnerAttempt, TargetSelection, Preview, Serialize }
+internal enum TimedPath { Framework, LiveLayout, Plan, HotbarApply, SettingsStamp, SettingsRead, SettingsApply, BackupWrite, SlotWrite, SlotVerify, ConfigSave, RunnerStart, RunnerAttempt, TargetSelection, Preview, Serialize, Forecast, HealerSelection, Execution }
 
 // Instrumentation is independent of detailed capture. Use fixed buckets to bound memory.
 internal static class PerformanceTimings
