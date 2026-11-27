@@ -3,7 +3,10 @@ using System;
 namespace WrathCombo.Engine.Selection;
 
 internal sealed record EncounterForecast(long ObservedAt, long Generation, string Module, float? Raidwide, float? Tankbuster,
-    float? Downtime, float? Knockback, float? DowntimeEnd = null, float? MaxCastTime = null)
+    float? Downtime, float? Knockback, float? DowntimeEnd = null, float? MaxCastTime = null,
+    float? Damage = null, int DamageType = 0, ulong DamagePlayers = 0, bool? ForceCancel = null,
+    bool? ForceCancelAI = null, bool? Moving = null, float? Vulnerable = null, float? VulnerableEnd = null,
+    float? SpecialModeIn = null, int SpecialMode = 0)
 {
     internal float? Remaining(float? value, long now, long generation)
     {

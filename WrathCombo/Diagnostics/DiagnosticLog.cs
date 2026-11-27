@@ -83,7 +83,12 @@ internal static class DiagnosticLog
         }
     }
     private static bool BackgroundCheck(string kind) =>
-        kind is "Feature.Evaluated" or "Runner.Tick" or "Runner.Exit" or "Rejected" or "Resolver.Rejected" or "Predicate.Result"
+        kind is "Execution.Wait" or "Preparation.Wait" or "Decision.Survival.SelfCare" or "Decision.SMN.ElementalPhase" or "Decision.BRD.TargetLifetime" or "Decision.GcdPlan" or "Decision.Healing.Landing" or "Decision.Healing.MitigationCoverage"
+        or "Decision.GNB.BurstPayoff" or "Decision.GNB.PlannedGcd" or "Decision.VPR.PhaseDuration" or "Decision.WAR.BurstDuration"
+        or "Decision.MCH.Reassemble" or "Decision.DRG.LifeSurge" or "Decision.DNC.EntryBudget"
+        or "Decision.PLD.Burst" or "Decision.Preparation" or "Decision.MNK.AcceptedPhase"
+        or "Decision.RPR.PhaseDuration" or "Decision.BRD.SnapshotRefresh" or "Decision.PvP.MCH.Analysis"
+        or "Feature.Evaluated" or "Runner.Tick" or "Runner.Exit" or "Rejected" or "Resolver.Rejected" or "Predicate.Result"
         or "Scope.End" or "Selection" or "Provider.Evaluate" or "Route.Permission" or "Decision.Target" or "Decision.Publish"
         or "Resolver.Begin" or "Resolver.Chosen" or "Resolver.Try" or "Resolver.Accepted" or "Readiness.Check" or "Readiness.Result" or "Forecast.Read" ||
         kind.StartsWith("Provider.Result:", StringComparison.Ordinal) || kind.StartsWith("PlannedGcd:", StringComparison.Ordinal)

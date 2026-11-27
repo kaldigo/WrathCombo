@@ -191,8 +191,12 @@ public static class ActionWatching
         //    }
         //}
         RotationInterop.ManualLimitBreak.Placement(actionType, actionId);
+        if (Engine.SelectionRuntime.Automatic && Engine.NativeExecution.AttemptSubmitted) return false;
+        if (Engine.SelectionRuntime.Automatic && actionId == NIN.Shukuchi && location != null &&
+            Engine.BossForecastProvider.DashSafe(Player.Position, *location) == false) return false;
         AccordDiagnostics.DiagnosticLog.Event("Native.LocationRequest", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Position = location == null ? (Vector3?)null : *location });
         bool accepted = UseActionLocHook.Original(thisPtr, actionType, actionId, targetId, location, extraParam, a7);
+        if (Engine.SelectionRuntime.Automatic) Engine.NativeExecution.ObserveResult(accepted);
         AccordDiagnostics.DiagnosticLog.Event("Native.LocationResult", () => new { Action = actionId, Target = targetId, Accepted = accepted });
         return accepted;
     }
@@ -367,10 +371,11 @@ public static class ActionWatching
 
             if (casterEntityId == Player.Object.EntityId && actionType == ActionType.Action)
             {
+                Engine.NativeExecution.Completed(actionId);
                 Engine.IntentRouting.ConfirmAction(actionId);
                 Engine.PveIntentRouting.Confirm(actionId);
                 NIN.ConfirmTestingMudra(actionId);
-                BST.ConfirmTestingFinisher(actionId);
+                BST.ConfirmTestingFinisher(actionId, numTargets > 0 ? targetEntityIds[0].Id : 0);
                 if ((Engine.ExperimentalSelection.ActiveDrg || Engine.ExperimentalSelection.ActiveHealer || Engine.ExperimentalSelection.ActivePreparedAction) &&
                     lastTestingConfirmation != (casterEntityId, header->GlobalSequence))
                 {
@@ -530,7 +535,7 @@ public static class ActionWatching
 
     private static unsafe bool CanQueueActionDetour(ActionManager* actionManager, ActionType actionType, uint actionID)
     {
-        if (RotationInterop.ManualLimitBreak.IsLimitBreak(actionType, actionID))
+        if (actionType != ActionType.Action || RotationInterop.ManualLimitBreak.IsLimitBreak(actionType, actionID))
             return CanQueueAction.Original(actionManager, actionType, actionID);
         float threshold = Service.Configuration.QueueAdjust ? Service.Configuration.QueueAdjustThreshold : 0.5f;
 
@@ -636,9 +641,13 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is used. </summary>
     private unsafe static bool UseActionDetour(ActionManager* actionManager, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
+        if (Engine.SelectionRuntime.Automatic && Engine.NativeExecution.AttemptSubmitted)
+            return AccordDiagnostics.DiagnosticLog.Reject("Automatic attempt already submitted an action");
+        Engine.NativeExecution.Invalidate();
         Engine.TestingApi.ObserveNormalPress(actionId, Engine.SelectionRuntime.Automatic, mode == ActionManager.UseActionMode.Queue);
         using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Native.Press", () => new { Action = actionId, Type = actionType.ToString(), Target = targetId, Mode = mode.ToString(), External = Engine.AutomationOwnership.ExternalAction });
-        if (RotationInterop.ManualLimitBreak.Input(actionManager, actionType, actionId, mode == ActionManager.UseActionMode.Queue))
+        if ((actionType != ActionType.Item || !Engine.AutomationOwnership.ExternalAction && !Engine.SelectionRuntime.Automatic) &&
+            RotationInterop.ManualLimitBreak.Input(actionManager, actionType, actionId, mode == ActionManager.UseActionMode.Queue))
         {
             bool manualInput = manualGeneralLimitBreak || !Engine.AutomationOwnership.ExternalAction && !Engine.SelectionRuntime.Automatic;
             bool previousGeneral = manualGeneralLimitBreak;
@@ -664,7 +673,7 @@ public static class ActionWatching
                 AccordDiagnostics.DiagnosticLog.Event("LimitBreak.ConcreteResult", () => new { Action = actionId, Target = targetId, accepted,
                     status, baseStatus, Level = LimitBreakLevel, Lock = actionManager->AnimationLock, Pending = pendingLimitBreak != null });
             }
-            AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Submitted = accepted, Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, ManualLimitBreak = true });
+            AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Submitted = accepted, Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, ManualLimitBreak = RotationInterop.ManualLimitBreak.IsLimitBreak(actionType, actionId), ManualItem = actionType == ActionType.Item });
             return accepted;
         }
         if (actionType == ActionType.Action && actionId == Engine.TankPull.Button)
@@ -804,6 +813,10 @@ public static class ActionWatching
                     mode == ActionManager.UseActionMode.Queue, Service.Configuration.OverwriteQueue, changed);
 
                 var areaTargeted = replacedWith >= 1_000_000 ? false : ActionSheet.TryGetValue(replacedWith, out var s) && s.TargetArea;
+                if (!Engine.ExecutionSafety.CanExecute(replacedWith, targetId))
+                    return AccordDiagnostics.DiagnosticLog.Reject("Automatic action violates encounter safety");
+                if (Engine.SelectionRuntime.Automatic && replacedWith < 1_000_000 && !Engine.NativeExecution.CanSubmit(replacedWith))
+                    return AccordDiagnostics.DiagnosticLog.Reject("Native recast, cast or animation lock is not ready");
 
                 if (areaTargeted && disablingReplacingTemp) //Ground targets don't hit the send method, so it has to be re-enabled here. Could be re-enabled further down the line if it causes output issues.
                     Service.ActionReplacer.EnableActionReplacingIfRequired();
@@ -918,16 +931,24 @@ public static class ActionWatching
         }
         finally
         {
-            AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Target = targetId, Strict = strictDecision, Submitted = submitted, Tracked = trackedPress,
+            bool matchingQueue = actionManager->ActionQueued && actionManager->QueuedActionId != 0 &&
+                (actionManager->QueuedActionId == actionId || actionManager->QueuedActionId == dispatchedAction) &&
+                (!strictDecision || actionManager->QueuedTargetId.Id == targetId);
+            bool accepted = submitted || matchingQueue;
+            Engine.NativeExecution.ObserveResult(accepted);
+            if (accepted && !Engine.SelectionRuntime.Automatic && !Engine.AutomationOwnership.ExternalAction && mode == ActionManager.UseActionMode.None)
+                Engine.ExecutionSafety.ManualInput(matchingQueue);
+            Engine.NativeExecution.Invalidate();
+            AccordDiagnostics.DiagnosticLog.Event("Native.Result", () => new { Action = actionId, Target = targetId, Strict = strictDecision, Submitted = submitted, Accepted = accepted, Tracked = trackedPress,
                 Queued = actionManager->ActionQueued, QueueAction = actionManager->QueuedActionId, QueueTarget = actionManager->QueuedTargetId.Id });
-            if (!submitted && Engine.SelectionRuntime.Automatic && AccordDiagnostics.DiagnosticLog.Active)
+            if (!accepted && Engine.SelectionRuntime.Automatic && AccordDiagnostics.DiagnosticLog.Active)
                 AccordDiagnostics.DiagnosticLog.Event("Native.AutomaticBlock", () => new {
                     Action = actionId, Resolved = dispatchedAction, Target = targetId,
                     Conditions = Svc.Condition.AsReadOnlySet().Select(flag => flag.ToString()).ToArray(),
                     AnimationLock = actionManager->AnimationLock, Cast = actionManager->CastActionId, Queued = actionManager->QueuedActionId,
                     GameStatus = actionId < 1000000 ? (uint?)actionManager->GetActionStatus(actionType, actionId, targetId) : null
                 });
-            if (submitted && mode != ActionManager.UseActionMode.Queue)
+            if (accepted && mode != ActionManager.UseActionMode.Queue)
             {
                 // A later accepted manual action supersedes our queue ownership.
                 raiseQueue.Validate(false, 0, 0);
@@ -939,12 +960,14 @@ public static class ActionWatching
                         actionManager->QueuedActionId, actionManager->QueuedTargetId.Id, Environment.TickCount64);
                 }
             }
-            if (submitted && trackedPress && dispatchedAction != 0 && Engine.SelectionRuntime.Automatic)
+            if (accepted && trackedPress && dispatchedAction != 0 && Engine.SelectionRuntime.Automatic)
             {
+                Engine.ExecutionSafety.Submitted(dispatchedAction);
+                Engine.NativeExecution.Submission(dispatchedAction, targetId, accepted);
                 try { Engine.SelectionRuntime.FollowAcceptedEnemy(dispatchedAction, targetId); }
                 catch (Exception ex) { Svc.Log.Error(ex, "Could not update the visible enemy after automatic action"); }
             }
-            if (trackedPress && !submitted)
+            if (trackedPress && !accepted)
             {
                 Engine.SelectionRuntime.RejectPress();
                 Engine.PveIntentRouting.RejectPress(actionId);

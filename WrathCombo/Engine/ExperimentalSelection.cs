@@ -36,7 +36,7 @@ internal static class ExperimentalSelection
     internal static bool ActivePictomancer => Observed("ActivePictomancer", Pictomancer && !Svc.ClientState.IsPvP && (uint)Player.Job == 42);
     internal static bool ActiveRedMage => Observed("ActiveRedMage", RedMage && !Svc.ClientState.IsPvP && (uint)Player.Job == 35);
     internal static bool ActivePreparedCaster => Observed("ActivePreparedCaster", ActiveSummoner || ActiveRedMage);
-    internal static bool ActivePreparedAction => Observed("ActivePreparedAction", ActivePreparedCaster || ActiveMachinist || ActiveBlueMage || ActivePvpMachinist);
+    internal static bool ActivePreparedAction => Observed("ActivePreparedAction", ActivePreparedCaster || ActiveBlackMage || ActivePictomancer || ActiveMachinist || ActiveBlueMage || ActivePvpMachinist);
     internal static bool ActiveSummoner => Observed("ActiveSummoner", Summoner && !Svc.ClientState.IsPvP && (uint)Player.Job == 27);
     internal static bool ActiveViper => Observed("ActiveViper", Viper && !Svc.ClientState.IsPvP && (uint)Player.Job == 41);
     internal static bool ActiveReaper => Observed("ActiveReaper", Reaper && !Svc.ClientState.IsPvP && (uint)Player.Job == 39);

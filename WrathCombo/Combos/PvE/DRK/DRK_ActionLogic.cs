@@ -68,15 +68,20 @@ internal partial class DRK
 
             disesteemOnly ??= false;
 
-            if ((flags.HasFlag(Combo.Simple) ||
+            if ((disesteemOnly == true || Engine.SelectionRuntime.PlannedGcd == 0) &&
+                (flags.HasFlag(Combo.Simple) ||
                  IsSTEnabled(flags, Preset.DRK_ST_CD_Disesteem) ||
                  IsAoEEnabled(flags, Preset.DRK_AoE_CD_Disesteem)) &&
                 ActionReady(Disesteem) &&
                 TraitLevelChecked(Traits.EnhancedShadowIII) &&
                 LocalPlayer.HasStatus(Buffs.Scorn) &&
-                ((Gauge.DarksideTimeRemaining > 0 &&
-                  LocalPlayer.Status(Buffs.Scorn).RemainingTimeOrZero() < 24) ||
-                 LocalPlayer.Status(Buffs.Scorn).RemainingTimeOrZero() < 14))
+                (Engine.ExperimentalSelection.ActiveDarkKnight
+                    ? Engine.Selection.DarkKnightPhase.UseScorn(LocalPlayer.Status(Buffs.Scorn).RemainingTimeOrZero(),
+                        LocalPlayer.HasStatus(Buffs.EnhancedDelirium) ? LocalPlayer.Status(Buffs.EnhancedDelirium).Stacks : LocalPlayer.Status(Buffs.Delirium).Stacks,
+                        LocalPlayer.HasStatus(Buffs.EnhancedDelirium) ? LocalPlayer.Status(Buffs.EnhancedDelirium).RemainingTimeOrZero() : LocalPlayer.Status(Buffs.Delirium).RemainingTimeOrZero(),
+                        Gauge.DarksideTimeRemaining > 0, RemainingGCD, (float)GCD)
+                    : (Gauge.DarksideTimeRemaining > 0 && LocalPlayer.Status(Buffs.Scorn).RemainingTimeOrZero() < 24) ||
+                      LocalPlayer.Status(Buffs.Scorn).RemainingTimeOrZero() < 14))
                 return (action = OriginalHook(Disesteem)) != 0;
 
             #endregion
@@ -177,6 +182,8 @@ internal partial class DRK
                 ShouldDeliriumNext = true;
 
             if (ShouldDeliriumNext &&
+                (!Engine.ExperimentalSelection.ActiveDarkKnight || Engine.Selection.ResourceWindow.CanFinish(new(0, false,
+                    (float)GCD, RemainingGCD, 3, false, Engine.BossForecastProvider.Downtime))) &&
                 IsOffCooldown(BloodWeapon))
             {
                 ShouldDeliriumNext = false;
@@ -422,7 +429,7 @@ internal partial class DRK
             #endregion
 
             // Bail if we can't weave any other mitigations
-            if (!CanWeave) return false;
+            if (!CanWeave && !Engine.EncounterDamage.EmergencyAbilityWindow) return false;
             // Bail if we just used mitigation
             if (JustUsedMitigation) return false;
 
@@ -511,7 +518,7 @@ internal partial class DRK
             // Bail if boss mitigation is not enabled
             if (!IsEnabled(Preset.DRK_Mitigation_Boss)) return false;
             // Bail if we can't weave any other mitigations
-            if (!CanWeave) return false;
+            if (!CanWeave && !Engine.EncounterDamage.EmergencyAbilityWindow) return false;
 
             #region Blackest Night (Tank Buster)
 
@@ -531,7 +538,7 @@ internal partial class DRK
 
             if (ActionReady(BlackestNight) &&
                 IsEnabled(Preset.DRK_Mitigation_Boss_BlackestNight_TB) &&
-                HasIncomingTankBusterEffect(out var incomingBusterAge) && incomingBusterAge >= blackestNightDelay &&
+                Engine.EncounterDamage.TankbusterWindow(blackestNightDelay, 7) &&
                 blackestNightInMitigationContent)
                 return (action = BlackestNight) != 0;
 
@@ -756,9 +763,12 @@ internal partial class DRK
             return false;
         }
 
-        private bool TryGetBloodAction(Combo flags, ref uint action)
+        internal bool TryGetBloodAction(Combo flags, ref uint action)
         {
-            if (ComboTimer > 0 && ComboTimer < GCD * 2) return false;
+            int phaseStacks = LocalPlayer.HasStatus(Buffs.EnhancedDelirium) ? LocalPlayer.Status(Buffs.EnhancedDelirium).Stacks : LocalPlayer.Status(Buffs.Delirium).Stacks;
+            float phaseTime = LocalPlayer.HasStatus(Buffs.EnhancedDelirium) ? LocalPlayer.Status(Buffs.EnhancedDelirium).RemainingTimeOrZero() : LocalPlayer.Status(Buffs.Delirium).RemainingTimeOrZero();
+            bool phaseDeadline = Engine.ExperimentalSelection.ActiveDarkKnight && phaseStacks > 0 && phaseTime <= RemainingGCD + GCD * phaseStacks + .1;
+            if (ComboTimer > 0 && ComboTimer < GCD * 2 && !phaseDeadline) return false;
 
             #region Variables and readiness bails
 
@@ -897,7 +907,7 @@ internal partial class DRK
                 // A boss timeline without a victim is not proof the player will take
                 // a tankbuster. Reserve for a known self marker or party-wide damage.
                 bool selfBuster = TryGetTankBusterTarget(out var victim) && victim?.GameObjectId == LocalPlayer.GameObjectId;
-                bool incoming = selfBuster || ObservedRaidwide().Seconds is >= 0 and <= 6 ||
+                bool incoming = selfBuster || Engine.EncounterDamage.SelfHitWithin(6) || ObservedRaidwide().Seconds is >= 0 and <= 6 ||
                     Engine.BossForecastProvider.Raidwide is >= 0 and <= 6;
                 manaPool = Engine.Selection.ResourceWindow.ShieldReserve(manaPool, ActionLearned(BlackestNight),
                     GetCooldownRemainingTime(BlackestNight) <= 6, HasAnyTBN, incoming);

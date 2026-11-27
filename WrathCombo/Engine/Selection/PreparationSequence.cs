@@ -1,7 +1,9 @@
 namespace WrathCombo.Engine.Selection;
 
 internal sealed record SelectionDecision(uint Action, uint PlannedGcd, ulong Recipient, uint Preparation, string Reason, long ObservedAt, long Generation, long PreventionEvent = 0, uint CompletionAction = 0,
-    System.Numerics.Vector3? GroundPosition = null, ulong? EvaluatedEnemy = null, bool ManualDamage = false, bool EncounterHeal = false)
+    System.Numerics.Vector3? GroundPosition = null, ulong? EvaluatedEnemy = null, bool ManualDamage = false, bool EncounterHeal = false,
+    PreventionPurpose Purpose = PreventionPurpose.All, long ExecuteAfter = 0, long FollowupAfter = 0,
+    PreventionPurpose FollowupPurpose = PreventionPurpose.All)
 {
     internal SelectionDecision PlaceGround(ulong recipient, System.Numerics.Vector3 position, long now, string reason) =>
         this with { Recipient = recipient, GroundPosition = position, ObservedAt = now, Reason = reason };
@@ -21,7 +23,8 @@ internal sealed class PreparationSequence
         if (pressed is { } p && p.Generation == generation && now - p.ObservedAt is >= 0 and < 3000 &&
             (action == p.Preparation || p.Preparation == 0 && p.CompletionAction != 0 && action == p.PlannedGcd))
         {
-            accepted = action == p.Preparation ? p with { ObservedAt = now } : Completion(p, now);
+            accepted = action == p.Preparation ? p with { ObservedAt = now, ExecuteAfter = p.FollowupAfter,
+                Purpose = p.FollowupPurpose == PreventionPurpose.All ? p.Purpose : p.FollowupPurpose } : Completion(p, now);
             pressed = null;
         }
         else if (accepted is { } current && action == current.PlannedGcd)

@@ -1,4 +1,4 @@
-﻿using Dalamud.Game.ClientState.JobGauge.Types;
+using Dalamud.Game.ClientState.JobGauge.Types;
 using WrathCombo.Combos.PvE.ALL;
 using WrathCombo.CustomComboNS;
 using WrathCombo.Native;
@@ -23,6 +23,28 @@ internal partial class PCT : Caster
             const Combo comboFlags = Combo.ST | Combo.Simple;
 
             //OGCD Spells
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (TryMovementOption(comboFlags, ref candidate))
+                    return candidate;
+
+                //GCD Spells
+                if (TryGCDSpells(comboFlags, ref candidate))
+                    return candidate;
+
+                //Motifs
+                if (TryDrawMotif(comboFlags, ref candidate))
+                    return candidate;
+
+                //SubCombo
+                if (TryCombos(comboFlags, ref candidate))
+                    return candidate;
+                else
+                    return OriginalHook(FireInRed);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
 
@@ -31,24 +53,8 @@ internal partial class PCT : Caster
                 return actionID;
 
             //Movement Options
-            if (TryMovementOption(comboFlags, ref actionID))
-                return actionID;
 
-            //GCD Spells
-            if (TryGCDSpells(comboFlags, ref actionID))
-                return actionID;
-
-            //Motifs
-            if (TryDrawMotif(comboFlags, ref actionID))
-                return actionID;
-
-            //SubCombo
-            if (TryCombos(comboFlags, ref actionID))
-                return actionID;
-            else
-                return OriginalHook(FireInRed);
-
-
+            return plannedGcd;
         }
     }
     internal class PCT_ST_AdvancedMode : CustomCombo
@@ -69,6 +75,28 @@ internal partial class PCT : Caster
             const Combo comboFlags = Combo.ST | Combo.Adv;
 
             //OGCD Spells
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (TryMovementOption(comboFlags, ref candidate))
+                    return candidate;
+
+                //GCD Spells
+                if (TryGCDSpells(comboFlags, ref candidate))
+                    return candidate;
+
+                //Motifs
+                if (TryDrawMotif(comboFlags, ref candidate))
+                    return candidate;
+
+                //SubCombo
+                if (TryCombos(comboFlags, ref candidate))
+                    return candidate;
+                else
+                    return OriginalHook(FireInRed);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
 
@@ -77,22 +105,8 @@ internal partial class PCT : Caster
                 return actionID;
 
             //Movement Options
-            if (TryMovementOption(comboFlags, ref actionID))
-                return actionID;
 
-            //GCD Spells
-            if (TryGCDSpells(comboFlags, ref actionID))
-                return actionID;
-
-            //Motifs
-            if (TryDrawMotif(comboFlags, ref actionID))
-                return actionID;
-
-            //SubCombo
-            if (TryCombos(comboFlags, ref actionID))
-                return actionID;
-            else
-                return OriginalHook(FireInRed);
+            return plannedGcd;
         }
     }
     #endregion
@@ -113,26 +127,34 @@ internal partial class PCT : Caster
             const Combo comboFlags = Combo.AoE | Combo.Simple;
 
             //OGCD Spells
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (TryMovementOption(comboFlags, ref candidate))
+                    return candidate;
+
+                //GCD Spells
+                if (TryGCDSpells(comboFlags, ref candidate))
+                    return candidate;
+
+                //Motifs
+                if (TryDrawMotif(comboFlags, ref candidate))
+                    return candidate;
+
+                //SubCombo
+                if (TryCombos(comboFlags, ref candidate))
+                    return candidate;
+                else
+                    return OriginalHook(FireIIinRed);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
 
             //Movement Options
-            if (TryMovementOption(comboFlags, ref actionID))
-                return actionID;
 
-            //GCD Spells
-            if (TryGCDSpells(comboFlags, ref actionID))
-                return actionID;
-
-            //Motifs
-            if (TryDrawMotif(comboFlags, ref actionID))
-                return actionID;
-
-            //SubCombo
-            if (TryCombos(comboFlags, ref actionID))
-                return actionID;
-            else
-                return OriginalHook(FireIIinRed);
+            return plannedGcd;
         }
     }
     internal class PCT_AoE_AdvancedMode : CustomCombo
@@ -149,6 +171,28 @@ internal partial class PCT : Caster
             const Combo comboFlags = Combo.AoE | Combo.Adv;
 
             //OGCD Spells
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (TryMovementOption(comboFlags, ref candidate))
+                    return candidate;
+
+                //GCD Spells
+                if (TryGCDSpells(comboFlags, ref candidate))
+                    return candidate;
+
+                //Motifs
+                if (TryDrawMotif(comboFlags, ref candidate))
+                    return candidate;
+
+                //SubCombo
+                if (TryCombos(comboFlags, ref candidate))
+                    return candidate;
+                else
+                    return OriginalHook(FireIIinRed);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (TryOGCDSpells(comboFlags, ref actionID))
                 return actionID;
 
@@ -156,22 +200,8 @@ internal partial class PCT : Caster
                 return actionID;
 
             //Movement Options
-            if (TryMovementOption(comboFlags, ref actionID))
-                return actionID;
 
-            //GCD Spells
-            if (TryGCDSpells(comboFlags, ref actionID))
-                return actionID;
-
-            //Motifs
-            if (TryDrawMotif(comboFlags, ref actionID))
-                return actionID;
-
-            //SubCombo
-            if (TryCombos(comboFlags, ref actionID))
-                return actionID;
-            else
-                return OriginalHook(FireIIinRed);
+            return plannedGcd;
         }
     }
     #endregion

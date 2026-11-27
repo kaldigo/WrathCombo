@@ -19,13 +19,14 @@ namespace WrathCombo.Engine;
 internal static partial class HealerSelection
 {
     [ThreadStatic] private static bool ownsPrevention;
-    internal static bool ReplacesLegacyPrevention => ExperimentalSelection.ActiveHealer && ownsPrevention;
+    internal static bool ReplacesLegacyPrevention => ExperimentalSelection.ActiveHealer && ExperimentalSelection.PreventiveHealing && ownsPrevention;
     internal static IDisposable Enter(Preset preset) => new ProviderScope(preset);
     private sealed class ProviderScope : IDisposable
     {
         private readonly bool previous = ownsPrevention;
         internal ProviderScope(Preset preset) => ownsPrevention = preset is Preset.WHM_STHeals or Preset.WHM_AoEHeals or
-            Preset.SCH_ST_Heal or Preset.SCH_AoE_Heal or Preset.AST_ST_Heals or Preset.AST_AoE_Heals || IsDamageProvider(preset);
+            Preset.SCH_ST_Heal or Preset.SCH_AoE_Heal or Preset.AST_ST_Heals or Preset.AST_AoE_Heals ||
+            preset.Attributes().AutoAction is { IsHeal: true } || IsDamageProvider(preset);
         public void Dispose() => ownsPrevention = previous;
     }
     private static bool IsDamageProvider(Preset preset) => preset.Attributes().AutoAction is { IsHeal: false };
@@ -60,10 +61,14 @@ internal static partial class HealerSelection
     {
         action = input;
         if (!ExperimentalSelection.ActiveHealer) return false;
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.HealerSelection);
         if (preset == Preset.ALL_Healer_Raise && input == RaiseSpell)
         { action = Raise(input)?.Action ?? All.Cease; return true; }
         bool damageInput = input is All.SingleTargetDPS or All.AoEDPS or PveIntentRouting.FullRotation && IsDamageProvider(preset) &&
             CustomActionHelper.OneButtonRotationChecker(input, CustomActionHelper.GetTypeByAttribute(preset.Attributes().AutoAction));
+        bool mayHeal = preset.Attributes().AutoAction is { IsHeal: true } || damageInput && ExperimentalSelection.EffectiveHealing;
+        if (mayHeal && UrgentRecovery(input, !damageInput || ExperimentalSelection.EffectiveHealingGcds) is { } urgent)
+        { action = urgent.Action; return true; }
         if (damageInput && SelectionRuntime.Commitment?.PlannedGcd == RaiseSpell && Continuation(input) is { } raising)
         { action = raising.Action; return true; }
         if (damageInput && ExperimentalSelection.IncludeCleanse && RotationBehaviour.Support != false &&
@@ -122,17 +127,37 @@ internal static partial class HealerSelection
             AST.NeutralSect => LocalPlayer.HasStatus(AST.Buffs.NeutralSect),
             _ => true,
         };
-        if (!preparationVisible) return NoAction(decision, "Wait for the confirmed preparation status");
+        if (!preparationVisible)
+        {
+            if (Environment.TickCount64 - decision.ObservedAt < 1200)
+                return NoAction(decision, "Wait briefly for the confirmed preparation status");
+            SelectionRuntime.CancelCommitment("Preparation status missing or consumed");
+            return null;
+        }
         uint next = decision.PlannedGcd;
         if (next == SCH.DeploymentTactics && !Svc.Objects.SearchById(decision.Recipient).HasStatus(SCH.Buffs.Galvanize))
-            return NoAction(decision, "Wait for the confirmed shield to become visible");
-        if (!ActionRoutes.Allowed(next) || !ActionReadyForTarget(next, decision.Recipient))
+        {
+            if (Environment.TickCount64 - decision.ObservedAt < 1200)
+                return NoAction(decision, "Wait for the confirmed shield to become visible");
+            SelectionRuntime.CancelCommitment("Deployment shield never appeared or was consumed");
+            return null;
+        }
+        if (!ActionRoutes.Allowed(next))
+        {
+            SelectionRuntime.CancelCommitment("Prepared action excluded");
+            return null;
+        }
+        if (!ActionReadyForTarget(next, decision.Recipient))
             return NoAction(decision, "Prepared follow-up is temporarily unavailable");
         var followup = decision with { Action = next, Preparation = 0, ObservedAt = Environment.TickCount64 };
         SelectionRuntime.Publish(input, followup);
         return followup;
     }
-    private static SelectionDecision NoAction(SelectionDecision decision, string reason) => decision with { Action = All.Cease, Reason = reason };
+    private static SelectionDecision NoAction(SelectionDecision decision, string reason)
+    {
+        AccordDiagnostics.DiagnosticLog.Event("Preparation.Wait", () => new { Reason = reason, Decision = decision });
+        return decision with { Action = All.Cease, Reason = reason };
+    }
     internal static unsafe bool CommitmentStillNeeded(SelectionDecision decision)
     {
         if (decision.PlannedGcd == RaiseSpell)
@@ -152,6 +177,9 @@ internal static partial class HealerSelection
         if (selected.Recipient is not { } targetId) return null;
         if (area)
         {
+            if (Job == 33 && RotationBehaviour.Support != false && GetPartyAvgHPPercent() < 50 &&
+                LocalPlayer.HasStatus(AST.Buffs.Macrocosmos) && OriginalHook(AST.Macrocosmos) == AST.MicroCosmos &&
+                Ready(input, AST.MicroCosmos, Self, "Release accumulated Macrocosmos recovery without requiring a forecast") is { } macro) return macro;
             var partyHeal = RecoveryFor(input, targetId, true, gcds, explicitHeal);
             if (partyHeal is not null || explicitHeal) return partyHeal;
             // Multiple enemies do not imply group damage. Check the selected
@@ -160,7 +188,7 @@ internal static partial class HealerSelection
         return RecoveryFor(input, targetId, false, gcds, explicitHeal);
     }
 
-    private static unsafe SelectionDecision? RecoveryFor(uint input, ulong targetId, bool area, bool gcds, bool explicitHeal)
+    private static unsafe SelectionDecision? RecoveryFor(uint input, ulong targetId, bool area, bool gcds, bool explicitHeal, bool urgent = false)
     {
         var target = Svc.Objects.SearchById(targetId);
         float hp = area ? GetPartyAvgHPPercent() : GetTargetHPPercent(target, forceUsePending: true);
@@ -186,6 +214,7 @@ internal static partial class HealerSelection
                 IsEnabled(Preset.SCH_AoE_Heal_Indomitability) && SCH.Config.SCH_AoE_Heal_Indomitability_Recitation &&
                 ActionRoutes.Allowed(SCH.Recitation) && ActionReadyForTarget(SCH.Recitation, Self)) enabled = true;
             if (!enabled || hp > threshold || !ActionRoutes.Allowed(spell)) continue;
+            if (urgent && !ImmediateRecovery(spell)) continue;
             if (Job == 28 && spell == OriginalHook(SCH.Adloquium) && SCH.Config.SCH_ST_Heal_AldoquimOpts[1] &&
                 !LocalPlayer.HasStatus(SCH.Buffs.EmergencyTactics) &&
                 (target.HasStatus(SGE.Buffs.EukrasianDiagnosis, true) || target.HasStatus(SGE.Buffs.EukrasianPrognosis, true))) continue;
@@ -206,13 +235,13 @@ internal static partial class HealerSelection
             }
             if (IsGcd(spell) && !gcds || !IsGcd(spell) && !CanWeave() && !explicitHeal && InCombat()) continue;
             if (!RecipientFor(spell, targetId, out var recipient)) continue;
-            if (Job == 28 && area && !LocalPlayer.HasStatus(SCH.Buffs.Recitation) &&
+            if (!urgent && Job == 28 && area && !LocalPlayer.HasStatus(SCH.Buffs.Recitation) &&
                 (spell == SCH.Indomitability && SCH.Config.SCH_AoE_Heal_Indomitability_Recitation ||
                  spell == OriginalHook(SCH.Succor) && SCH.Config.SCH_AoE_Heal_Succor_Options[1]))
             {
                 if (Prepare(input, spell, recipient, SCH.Recitation, 0, null) is { } preparation) return preparation;
             }
-            if (Job == 24 && IsGcd(spell) && !LocalPlayer.HasStatus(WHM.Buffs.ThinAir) &&
+            if (!urgent && Job == 24 && IsGcd(spell) && !LocalPlayer.HasStatus(WHM.Buffs.ThinAir) &&
                 ActionManager.GetActionCost(ActionType.Action, spell, 0, 0, 0, 0) > 0 &&
                 IsEnabled(area ? Preset.WHM_AoEHeals_ThinAir : Preset.WHM_STHeals_ThinAir) &&
                 GetRemainingCharges(WHM.ThinAir) > (area ? WHM.Config.WHM_AoEHeals_ThinAir : WHM.Config.WHM_STHeals_ThinAir))
@@ -326,69 +355,78 @@ internal static partial class HealerSelection
 
     internal static SelectionDecision? Prevention(uint input, bool raidwide, bool tankbuster, bool gcds = true)
     {
+        using var route = new ActionRouteContext(ActionRoutes.For(input));
+        SelectionRuntime.BeginPreview(input);
+        if (UrgentRecovery(input, gcds) is { } urgent) return urgent;
         if (!ExperimentalSelection.PreventiveHealing) return null;
         if (ExperimentalSelection.ActiveSage) return SGE.AutomaticPrevention(raidwide, tankbuster, input, gcds);
         if (!ExperimentalSelection.ActiveHealer) return null;
         if (Continuation(input) is { } continuation) return continuation;
-        if (RotationBehaviour.Protection == false) return null;
-        if (tankbuster && SelectionRuntime.Prevention.Available("tankbuster") is { Recipient: not 0 } buster)
-        {
-            uint action; bool permitted;
-            var victim = Svc.Objects.SearchById(buster.Recipient);
-            _ = Job switch { 24 => WHM.GetMatchingConfigST(2, victim, out action, out permitted),
-                28 => SCH.GetMatchingConfigST(1, victim, out action, out permitted),
-                _ => AST.GetMatchingConfigST(2, victim, out action, out permitted) };
-            if (permitted && CanWeave() && Ready(input, action, buster.Recipient, "Known tankbuster recipient", buster.Id) is { } defense) return defense;
-        }
+        if (RotationBehaviour.Protection == false && RotationBehaviour.Support == false) return null;
+        if (RotationBehaviour.Protection != false && tankbuster)
+            foreach (var buster in SelectionRuntime.Prevention.Active("tankbuster"))
+            {
+                if (buster.Recipient == 0 || buster.DueAt is { } busterImpact && busterImpact - Environment.TickCount64 is < 0 or > 6000) continue;
+                if (BusterToolkit(input, buster, gcds) is { } defense) return defense;
+            }
         if (!raidwide || SelectionRuntime.Prevention.Available("raidwide") is not { } window) return null;
         bool mitigationCovered = PartyMitigationCoverage.Covers(window);
         float? deadline = window.DueAt is { } due ? Math.Max(0, (due - Environment.TickCount64) / 1000f) : null;
-        if (CanWeave())
+        if (TimedToolkit(input, window) is { } toolkit) return toolkit;
+        bool beforeImpact = window.DueAt is not { } impact || impact > Environment.TickCount64;
+        if (beforeImpact && (deadline is null or <= 6) && (CanWeave() || RemainingGCD <= .1f))
         {
-            if (Job == 24 && RotationBehaviour.Support != false && GroupDamageIncoming(out bool multihit) && multihit &&
+            if (!SelectionRuntime.Prevention.Fulfilled(window.Id, PreventionPurpose.Reactive) && Job == 24 && RotationBehaviour.Support != false && GroupDamageIncoming(out bool multihit) && multihit &&
                 IsEnabled(Preset.WHM_Raidwide_LiturgyOfTheBell) && !LocalPlayer.HasStatus(WHM.Buffs.LiturgyOfTheBell) && !IsMoving() &&
                 Ready(input, WHM.LiturgyOfTheBell, Self, "Bell for an observed multihit raidwide", window.Id) is { } bell) return bell;
-            if (!mitigationCovered && Job == 24 && IsEnabled(Preset.WHM_Raidwide_Temperance) && Ready(input, WHM.Temperance, Self, "One mitigation for incoming raidwide", window.Id) is { } temperance) return temperance;
-            if (!mitigationCovered && Job == 28 && IsEnabled(Preset.SCH_Raidwide_Expedient) && Ready(input, SCH.Expedient, Self, "One mitigation for incoming raidwide", window.Id) is { } expedient) return expedient;
-            if (!mitigationCovered && Job == 33 && IsEnabled(Preset.AST_Raidwide_CollectiveUnconscious) && Ready(input, AST.CollectiveUnconscious, Self, "One mitigation for incoming raidwide", window.Id) is { } collective) return collective;
+            bool reductionNeeded = RotationBehaviour.Protection != false && !mitigationCovered && !SelectionRuntime.Prevention.Fulfilled(window.Id, PreventionPurpose.Reduction);
+            if (reductionNeeded && Job == 24 && IsEnabled(Preset.WHM_Raidwide_Temperance) && Ready(input, WHM.Temperance, Self, "Mitigation covers incoming raidwide", window.Id) is { } temperance) return temperance;
+            if (reductionNeeded && Job == 28 && IsEnabled(Preset.SCH_Raidwide_Expedient) && Ready(input, SCH.Expedient, Self, "Mitigation covers incoming raidwide", window.Id) is { } expedient) return expedient;
+            if (reductionNeeded && Job == 33 && IsEnabled(Preset.AST_Raidwide_CollectiveUnconscious) && Ready(input, AST.CollectiveUnconscious, Self, "Mitigation covers incoming raidwide", window.Id) is { } collective) return collective;
         }
-        if (!gcds) return null;
-        if (Job == 28 && IsEnabled(Preset.SCH_Raidwide_Succor) && SCH.ShieldCheck)
-            return Prepare(input, PartyHeal, Self, SCH.RaidwideRecitation() ? SCH.Recitation : 0, 0, deadline, window.Id);
-        if (Job == 33 && IsEnabled(Preset.AST_Raidwide_NeutralSect) && !LocalPlayer.HasStatus(AST.Buffs.NeutralSectShield, true))
-            return Prepare(input, PartyHeal, Self, LocalPlayer.HasStatus(AST.Buffs.NeutralSect) ? 0 : AST.NeutralSect, 0, deadline, window.Id);
-        return null;
+        if (!gcds) return ScheduledRecovery(input, window, false);
+        bool shieldNeeded = RotationBehaviour.Protection != false && beforeImpact && (deadline is null or <= 5) && !SelectionRuntime.Prevention.Fulfilled(window.Id, PreventionPurpose.Shield);
+        if (shieldNeeded && Job == 28 && (SimplePartyHealing || IsEnabled(Preset.SCH_Raidwide_Succor)) && SCH.ShieldCheck)
+            if (Prepare(input, PartyHeal, Self, SCH.RaidwideRecitation() ? SCH.Recitation : 0, 0, deadline, window.Id) is { } shield) return shield;
+        if (shieldNeeded && Job == 33 && (SimplePartyHealing || IsEnabled(Preset.AST_Raidwide_NeutralSect) && IsEnabled(Preset.AST_Raidwide_AspectedHelios)) && !LocalPlayer.HasStatus(AST.Buffs.NeutralSectShield, true))
+            if (Prepare(input, PartyHeal, Self, LocalPlayer.HasStatus(AST.Buffs.NeutralSect) ? 0 : AST.NeutralSect, 0, deadline, window.Id) is { } shield) return shield;
+        return ScheduledRecovery(input, window, gcds);
     }
 
     private static unsafe SelectionDecision? Prepare(uint input, uint followup, ulong recipient, uint preparation, uint completion, float? deadline, long eventId = 0)
     {
+        if (eventId != 0 && SelectionRuntime.Prevention.Fulfilled(eventId, PreventionPurpose.Shield)) return null;
         if (!ActionLearned(followup) || !ActionRoutes.Allowed(followup) || !RecipientFor(followup, recipient, out var actual) || actual != recipient ||
             completion != 0 && !ActionRoutes.Allowed(completion)) return null;
         bool free = preparation is SCH.Recitation or WHM.ThinAir || LocalPlayer.HasStatus(SCH.Buffs.Recitation) || LocalPlayer.HasStatus(WHM.Buffs.ThinAir);
         if (!free && LocalPlayer.CurrentMp < ActionManager.GetActionCost(ActionType.Action, followup, 0, 0, 0, 0)) return null;
-        float cast = preparation == Role.Swiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast) ? 0 : GetActionCastTime(followup);
-        if (SelectionRuntime.Automatic && IsMoving() && cast > 0 && !LocalPlayer.HasStatus(Role.Buffs.Swiftcast)) return null;
+        float cast = preparation == Role.Swiftcast || LocalPlayer.HasStatus(Role.Buffs.Swiftcast) ? 0 : NativeExecution.CastTime(followup);
+        if (!ExecutionSafety.HealingCastFits(cast, preparation != 0 ? .7f : 0)) return null;
         float duration = Math.Max(IsGcd(followup) ? RemainingGCD : 0, preparation != 0 ? 0.7f : 0) + cast + 0.7f;
         if (completion != 0) duration += 0.7f;
         if (deadline is { } seconds && duration > seconds) return null;
         if (preparation != 0 && (!ActionRoutes.Allowed(preparation) || !ActionReadyForTarget(preparation, Self) || InCombat() && !CanWeave())) return null;
         var decision = new SelectionDecision(preparation != 0 ? preparation : followup, followup, recipient, preparation,
-            "Prepare the selected healing action and retain its recipient", Environment.TickCount64, SelectionRuntime.Generation, eventId, completion);
+            "Prepare the selected healing action and retain its recipient", Environment.TickCount64, SelectionRuntime.Generation, eventId, completion,
+            Purpose: eventId == 0 ? PreventionPurpose.All : PreventionPurpose.Shield);
         SelectionRuntime.Publish(input, decision);
         return decision;
     }
     private static SelectionDecision? Ready(uint input, uint action, ulong recipient, string reason, long eventId = 0)
     {
+        if (eventId != 0 && SelectionRuntime.Prevention.Fulfilled(eventId, EventPurpose(action, eventId))) return null;
+        if (!ExecutionSafety.HealingCastFits(NativeExecution.CastTime(action))) return null;
         if (ExperimentalSelection.GroundTargets && HealingGroundSelection.Supported(action))
         {
             if (!ActionRoutes.Allowed(action) || !ActionReady(action)) return null;
             if (HealingGroundSelection.Select(input, action) == All.Cease || SelectionRuntime.Preview(input) is not { } ground) return null;
-            ground = ground with { PreventionEvent = eventId, Reason = reason };
+            ground = ground with { PreventionEvent = eventId, Reason = reason, Purpose = EventPurpose(action, eventId) };
             SelectionRuntime.Publish(input, ground);
             return ground;
         }
         if (!ActionRoutes.Allowed(action) || !RecipientFor(action, recipient, out var actual) || !ActionReadyForTarget(action, actual)) return null;
-        var decision = new SelectionDecision(action, IsGcd(action) ? action : 0, actual, 0, reason, Environment.TickCount64, SelectionRuntime.Generation, eventId);
+        var decision = new SelectionDecision(action, IsGcd(action) ? action : 0, actual, 0, reason, Environment.TickCount64, SelectionRuntime.Generation, eventId,
+            Purpose: EventPurpose(action, eventId));
         SelectionRuntime.Publish(input, decision);
         return decision;
     }
