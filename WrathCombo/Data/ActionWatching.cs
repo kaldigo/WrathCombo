@@ -706,7 +706,10 @@ public static class ActionWatching
         {
             if (actionType is ActionType.Action)
             {
-                if (P.CustomActions.Manager.Actions.TryGetFirst(x => x.Id == actionManager->GetAdjustedActionId(actionId), out var customAct))
+                // Resolve once for this input. Resolving inside the search predicate
+                // reruns automatic selection for every registered custom button.
+                var replacedWith = actionManager->GetAdjustedActionId(actionId);
+                if (P.CustomActions.Manager.Actions.TryGetFirst(x => x.Id == replacedWith, out var customAct))
                 {
                     if (customAct.OnClick != null)
                     {
@@ -715,7 +718,6 @@ public static class ActionWatching
                     }
                 }
 
-                var replacedWith = actionManager->GetAdjustedActionId(actionId);
                 ulong? testingRecipient = null;
                 Vector3? testingGround = null;
                 if (mode != ActionManager.UseActionMode.Queue)
