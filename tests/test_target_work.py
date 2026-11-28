@@ -51,6 +51,7 @@ static class Svc {
   public static object? SearchById(ulong id)=>Actors.FirstOrDefault(a=>a.GameObjectId==id);
  }
 }
+class WrathPartyMember {}
 static class Fixture { public static Lumina.Excel.Sheets.Action Row=new(); public static float Range; public static int PartyReads,NativeReads; public static bool SelfAllowed=true; }
 static class ActionManager {
  public static float GetActionRange(uint action)=>Fixture.Range;
@@ -61,7 +62,7 @@ static class ExperimentalSelection { public static bool ActiveTargets=true,Autom
 static class SimpleTarget { public static IBattleChara? HardTarget; }
 static class PvpTargetEligibility { public static bool CanDamage(uint action,IBattleChara actor)=>actor.CanUse; }
 static class TestingApi { public static void RecordDecision(string name,object input,object output){} }
-namespace AutoRotation { static class AutoRotationController { public static class DPSTargeting { public static bool FightingParty(IBattleChara a,int[] party)=>a.Engaged; } } }
+namespace AutoRotation { static class AutoRotationController { public static class DPSTargeting { public static bool FightingParty(IBattleChara a,WrathPartyMember[] party)=>a.Engaged; } } }
 namespace AccordDiagnostics { enum TimedPath { TargetSelection,EnemySnapshot,ActionEligibility,LegacyTargetRanking } static class PerformanceTimings { public static IDisposable? Measure(TimedPath path)=>null; } }
 static class Runtime {
  static bool automatic=true; internal static bool HandlingPress=true;
@@ -72,7 +73,7 @@ ACTORS
 SELECTOR
 RESOLVER
  static uint OriginalHook(uint id)=>id;
- static int[] GetPartyMembers(){Fixture.PartyReads++;return [];}
+ static WrathPartyMember[] GetPartyMembers(){Fixture.PartyReads++;return [];}
  static float GetTargetHPPercent(IBattleChara a)=>100;
  static bool InActionRange(uint action,IBattleChara a)=>true;
  static ImmutableArray<TargetOverride> EnemyOverrides(IBattleChara? selected)=>selected==null?[]:[new(TargetSource.Selected,selected.GameObjectId)];
@@ -141,6 +142,8 @@ class Program {
   Check(Routing.Single(true)==chosen && DPSTargeting.Reads==1,"ST healer routing changed");
   SelectionRuntime.Handled=false;
   Check(Routing.Single(false)==chosen && DPSTargeting.Reads==2,"Legacy ST fallback lost");
+  Svc.Objects.Actors=[];int reads=Fixture.PartyReads;Runtime.Select();
+  Check(Fixture.PartyReads==reads,"Empty-world snapshot queried the party roster");
   Console.WriteLine("Target work boundaries passed");
  }
 }

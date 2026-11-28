@@ -12,6 +12,7 @@ using ECommons.GameHelpers;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using WrathCombo.Core;
 using WrathCombo.CustomComboNS;
+using WrathCombo.CustomComboNS.Functions;
 using WrathCombo.Engine.Selection;
 using WrathCombo.Extensions;
 using WrathCombo.Services;
@@ -396,10 +397,10 @@ internal static class SelectionRuntime
             return frameEnemies;
         }
         using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.EnemySnapshot);
-        var party = GetPartyMembers().ToArray();
+        WrathPartyMember[]? party = null;
         var actors = Svc.Objects.GetBattleCharas().Where(a => a.IsHostile() && !a.IsDead && a.IsTargetable)
             .Select(a => new EnemyActor(a, a.GameObjectId, a.Position, a.HitboxRadius, GetTargetHPPercent(a) / 100f,
-                AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a, party))).ToArray();
+                AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a, party ??= GetPartyMembers().ToArray()))).ToArray();
         enemyFrame = frame;
         if (enemyEvaluation is { } scope) scope.Actors = actors;
         return frameEnemies = actors;

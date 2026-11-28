@@ -39,9 +39,9 @@ static class Player {
     public static IBattleChara Object = new() {GameObjectId=1};
     public static TerritoryIntendedUseEnum TerritoryIntendedUseEnum;
 }
-record Member(ulong GameObjectId, IBattleChara? BattleChara);
+record WrathPartyMember(ulong GameObjectId, IBattleChara? BattleChara);
 static unsafe class Replay {
-    static Member[] GetPartyMembers() => [];
+    static WrathPartyMember[] GetPartyMembers() => [];
 METHOD
     static void Main() {
         var storyAlly = new IBattleNpc {GameObjectId=2};
@@ -88,6 +88,13 @@ METHOD
         if(Acquire()!=null) throw new Exception("Different arena actor was accepted");
         OccultEventTargets.ActorId=0x46A7; OccultEventTargets.CE=0;
         if(Acquire()!=null) throw new Exception("Inactive CE was accepted");
+        var partyAlly = new IBattleChara {GameObjectId=5,TargetObjectId=3};
+        partyAlly.Struct()->InCombat=true;
+        if(!FightingParty(enemy,[new(5,partyAlly)])) throw new Exception("Captured party combat was ignored");
+        partyAlly.Struct()->InCombat=false;
+        enemy.TargetObjectId=5;
+        if(!FightingParty(enemy,[new(5,partyAlly)])) throw new Exception("Enemy attacking a captured party member was rejected");
+        if(FightingParty(enemy,[])) throw new Exception("Unrelated alliance/world actor became party combat");
     }
 }
 """.replace("METHOD", method).replace("EVENT_POLICY", predicate + arenas)
