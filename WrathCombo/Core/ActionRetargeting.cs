@@ -44,6 +44,8 @@ public class ActionRetargeting : IDisposable
 {
     /// List of Retargets for actions, keyed with the action and replaced action(s).
     internal readonly Dictionary<uint, Retargeting> Retargets = [];
+    private readonly Dictionary<uint, Retargeting> automaticRetargets = [];
+    private Dictionary<uint, Retargeting> ActiveRetargets => Engine.SelectionRuntime.Automatic ? automaticRetargets : Retargets;
 
     public ActionRetargeting()
     {
@@ -103,7 +105,7 @@ public class ActionRetargeting : IDisposable
         Retargeting? oldRetarget      = null;
         foreach (var replacedAction in replacedActions.Concat([action]))
         {
-            if (!Retargets.TryGetValue(replacedAction, out oldRetarget))
+            if (!ActiveRetargets.TryGetValue(replacedAction, out oldRetarget))
                 continue;
 
             // Flag as a partial overwrite if `actionInReplaced` has different values
@@ -163,9 +165,8 @@ public class ActionRetargeting : IDisposable
         target       = null;
         replacedWith = action;
         // Find the Retarget object
-        if (!Retargets.TryGetValue(action, out var retarget) ||
-            !Service.ActionReplacer.LastActionInvokeFor
-                .TryGetValue(action, out var lastAction) ||
+        if (!ActiveRetargets.TryGetValue(action, out var retarget) ||
+            !Service.ActionReplacer.TryGetLastAction(action, out var lastAction) ||
             lastAction != retarget.Action)
             return false;
 
@@ -335,26 +336,21 @@ public class ActionRetargeting : IDisposable
     {
         // Only retarget the action as well as the replaced actions if excepted
         if (_actionsAllowedToBeReplacedAction.Contains(retarget.Action))
-            Retargets[retarget.Action] = retarget;
+            ActiveRetargets[retarget.Action] = retarget;
 
         foreach (var replacedAction in retarget.ReplacedActions)
-            Retargets[replacedAction] = retarget;
+            ActiveRetargets[replacedAction] = retarget;
     }
 
     /// <summary>
     ///     Removes all Retargets for an action.
     /// </summary>
     /// <param name="retargetID">The ID of the Retarget object to remove.</param>
-    private void RemoveRetarget(int retargetID)
+    private void RemoveRetarget(int retargetID, Dictionary<uint, Retargeting>? cache = null)
     {
-        var retarget = Retargets.Values
-            .FirstOrDefault(x => x.ID == retargetID);
-        if (retarget == null)
-            return;
-
-        var actionsToRemove = retarget.ReplacedActions.Concat([retarget.Action]);
-        foreach (var replacedAction in actionsToRemove)
-            Retargets.Remove(replacedAction);
+        cache ??= ActiveRetargets;
+        foreach (var action in cache.Where(pair => pair.Value.ID == retargetID).Select(pair => pair.Key).ToArray())
+            cache.Remove(action);
     }
 
     /// Simple Flag to stop clearing the cache when the plugin is disposed.
@@ -380,18 +376,19 @@ public class ActionRetargeting : IDisposable
         }
 
         // Find old Retargets that are allowed to be culled
-        var oldRetargets = P.ActionRetargeting.Retargets.Values
-            .Where(x => (DateTime.Now - x.Created) > TS.FromSeconds(20))
+        var oldRetargets = new[] { P.ActionRetargeting.Retargets, P.ActionRetargeting.automaticRetargets }
+            .SelectMany(cache => cache.Values.Distinct().Select(retarget => (Cache: cache, Retarget: retarget)))
+            .Where(x => (DateTime.Now - x.Retarget.Created) > TS.FromSeconds(20))
             .ToList();
 
         // Cull each unique Retarget
         if (oldRetargets.Count > 0)
             foreach (var old in oldRetargets)
             {
-                P.ActionRetargeting.RemoveRetarget(old.ID);
+                P.ActionRetargeting.RemoveRetarget(old.Retarget.ID, old.Cache);
                 // Make sure not to spam if the same retarget is culled more than once
-                if (!EZ.Throttle($"retargetClr{old.ID}", TS.FromSeconds(3)))
-                    log("cleared old Retarget for", showAction: true, retarget: old);
+                if (!EZ.Throttle($"retargetClr{old.Retarget.ID}", TS.FromSeconds(3)))
+                    log("cleared old Retarget for", showAction: true, retarget: old.Retarget);
             }
 
         Svc.Framework.RunOnTick(P.ActionRetargeting.ClearOldRetargets,
@@ -402,6 +399,7 @@ public class ActionRetargeting : IDisposable
     internal void ClearCachedRetargets()
     {
         Retargets.Clear();
+        automaticRetargets.Clear();
         log("cleared cached Retargets", logLevel: 1);
     }
 
@@ -419,6 +417,7 @@ public class ActionRetargeting : IDisposable
     {
         Configuration.ConfigChanged -= ClearCachedRetargetsOnConfigChange;
         Retargets.Clear();
+        automaticRetargets.Clear();
         CancelCacheClearing = true;
     }
 

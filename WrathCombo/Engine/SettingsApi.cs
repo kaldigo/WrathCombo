@@ -36,7 +36,7 @@ internal sealed class SettingsApi : IDisposable
 
     private static void ResetOpenerPreview()
     {
-        if (Player.Available) Service.ActionReplacer.LastActionInvokeFor.Clear();
+        if (Player.Available) Service.ActionReplacer.ClearActionCache();
     }
 
     internal SettingsApi()
@@ -167,7 +167,7 @@ internal sealed class SettingsApi : IDisposable
         {
             if (RotationBehaviour.AllowOpeners == false) global::WrathCombo.CustomComboNS.WrathOpener.CurrentOpener?.ResetOpener();
 
-            Service.ActionReplacer.LastActionInvokeFor.Clear();
+            Service.ActionReplacer.ClearActionCache();
             Service.ActionReplacer.UpdateFilteredCombos();
         }
         WrathCombo.P!.ActionRetargeting.ClearCachedRetargets();

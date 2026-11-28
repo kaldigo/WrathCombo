@@ -37,8 +37,17 @@ internal sealed class ActionReplacer : IDisposable
     private readonly Hook<IsActionReplaceableDelegate> isActionReplaceableHook;
 
     public readonly Dictionary<uint, uint> LastActionInvokeFor = [];
+    private readonly Dictionary<uint, uint> automaticActions = [];
+    internal void RecordActionInvoke(uint input, uint action) =>
+        (Engine.SelectionRuntime.Automatic ? automaticActions : LastActionInvokeFor)[input] = action;
+    internal bool TryGetLastAction(uint input, out uint action) =>
+        (Engine.SelectionRuntime.Automatic ? automaticActions : LastActionInvokeFor).TryGetValue(input, out action);
+    internal void ClearActionCache() { LastActionInvokeFor.Clear(); automaticActions.Clear(); idleIcons.Clear(); }
     private readonly Dictionary<uint, (uint Action, Job Job, uint Territory, int Level)> idleIcons = [];
-    internal void RememberIdleIcon(uint input, uint action) => idleIcons[input] = (action, Player.Job, Svc.ClientState.TerritoryType, Player.Level);
+    internal void RememberIdleIcon(uint input, uint action)
+    {
+        if (!Engine.SelectionRuntime.Automatic) idleIcons[input] = (action, Player.Job, Svc.ClientState.TerritoryType, Player.Level);
+    }
     private uint DisplayAction(uint input, uint result) =>
         (result == All.Cease || result == input && Engine.PveIntentRouting.IsDamageButton(input)) && !Engine.SelectionRuntime.HandlingPress && !Engine.SelectionRuntime.Automatic &&
         idleIcons.TryGetValue(input, out var icon) && icon.Job == Player.Job && icon.Level == Player.Level &&
@@ -134,7 +143,17 @@ internal sealed class ActionReplacer : IDisposable
                 Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51])
                 return OriginalHook(actionID);
 
-            // Only refresh every so often
+            // Automatic selection owns fresh action/recipient decisions. It must
+            // neither consume a manual icon result nor write its movement/urgency
+            // rejection into the manual preview's throttle or cache.
+            if (Engine.SelectionRuntime.Automatic)
+            {
+                uint automaticAction = GetAdjustedAction(actionID);
+                RecordActionInvoke(actionID, automaticAction);
+                return automaticAction;
+            }
+
+            // Only refresh manual previews every so often.
             if (!Engine.SelectionRuntime.ConsumePressRefresh() && !EzThrottler.Throttle("Actions" + actionID,
                     Service.Configuration.Throttle) && LastActionInvokeFor.TryGetValue(actionID, out var cached))
                 return DisplayAction(actionID, cached);
@@ -288,6 +307,7 @@ internal sealed class ActionReplacer : IDisposable
 
     public void UpdateFilteredCombos()
     {
+        ClearActionCache();
         var playerJob = Player.Job;
         var upgradedJob = playerJob.GetUpgradedJob();
 

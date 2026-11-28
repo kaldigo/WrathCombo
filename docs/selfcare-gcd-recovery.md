@@ -1,6 +1,6 @@
 # Predictive self-recovery and Variant Cure arbitration
 
-Status: implemented and validated locally on 28 November 2026; publication explicitly held at the user's request. No release tag or feed change is authorized yet.
+Status: the user authorized publishing on 28 November 2026 after fixing the separate Sprint repair loop and automatic/manual preview cache. This self-recovery change is included in candidate 1.0.4.82; native gameplay acceptance remains separate from automated checks.
 
 Self-healing now compares the current heal's landing opportunity with the opportunity after another damage GCD. The calculation includes native GCD/cast/animation locks, adjusted heal cast time, current GCD period and a conservative 0.7-second application margin. It uses observed recent health loss over that same horizon and reliable incoming-hit timing. It preserves configured normal thresholds, the preventive health ceiling, disabled forecasts, native eligibility and route permissions. This is not a forecast of an unknown boss potency.
 
@@ -10,4 +10,4 @@ Variant Cure no longer returns before an independently usable, configured Second
 
 Validation: release build with zero errors; 82 pure-policy checks; 55 Python tests, including a 14-case production-method recovery fixture and coverage of the physical job permission handoff; 474,415 current Accord compatibility assertions. The final native-eligibility adjustment was rebuilt and its focused fixture rerun. These checks do not establish in-game survival outcomes.
 
-Before publication, address/review the separate healer capture findings: Accord's Sprint normalization and configured layout disagree about the same Sprint slot, producing repeated live-layout writes/backups/config saves; Wrath's action-preview cache is shared between automatic and manual contexts, allowing a moving automatic heal rejection to contaminate the manual icon. Neither healer/UI issue was silently patched or released as part of this self-recovery change.
+The accompanying fixes address the separate healer capture findings: Accord's Sprint normalization and configured layout disagree about the same Sprint slot, producing repeated live-layout writes/backups/config saves; Wrath's action-preview cache is shared between automatic and manual contexts, allowing a moving automatic heal rejection to contaminate the manual icon. Wrath now isolates automatic action/retarget records from manual previews and refreshes automatic decisions without reusing the manual throttle. Accord normalizes configured Sprint to the same mode-aware form as its Sprint updater. Tests cover cache isolation, native manual/external/checked bypasses, retarget isolation including matching IDs, and repeated layout polls with zero new writes or backups.

@@ -1280,7 +1280,7 @@ internal unsafe class AutoRotationController
                     {
                         originalAct = actToCheck;
                         outAct = changedAct;
-                        Service.ActionReplacer.LastActionInvokeFor[actToCheck] = outAct;
+                        Service.ActionReplacer.RecordActionInvoke(actToCheck, outAct);
                         break;
                     }
                 }

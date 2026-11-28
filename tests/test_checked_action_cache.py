@@ -20,6 +20,7 @@ class CheckedActionCacheTests(unittest.TestCase):
         opener = (ROOT / 'WrathCombo/CustomCombo/WrathOpener.cs').read_text(encoding='utf-8-sig')
         opener = opener[opener.index('    public unsafe bool FullOpener('):opener.index('    internal void ObserveForTesting')].replace('unsafe ', '')
         display = source[source.index('    private readonly Dictionary<uint, (uint Action'):source.index('    /// <summary>', source.index('    private uint DisplayAction'))]
+        context = source[source.index('    private readonly Dictionary<uint, uint> automaticActions'):source.index('    private readonly Dictionary<uint, (uint Action')]
         harness = r'''
 using System;
 using System.Collections.Generic;
@@ -51,10 +52,13 @@ static class Logs { public static void Log(this Exception e) => throw e; }
 class Hook {
     public object FilteredCombos = new();
     public Dictionary<uint, uint> LastActionInvokeFor = new() { [100] = 200, [101] = 201 };
+CONTEXT
 DISPLAY
     void UpdateFilteredCombos() { }
     uint OriginalHook(uint action) => action;
-    uint GetAdjustedAction(uint action) => 999;
+    public uint ManualHeal = 124, AutomaticHeal = All.Cease;
+    uint GetAdjustedAction(uint action) => action == 124 ? (Engine.SelectionRuntime.Automatic ? AutomaticHeal : ManualHeal) :
+        action == 1000016 && Engine.SelectionRuntime.Automatic ? All.Cease : 999;
 METHOD
 }
 class Opener {
@@ -69,6 +73,26 @@ OPENER
 class Program {
     static void Main() {
         var hook = new Hook();
+        Engine.SelectionRuntime.Automatic = true;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 124) != All.Cease) throw new Exception("Automatic movement rejection lost");
+        hook.RecordActionInvoke(124, All.Cease); // Same direct path used by InvokeCombo.
+        hook.RememberIdleIcon(1000016, 777);
+        Engine.SelectionRuntime.Automatic = false;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 124) != 124) throw new Exception("Automatic Wait contaminated manual Medica");
+        if (!hook.TryGetLastAction(124, out var manual) || manual != 124) throw new Exception("Manual recipient validation used automatic result");
+        Engine.SelectionRuntime.Automatic = true; hook.AutomaticHeal = 135;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 124) != 135) throw new Exception("Automatic execution reused manual cache or stale decision");
+        if (!hook.TryGetLastAction(124, out var automatic) || automatic != 135) throw new Exception("Automatic recipient validation used manual result");
+        Engine.SelectionRuntime.Automatic = false;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 124) != 124) throw new Exception("Automatic change altered manual icon");
+        hook.ManualHeal = 136; Engine.SelectionRuntime.Refresh = true;
+        if (hook.GetAdjustedActionDetour(IntPtr.Zero, 124) != 136) throw new Exception("Real manual press did not refresh decision");
+        hook.ClearActionCache();
+        Engine.SelectionRuntime.Automatic = true;
+        if (hook.TryGetLastAction(124, out _)) throw new Exception("Settings reset retained automatic result");
+        Engine.SelectionRuntime.Automatic = false;
+        if (hook.TryGetLastAction(124, out _)) throw new Exception("Settings reset retained manual result");
+        hook.LastActionInvokeFor[100] = 200; hook.LastActionInvokeFor[101] = 201;
         if (hook.GetAdjustedActionDetour(IntPtr.Zero, 100) != 200) throw new Exception("Normal cache changed");
         foreach(var flag in new[]{ConditionFlag.BetweenAreas,ConditionFlag.BetweenAreas51}) {
             Svc.Condition.Flags.Add(flag);
@@ -130,7 +154,7 @@ class Program {
         Console.WriteLine("Checked-action cache boundary passed");
     }
 }
-'''.replace('METHOD', method).replace('DISPLAY', display).replace('OPENER', opener)
+'''.replace('METHOD', method).replace('CONTEXT', context).replace('DISPLAY', display).replace('OPENER', opener)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)
             (path / 'Cache.csproj').write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>')
