@@ -11,7 +11,7 @@ using Newtonsoft.Json.Linq;
 
 namespace AccordDiagnostics;
 
-// Identical, locally authored source in all three plugins. No runtime dependency between engines.
+// Locally authored capture transport. No runtime dependency between engines.
 internal static class DiagnosticLog
 {
     internal static Action<long>? ObserveSerialization;
@@ -21,6 +21,13 @@ internal static class DiagnosticLog
     [ThreadStatic] private static int pressDepth;
     private const long ChunkBytes = 4L * 1024 * 1024;
     private const int RetainedParts = 8;
+    private sealed class FeatureObservation(string name)
+    {
+        internal readonly string ActiveKey = name + ":active", InactiveKey = name + ":inactive";
+        internal bool Seen, Active, PvP;
+        internal uint Job;
+        internal long Next;
+    }
     private sealed class Scope(long previous, bool press) : IDisposable
     {
         private readonly long started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -54,6 +61,7 @@ internal static class DiagnosticLog
         internal readonly Channel<string> Queue = Channel.CreateBounded<string>(new BoundedChannelOptions(8192) { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
         internal readonly Dictionary<string, long> Counts = new();
         internal readonly Dictionary<string, long> NextSample = new();
+        internal readonly Dictionary<string, FeatureObservation> Features = new();
         internal long SampledOut;
         internal int ExpiredParts;
         internal readonly string Id, Component, Directory;
@@ -97,6 +105,7 @@ internal static class DiagnosticLog
     internal static void Event(string kind, Func<object?> data, string? sampleKey = null)
     {
         if (!Active) return;
+        using var timing = PerformanceTimings.Measure(TimedPath.DiagnosticCapture);
         try
         {
             // Resolve game objects on the caller thread, never on the file writer.
@@ -114,20 +123,50 @@ internal static class DiagnosticLog
                     observed.NextSample[key] = now + 1000;
                 }
             }
-            long started = System.Diagnostics.Stopwatch.GetTimestamp();
-            var payload = data();
-            lock (Gate)
-            {
-                var s = current;
-                if (s != observed || !observed.Accepting) return;
-                var line = JsonConvert.SerializeObject(new { Schema = 1, Session = s.Id, Component = s.Component,
-                    Scope = scope, Sequence = ++s.Sequence, Utc = DateTime.UtcNow, MonotonicMs = Environment.TickCount64,
-                    ElapsedMs = Environment.TickCount64 - s.Started, Kind = kind, Data = payload }, new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
-                ObserveSerialization?.Invoke(System.Diagnostics.Stopwatch.GetTimestamp() - started);
-                if (!s.Queue.Writer.TryWrite(line)) Interlocked.Increment(ref s.Dropped);
-            }
+            WriteEvent(observed, kind, data);
         }
         catch (Exception ex) { lock (Gate) { if (current is { } s) { Interlocked.Increment(ref s.Dropped); s.Error = "Capture: " + ex.Message; } } }
+    }
+    internal static void Feature(string feature, bool active, uint job, bool pvp)
+    {
+        if (!Active) return;
+        using var timing = PerformanceTimings.Measure(TimedPath.DiagnosticCapture);
+        try
+        {
+            var observed = current;
+            if (observed == null) return;
+            lock (Gate)
+            {
+                if (current != observed || !observed.Accepting) return;
+                if (!observed.Features.TryGetValue(feature, out var state))
+                    observed.Features[feature] = state = new(feature);
+                var key = active ? state.ActiveKey : state.InactiveKey;
+                observed.Counts[key] = observed.Counts.GetValueOrDefault(key) + 1;
+                long now = Environment.TickCount64;
+                // Feature gates are state, not action attempts. Preserve every transition
+                // and the exact call counts, but do not serialize identical state per press.
+                if (state.Seen && state.Active == active && state.Job == job && state.PvP == pvp && now < state.Next)
+                { observed.SampledOut++; return; }
+                state.Seen = true; state.Active = active; state.Job = job; state.PvP = pvp; state.Next = now + 1000;
+            }
+            WriteEvent(observed, "Feature.Evaluated", () => new { Feature = feature, Active = active, Job = job, PvP = pvp });
+        }
+        catch (Exception ex) { lock (Gate) { if (current is { } s) { Interlocked.Increment(ref s.Dropped); s.Error = "Capture: " + ex.Message; } } }
+    }
+    private static void WriteEvent(Session observed, string kind, Func<object?> data)
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var payload = data();
+        lock (Gate)
+        {
+            var s = current;
+            if (s != observed || !observed.Accepting) return;
+            var line = JsonConvert.SerializeObject(new { Schema = 1, Session = s.Id, Component = s.Component,
+                Scope = scope, Sequence = ++s.Sequence, Utc = DateTime.UtcNow, MonotonicMs = Environment.TickCount64,
+                ElapsedMs = Environment.TickCount64 - s.Started, Kind = kind, Data = payload }, new JsonSerializerSettings { ReferenceLoopHandling = ReferenceLoopHandling.Ignore });
+            ObserveSerialization?.Invoke(System.Diagnostics.Stopwatch.GetTimestamp() - started);
+            if (!s.Queue.Writer.TryWrite(line)) Interlocked.Increment(ref s.Dropped);
+        }
     }
     internal static object Status()
     {

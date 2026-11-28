@@ -641,6 +641,7 @@ public static class ActionWatching
     /// <summary> Handles logic when an action is used. </summary>
     private unsafe static bool UseActionDetour(ActionManager* actionManager, ActionType actionType, uint actionId, ulong targetId, uint extraParam, ActionManager.UseActionMode mode, uint comboRouteId, bool* outOptAreaTargeted)
     {
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.NativePress);
         if (Engine.SelectionRuntime.Automatic && Engine.NativeExecution.AttemptSubmitted)
             return AccordDiagnostics.DiagnosticLog.Reject("Automatic attempt already submitted an action");
         Engine.NativeExecution.Invalidate();

@@ -941,6 +941,7 @@ internal unsafe class AutoRotationController
     {
         public static IBattleChara? GetSingleTarget(Enum rotationMode)
         {
+            using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.LegacyTargetRanking);
             if (rotationMode is DPSRotationMode dpsmode)
             {
                 if (Player.Object?.Role is CombatRole.Tank ||
@@ -1047,16 +1048,19 @@ internal unsafe class AutoRotationController
                 }
                 if (cfg.DPSRotationMode == DPSRotationMode.Manual) { OverrideTarget = null; return false; }
             }
-            var autoTarget = DPSTargeting.BaseSelection.MaxBy(x => NumberOfEnemiesInRange(OriginalHook(gameAct), x, true));
             var manualTarget = SimpleTarget.HardTarget;
 
             IBattleChara? target = null;
             // Determine target according to rotation mode and AoE settings
 
             var useAutoTarget = cfg.DPSRotationMode != DPSRotationMode.Manual || (cfg.DPSRotationMode == DPSRotationMode.Manual && cfg.DPSSettings.AoEIgnoreManual && (!cfg.DPSSettings.AoEOnlyWhenTargeting || manualTarget is not null));
-            target = useAutoTarget ? autoTarget : manualTarget;
-
-            if (!attributes.AutoAction.IsHeal) target = SelectionRuntime.ResolveAutomaticEnemy(gameAct, target);
+            if (attributes.AutoAction.IsHeal || !SelectionRuntime.TryResolveAutomaticEnemy(gameAct, out target))
+            {
+                using var ranking = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.LegacyTargetRanking);
+                target = useAutoTarget
+                    ? DPSTargeting.BaseSelection.MaxBy(x => NumberOfEnemiesInRange(OriginalHook(gameAct), x, true))
+                    : manualTarget;
+            }
 
             if ((target is not IBattleChara t || (!t.IsHostile() && !t.IsFriendly())) && cfg.PauseWhenNoTarget) return true;
 
@@ -1177,9 +1181,9 @@ internal unsafe class AutoRotationController
             if (ActionManager.Instance()->ActionQueued)
                 return true;
 
-            var target = GetSingleTarget(mode);
-
-            if (attributes.AutoAction?.IsHeal != true) target = SelectionRuntime.ResolveAutomaticEnemy(gameAct, target);
+            IBattleChara? target = null;
+            if (attributes.AutoAction?.IsHeal == true || !SelectionRuntime.TryResolveAutomaticEnemy(gameAct, out target))
+                target = GetSingleTarget(mode);
 
             if ((target is not { } t || (!t.IsHostile() && !t.IsFriendly())) && cfg.PauseWhenNoTarget) return true;
 
@@ -1305,9 +1309,9 @@ internal unsafe class AutoRotationController
             ((cfg.DPSSettings.OnlyAttackInCombat && chara.Struct()->InCombat) || !cfg.DPSSettings.OnlyAttackInCombat || OccultEventTargets.Matches(chara)) &&
             IsInLineOfSight(chara);
 
-        internal static bool FightingParty(IBattleChara enemy) => OccultEventTargets.Matches(enemy) || enemy.Struct()->InCombat &&
+        internal static bool FightingParty(IBattleChara enemy, IReadOnlyList<WrathPartyMember>? party = null) => OccultEventTargets.Matches(enemy) || enemy.Struct()->InCombat &&
             (enemy.TargetObjectId == Player.Object.GameObjectId ||
-             GetPartyMembers().Any(member => enemy.TargetObjectId == member.GameObjectId ||
+             (party ?? GetPartyMembers()).Any(member => enemy.TargetObjectId == member.GameObjectId ||
                  member.BattleChara is { } ally && ally.Struct()->InCombat && ally.TargetObjectId == enemy.GameObjectId) ||
              Player.Object.Struct()->InCombat && Player.Object.TargetObjectId == enemy.GameObjectId ||
              // Story allies fight alongside the player without joining the party roster.

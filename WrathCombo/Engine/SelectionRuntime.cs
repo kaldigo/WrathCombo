@@ -30,6 +30,7 @@ internal static class SelectionRuntime
     {
         internal bool Initialized;
         internal ulong? Recipient;
+        internal EnemyActor[]? Actors;
         public void Dispose() => enemyEvaluation = previous;
     }
     internal static IDisposable? EnterEnemyEvaluation(uint input)
@@ -51,12 +52,18 @@ internal static class SelectionRuntime
     internal static IBattleChara? EvaluationTarget => enemyEvaluation?.Recipient is { } id ? Svc.Objects.SearchById(id) as IBattleChara : null;
     internal static IBattleChara? ResolveAutomaticEnemy(uint root, IBattleChara? legacy)
     {
-        if (!ExperimentalSelection.ActiveTargets || !Player.Available) return legacy;
+        return TryResolveAutomaticEnemy(root, out var target) ? target : legacy;
+    }
+    internal static bool TryResolveAutomaticEnemy(uint root, out IBattleChara? target)
+    {
+        target = null;
+        if (!ExperimentalSelection.ActiveTargets || !Player.Available) return false;
         root = OriginalHook(root);
         if (!Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(root, out var row) ||
-            row.CastType is not (1 or 2 or 3 or 4 or 10) || !row.CanTargetHostile && !(row.CanTargetSelf && row.CastType == 2)) return legacy;
+            row.CastType is not (1 or 2 or 3 or 4 or 10) || !row.CanTargetHostile && !(row.CanTargetSelf && row.CastType == 2)) return false;
         var decision = SelectEnemy(root, validateDamage: false);
-        return decision.Recipient is { } id ? Svc.Objects.SearchById(id) as IBattleChara : null;
+        target = decision.Recipient is { } id ? Svc.Objects.SearchById(id) as IBattleChara : null;
+        return true; // An authoritative empty decision must not fall back to an unsafe target.
     }
     internal static void ObserveDamageControl(uint root)
     {
@@ -381,12 +388,20 @@ internal static class SelectionRuntime
     private static EnemyActor[] frameEnemies = [];
     private static EnemyActor[] EnemyActors(bool fresh)
     {
+        if (enemyEvaluation?.Actors is { } captured) return captured;
         var frame = Svc.Framework.LastUpdateUTC;
-        if (!fresh && frame == enemyFrame) return frameEnemies;
+        if (!fresh && frame == enemyFrame)
+        {
+            if (enemyEvaluation is { } cachedScope) cachedScope.Actors = frameEnemies;
+            return frameEnemies;
+        }
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.EnemySnapshot);
+        var party = GetPartyMembers().ToArray();
         var actors = Svc.Objects.GetBattleCharas().Where(a => a.IsHostile() && !a.IsDead && a.IsTargetable)
             .Select(a => new EnemyActor(a, a.GameObjectId, a.Position, a.HitboxRadius, GetTargetHPPercent(a) / 100f,
-                AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a))).ToArray();
+                AutoRotation.AutoRotationController.DPSTargeting.FightingParty(a, party))).ToArray();
         enemyFrame = frame;
+        if (enemyEvaluation is { } scope) scope.Actors = actors;
         return frameEnemies = actors;
     }
 
@@ -394,26 +409,39 @@ internal static class SelectionRuntime
     {
         using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.TargetSelection);
         var row = Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().GetRow(action);
-        bool centered = row.CanTargetSelf && ActionManager.GetActionRange(action) <= 0;
+        float nativeRange = ActionManager.GetActionRange(action);
+        bool centered = row.CanTargetSelf && nativeRange <= 0;
+        float range = validateDamage ? centered ? row.EffectRange : nativeRange : Math.Max(30, (int)row.EffectRange);
+        var caster = Player.Position;
+        float casterRadius = Player.Object!.HitboxRadius;
+        bool? selfEligible = null;
         var selected = SimpleTarget.HardTarget as IBattleChara;
         if (selected is not null && !selected.IsHostile()) selected = null;
         var overrides = EnemyOverrides(selected);
-        var actors = EnemyActors(execution || HandlingPress).Select(enemy =>
+        var enemies = EnemyActors(execution || HandlingPress);
+        ImmutableArray<TargetActor> actors;
+        using (AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.ActionEligibility))
         {
-            var a = enemy.Actor;
-            return new TargetActor(enemy.Id, enemy.Position, enemy.Radius,
-                !a.IsInvincible && !Service.Configuration.IgnoredNPCs.ContainsKey(a.BaseId) &&
-                (!validateDamage || !Svc.ClientState.IsPvP || PvpTargetEligibility.CanDamage(action, a)) &&
-                (centered ? ActionManager.CanUseActionOnTarget(action, Player.GameObject) :
-                    ActionManager.CanUseActionOnTarget(action, a.GameObject()) && (!validateDamage || InActionRange(action, a))),
-                false, enemy.Health, Svc.ClientState.IsPvP || enemy.Engaged || !automatic && overrides.Any(o => o.Id == enemy.Id));
-        }).ToImmutableArray();
+            actors = enemies.Select(enemy =>
+            {
+                var a = enemy.Actor;
+                // Out-of-range actors still belong to the affected set for collateral
+                // safety; only their direct eligibility/native query is pruned.
+                return new TargetActor(enemy.Id, enemy.Position, enemy.Radius,
+                    System.Numerics.Vector3.Distance(caster, enemy.Position) <= range + casterRadius + enemy.Radius &&
+                    !a.IsInvincible && !Service.Configuration.IgnoredNPCs.ContainsKey(a.BaseId) &&
+                    (!validateDamage || !Svc.ClientState.IsPvP || PvpTargetEligibility.CanDamage(action, a)) &&
+                    (centered ? (selfEligible ??= ActionManager.CanUseActionOnTarget(action, Player.GameObject)) :
+                        ActionManager.CanUseActionOnTarget(action, a.GameObject()) && (!validateDamage || InActionRange(action, a))),
+                    false, enemy.Health, Svc.ClientState.IsPvP || enemy.Engaged || !automatic && overrides.Any(o => o.Id == enemy.Id));
+            }).ToImmutableArray();
+        }
         var shape = row.CastType switch { 2 => EffectShape.Circle, 3 => EffectShape.Cone, 4 => EffectShape.Line, 10 => EffectShape.Donut, _ => EffectShape.Single };
         bool acquire = ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy && selected is null;
         ImmutableArray<TargetOverride> requested = fixedRecipient is { } fixedId
             ? [new(TargetSource.Explicit, fixedId)] : overrides;
-        var snapshot = new TargetSelectionInput(Player.Position, Player.Object!.HitboxRadius,
-            new(validateDamage ? centered ? row.EffectRange : ActionManager.GetActionRange(action) : Math.Max(30, (int)row.EffectRange),
+        var snapshot = new TargetSelectionInput(caster, casterRadius,
+            new(range,
                 row.EffectRange, shape, centered, HalfAngle: MathF.PI / 3, Width: row.XAxisModifier > 0 ? row.XAxisModifier : 4, InnerRadius: shape == EffectShape.Donut ? row.XAxisModifier > 0 ? row.XAxisModifier : 8 : 0),
             new(acquire, ExperimentalSelection.Fallback, shape != EffectShape.Single, false, true, AllowManualSplash: !automatic && !Svc.ClientState.IsPvP), actors, actors,
             requested);

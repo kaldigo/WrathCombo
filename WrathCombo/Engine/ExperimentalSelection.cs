@@ -102,7 +102,7 @@ internal static class ExperimentalSelection
     private static bool Observed(string feature, bool active)
     {
         if (LegacyDamage) return false;
-        if (AccordDiagnostics.DiagnosticLog.Active) AccordDiagnostics.DiagnosticLog.Event("Feature.Evaluated", () => new { Feature = feature, Active = active, Job = (uint)Player.Job, PvP = Svc.ClientState.IsPvP }, feature + (active ? ":active" : ":inactive"));
+        if (AccordDiagnostics.DiagnosticLog.Active) AccordDiagnostics.DiagnosticLog.Feature(feature, active, (uint)Player.Job, Svc.ClientState.IsPvP);
         return active;
     }
     internal static JObject Read() => new() { ["Drg"] = Drg, ["Machinist"] = Machinist, ["Paladin"] = Paladin, ["CompareDrg"] = CompareDrg, ["Sage"] = Sage,
