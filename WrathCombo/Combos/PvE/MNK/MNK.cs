@@ -24,7 +24,7 @@ internal partial class MNK : Melee
             if (UseFormshift())
                 return FormShift;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 25))
                 return contentAction;
 
 
@@ -99,7 +99,7 @@ internal partial class MNK : Melee
             if (UseFormshift())
                 return FormShift;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 25))
                 return contentAction;
 
 
@@ -182,7 +182,7 @@ internal partial class MNK : Melee
                 UseFormshift())
                 return FormShift;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.MNK_ST_ComboHeals) ? (int)MNK_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
 
@@ -297,7 +297,7 @@ internal partial class MNK : Melee
                 UseFormshift())
                 return FormShift;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.MNK_AoE_ComboHeals) ? (int)MNK_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
 

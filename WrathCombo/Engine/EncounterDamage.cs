@@ -45,21 +45,29 @@ internal static class EncounterDamage
 
     private static readonly Selection.HealthTrend selfHealth = new();
     private static (ulong? Player, uint? Maximum, uint Territory, bool Combat) healthContext;
-    internal static bool ShouldSelfHeal(uint action, float threshold)
+    internal static void ObserveSelfHealth()
     {
-        float health = PlayerHealthPercentageHp();
+        if (!Player.Available || Svc.ClientState.IsPvP) { selfHealth.Reset(); healthContext = default; return; }
         var current = (Player.Object?.GameObjectId, Player.Object?.MaxHp, Svc.ClientState.TerritoryType, InCombat());
         if (healthContext != current) { healthContext = current; selfHealth.Reset(); }
+        selfHealth.Observe(PlayerHealthPercentageHp(), Environment.TickCount64);
+    }
+    internal static bool ShouldSelfHeal(uint action, float threshold)
+    {
+        ObserveSelfHealth();
+        float health = PlayerHealthPercentageHp();
         long now = Environment.TickCount64;
-        selfHealth.Observe(health, now);
-        if (health <= threshold) return true;
-        if (threshold <= 0 || !ExperimentalSelection.Forecasts || !InCombat() || health > Math.Max(threshold, 70)) return false;
-        float cast = NativeExecution.CastTime(action), lead = cast + 1;
+        var native = NativeExecution.Capture();
+        bool gcd = Data.ActionWatching.ActionSheet.TryGetValue(action, out var row) && row.ActionCategory.RowId is 2 or 3;
+        float cast = NativeExecution.CastTime(action);
+        float available = Math.Max(native.CastRemaining, Math.Max(native.AnimationLock, gcd ? native.GcdRemaining : 0));
+        float period = native.GcdTotal > 0 ? native.GcdTotal : 2.5f;
+        float horizon = available + cast + .7f + period;
         float? hit = SelfHitWindow();
-        bool canLand = hit is null || hit >= cast + .1f;
-        bool predicted = canLand && (hit <= lead || selfHealth.Project(health, lead, now) <= threshold);
-        TestingApi.RecordDecision("Survival.SelfCare", new { Action = action, Health = health, Threshold = threshold, Hit = hit, Cast = cast }, predicted);
-        return predicted;
+        var plan = SelfHealPlan.Evaluate(health, threshold, ExperimentalSelection.Forecasts && InCombat(),
+            available, cast, period, hit, selfHealth.Project(health, horizon, now));
+        TestingApi.RecordDecision("Survival.SelfCare", new { Action = action, Health = health, Threshold = threshold, Hit = hit, Cast = cast, Available = available, NextGcd = period, Horizon = horizon }, plan);
+        return plan.Needed;
     }
     private static float? SelfHitWindow()
     {

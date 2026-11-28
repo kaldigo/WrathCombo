@@ -23,7 +23,7 @@ internal partial class RPR : Melee
 
             if (!LocalPlayer.HasStatus(Buffs.Executioner) &&
                 !LocalPlayer.HasStatus(Buffs.SoulReaver) &&
-                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 25))
                 return contentAction;
 
 
@@ -109,7 +109,7 @@ internal partial class RPR : Melee
                 !LocalPlayer.HasStatus(Buffs.Soulsow) && !PartyInCombat())
                 return Soulsow;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 25))
                 return contentAction;
 
 
@@ -191,7 +191,7 @@ internal partial class RPR : Melee
 
             if (!LocalPlayer.HasStatus(Buffs.Executioner) &&
                 !LocalPlayer.HasStatus(Buffs.SoulReaver) &&
-                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.RPR_ST_ComboHeals) ? (int)RPR_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
 
@@ -316,7 +316,7 @@ internal partial class RPR : Melee
                 !LocalPlayer.HasStatus(Buffs.Soulsow) && !PartyInCombat())
                 return Soulsow;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.RPR_AoE_ComboHeals) ? (int)RPR_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
 

@@ -19,7 +19,7 @@ internal partial class VPR : Melee
 
             ReportVPRPositionalHints(vicewinderBuffPrio: false);
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
 
@@ -86,7 +86,7 @@ internal partial class VPR : Melee
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, SteelMaw))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
 
@@ -149,7 +149,7 @@ internal partial class VPR : Melee
             if (IsEnabled(Preset.VPR_ST_Opener) && Opener().FullOpener(ref actionID))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.VPR_ST_ComboHeals) ? (int)VPR_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
 
@@ -240,7 +240,7 @@ internal partial class VPR : Melee
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, SteelMaw))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.VPR_AoE_ComboHeals) ? (int)VPR_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
 

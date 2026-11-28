@@ -157,7 +157,7 @@ internal partial class DNC : PhysicalRanged
                     : FinishOrHold(TechnicalFinish4);
 
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.DNC_ST_Adv_PanicHeals) ? (int)DNC_ST_Adv_PanicHealWindPercent : null))
                 return contentAction;
 
 
@@ -502,7 +502,7 @@ internal partial class DNC : PhysicalRanged
                     : TechnicalFinish4;
 
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
 
@@ -786,7 +786,7 @@ internal partial class DNC : PhysicalRanged
                     : FinishOrHold(TechnicalFinish4);
 
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.DNC_AoE_Adv_PanicHeals) ? (int)DNC_AoE_Adv_PanicHealWindPercent : null))
                 return contentAction;
 
 
@@ -1067,7 +1067,7 @@ internal partial class DNC : PhysicalRanged
                     : TechnicalFinish4;
 
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
 

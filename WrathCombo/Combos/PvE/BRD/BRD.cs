@@ -19,7 +19,7 @@ internal partial class BRD : PhysicalRanged
                 return actionID;
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
             #endregion
 
@@ -41,7 +41,7 @@ internal partial class BRD : PhysicalRanged
                 return actionID;
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
             #endregion
 
@@ -65,7 +65,7 @@ internal partial class BRD : PhysicalRanged
                 return actionID;
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.BRD_AoE_SecondWind) ? (int)BRD_AoESecondWindThreshold : null))
                 return contentAction;
             #endregion
             
@@ -104,7 +104,7 @@ internal partial class BRD : PhysicalRanged
             #endregion
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.BRD_ST_SecondWind) ? (int)BRD_STSecondWindThreshold : null))
                 return contentAction;
             #endregion
 

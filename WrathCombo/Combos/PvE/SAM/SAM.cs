@@ -157,7 +157,7 @@ internal partial class SAM : Melee
                 UsePrepullMeikyo(requireNotJustUsed: true))
                 return MeikyoShisui;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.SAM_ST_Adv_ComboHeals) ? (int)SAM_ST_SecondWindOption : null))
                 return contentAction;
 
 
@@ -310,7 +310,7 @@ internal partial class SAM : Melee
                 UsePrepullMeikyo(requireNotJustUsed: true))
                 return MeikyoShisui;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.SAM_AoE_Adv_ComboHeals) ? (int)SAM_AoE_SecondWindOption : null))
                 return contentAction;
 
 

@@ -1,0 +1,13 @@
+# Predictive self-recovery and Variant Cure arbitration
+
+Status: implemented and validated locally on 28 November 2026; publication explicitly held at the user's request. No release tag or feed change is authorized yet.
+
+Self-healing now compares the current heal's landing opportunity with the opportunity after another damage GCD. The calculation includes native GCD/cast/animation locks, adjusted heal cast time, current GCD period and a conservative 0.7-second application margin. It uses observed recent health loss over that same horizon and reliable incoming-hit timing. It preserves configured normal thresholds, the preventive health ceiling, disabled forecasts, native eligibility and route permissions. This is not a forecast of an unknown boss potency.
+
+Health observations now run on framework updates, rather than only when a heal happens to pass its cooldown check. Sampling remains bounded and health history resets across player, maximum HP, territory and combat-context changes. Variant tank/melee/ranged/magic Cure and existing Occult self-healing consumers share the corrected planner.
+
+Variant Cure no longer returns before an independently usable, configured Second Wind can be considered. All 34 existing physical ST/AoE simple/advanced recovery providers pass their own existing threshold and permission: BRD, DNC, MCH, MNK, DRG, NIN, SAM, RPR and VPR. Simple SAM has no existing Second Wind branch and is unchanged. Disabled abilities, support permissions, cooldowns, native locks, exclusions and custom thresholds remain binding. A native-legal Second Wind may replace the selected healing GCD even when there is no ordinary damage weave; this does not relax weaving for damage abilities. Original public content-helper overloads are retained.
+
+Validation: release build with zero errors; 82 pure-policy checks; 55 Python tests, including a 14-case production-method recovery fixture and coverage of the physical job permission handoff; 474,415 current Accord compatibility assertions. The final native-eligibility adjustment was rebuilt and its focused fixture rerun. These checks do not establish in-game survival outcomes.
+
+Before publication, address/review the separate healer capture findings: Accord's Sprint normalization and configured layout disagree about the same Sprint slot, producing repeated live-layout writes/backups/config saves; Wrath's action-preview cache is shared between automatic and manual contexts, allowing a moving automatic heal rejection to contaminate the manual icon. Neither healer/UI issue was silently patched or released as part of this self-recovery change.

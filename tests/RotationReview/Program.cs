@@ -175,6 +175,24 @@ static class Checks
         That(limited.Validate(42, true, 13500) && limited.Current == 5, "accepted progress retains final step");
         That(!limited.Validate(42, true, 18000), "no-progress sequence releases instead of waiting indefinitely");
 
+        var earlyRecovery = SelfHealPlan.Evaluate(56.5f, 50, true, .34f, 0, 1.5f, 1.47f, 53);
+        That(earlyRecovery.Needed && earlyRecovery.Landing < 1.47f && earlyRecovery.DeferredLanding > 1.47f,
+            "instant Cure must take the current GCD opportunity before a known hit, not wait until one second out");
+        That(SelfHealPlan.Evaluate(60, 50, true, 0, 0, 2.5f, null, 42).Needed,
+            "ongoing observed damage can require recovery without a BossMod timer");
+        That(!SelfHealPlan.Evaluate(60, 50, true, 0, 0, 2.5f, null, 59).Needed,
+            "healthy stable player does not receive preventive Cure");
+        That(!SelfHealPlan.Evaluate(90, 50, true, 0, 0, 2.5f, 1, 40).Needed,
+            "preventive recovery retains the configured bounded health ceiling");
+        That(!SelfHealPlan.Evaluate(40, 0, true, 0, 0, 2.5f, 1, 0).Needed,
+            "disabled self-heal threshold remains disabled");
+        That(!SelfHealPlan.Evaluate(60, 50, false, 0, 0, 2.5f, 1, 0).Needed &&
+            SelfHealPlan.Evaluate(40, 50, false, 0, 0, 2.5f, null, 40).Needed,
+            "forecast option off preserves ordinary threshold recovery");
+        That(!SelfHealPlan.Evaluate(60, 50, true, 0, 0, 2.5f, 10, 60).Needed,
+            "distant event must not consume a recovery GCD now");
+        That(SelfHealPlan.Evaluate(60, 50, true, 1, 2, 2.5f, 4, 60).Needed,
+            "cast-time and current lock contribute to the last recovery opportunity");
         Console.WriteLine($"Rotation review foundation: {checks} behavioral checks passed.");
     }
 }

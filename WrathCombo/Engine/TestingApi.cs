@@ -115,6 +115,7 @@ internal sealed class TestingApi : IDisposable
             lastInput = lastSend = 0;
         }
         if (ExperimentalSelection.Forecasts) BossForecastProvider.Tick();
+        EncounterDamage.ObserveSelfHealth();
         TargetLifetime.Tick();
         NativeExecution.ObserveCast();
         ExecutionSafety.Tick();

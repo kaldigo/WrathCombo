@@ -17,7 +17,7 @@ internal partial class DRG : Melee
 
             ReportDRGPositionalHints();
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
 
@@ -98,7 +98,7 @@ internal partial class DRG : Melee
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, DoomSpike))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
 
@@ -182,7 +182,7 @@ internal partial class DRG : Melee
                 Opener().FullOpener(ref actionID))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.DRG_ST_ComboHeals) ? (int)DRG_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
 
@@ -307,7 +307,7 @@ internal partial class DRG : Melee
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, DoomSpike))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.DRG_AoE_ComboHeals) ? (int)DRG_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
 
