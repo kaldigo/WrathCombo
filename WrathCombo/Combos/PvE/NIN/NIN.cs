@@ -36,7 +36,7 @@ internal partial class NIN : Melee
 
             #region Special Content
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction) && !MudraPhase)
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40) && !MudraPhase)
                 return contentAction;
 
             #endregion
@@ -162,7 +162,7 @@ internal partial class NIN : Melee
 
             #region Special Content
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction) && !MudraPhase)
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40) && !MudraPhase)
                 return contentAction;
 
             #endregion
@@ -294,7 +294,7 @@ internal partial class NIN : Melee
 
             #region Special Content
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction) && !MudraPhase)
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.NIN_ST_AdvancedMode_SecondWind) ? (int)NIN_ST_AdvancedMode_SecondWindThreshold : null) && !MudraPhase)
                 return contentAction;
 
             #endregion
@@ -452,7 +452,7 @@ internal partial class NIN : Melee
 
             #region Special Content
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction) && !MudraPhase)
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.NIN_AoE_AdvancedMode_SecondWind) ? (int)NIN_AoE_AdvancedMode_SecondWindThreshold : null) && !MudraPhase)
                 return contentAction;
 
             #endregion

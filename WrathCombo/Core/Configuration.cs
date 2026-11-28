@@ -34,6 +34,10 @@ namespace WrathCombo.Core;
 [Serializable]
 public partial class Configuration : IPluginConfiguration
 {
+    // Opt-in coordination survives reload in the stopped state until Accord reacquires authority.
+    public bool AccordAutomationManaged;
+    public Newtonsoft.Json.Linq.JObject RotationSelectionSettings { get; set; } = new();
+    public bool HoldManagedOpeners { get; set; }
     public Dictionary<uint, WrathFork.Contract.RotationPreferences> RotationPreferences { get; set; } = new();
     public Dictionary<uint, Dictionary<WrathFork.Contract.Feature, bool>> ForkFeatures { get; set; } = new();
     public Dictionary<uint, Dictionary<uint, WrathFork.Contract.ActionRoutePolicy>> ActionRoutes { get; set; } = new();
@@ -74,12 +78,9 @@ public partial class Configuration : IPluginConfiguration
 
     /// If the DTR Bar text should be shortened. Default: false.
     /// <seealso cref="WrathCombo.OnFrameworkUpdate"/>
-    [SettingCategory(Main_UI_Options)]
-    [Setting(Setting.Type.Toggle)]
+    // Retained for config compatibility; Accord owns server-bar controls.
     public bool ShortDTRText = false;
 
-    [SettingCategory(Main_UI_Options)]
-    [Setting(Setting.Type.Toggle)]
     public bool ShowOpenerDtr = false;
 
     /// Hides the message of the day. Default: false.

@@ -228,8 +228,12 @@ internal abstract partial class CustomComboFunctions
     /// null. This parameter is passed uninitialized.</param>
     /// <returns>true if a tank buster target is found and assigned to target; otherwise, false.</returns>
     public static bool TryGetTankBusterTarget(out IBattleChara target)
+        => TryGetTankBusterTarget(out target, out _);
+
+    internal static bool TryGetTankBusterTarget(out IBattleChara target, out string eventKey)
     {
         target = null!;
+        eventKey = "";
 
         var tankBusterVfx = VfxManager.TrackedEffects
             .FilterToTargeted()
@@ -244,6 +248,7 @@ internal abstract partial class CustomComboFunctions
             return false;
 
         target = battleChara;
+        eventKey = "vfx:" + tankBusterVfx.VfxID;
 
         return true;
     }

@@ -1,0 +1,111 @@
+using System;
+using System.Collections.Generic;
+using ECommons.DalamudServices;
+using FFXIVClientStructs.FFXIV.Client.Game;
+
+namespace RotationInterop;
+
+// This is a transient execution guard. It never changes Accord's saved runner preference.
+internal static unsafe class ManualLimitBreak
+{
+    internal readonly record struct QueueEntry(ActionType Type, uint Id, ulong Target);
+    private static readonly Dictionary<uint, bool> categories = new();
+    private static QueueEntry runnerQueue;
+    private static long queueExpires, holdUntil;
+    [ThreadStatic] private static int runnerDepth;
+
+    private static QueueEntry Queue(ActionManager* am) => am != null && am->ActionQueued
+        ? new(am->QueuedActionType, am->QueuedActionId, am->QueuedTargetId.Id) : default;
+
+    internal static bool IsLimitBreak(ActionType type, uint id)
+    {
+        if (type == ActionType.GeneralAction) return id == 3;
+        if (type != ActionType.Action || id == 0 || id >= 1_000_000) return false;
+        if (!categories.TryGetValue(id, out var found))
+        {
+            found = Svc.Data.GetExcelSheet<Lumina.Excel.Sheets.Action>().TryGetRow(id, out var row)
+                && row.ActionCategory.RowId is 9 or 15;
+            categories[id] = found;
+        }
+        return found;
+    }
+
+    // Deliberate item use (including Phoenix Down) owns its native queue and cast.
+    // Do not guess item IDs or cast durations; follow the game's actual item state.
+    private static bool IsProtected(ActionType type, uint id) =>
+        id != 0 && (type == ActionType.Item || IsLimitBreak(type, id));
+
+    // Snapshot the existing action lock once. Rechecking the deadline on each frame
+    // would keep an invalid click alive indefinitely.
+    internal static long InputDeadline(ActionManager* am, long now)
+    {
+        var gcd = am->GetRecastGroupDetail(57);
+        float recast = gcd != null && gcd->IsActive ? gcd->Total - gcd->Elapsed : 0;
+        float cast = am->CastActionId != 0 ? am->CastTimeTotal - am->CastTimeElapsed : 0;
+        float remaining = Math.Max(0, Math.Max(recast, Math.Max(cast, am->AnimationLock)));
+        return now + (long)Math.Ceiling(remaining * 1000) + 1800;
+    }
+
+    internal static bool Input(ActionManager* am, ActionType type, uint id, bool queueReplay)
+    {
+        if (am == null || runnerDepth != 0) return false;
+        if (queueReplay) return IsProtected(type, id);
+        if (!IsProtected(type, id)) { runnerQueue = default; return false; }
+        var now = Environment.TickCount64;
+        var queued = Queue(am);
+        bool clear = queued.Id != 0 && queued == runnerQueue && now < queueExpires && !IsProtected(queued.Type, queued.Id);
+        if (clear) am->ActionQueued = false;
+        runnerQueue = default;
+        holdUntil = InputDeadline(am, now);
+        AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Input", () => new { Action = id, Item = type == ActionType.Item, ClearedRunnerQueue = clear, PreviousAction = queued.Id });
+        return true;
+    }
+
+    // Includes native placement of a ground LB and a job-specific action reached through a replacement.
+    internal static void Placement(ActionType type, uint id)
+    {
+        if (runnerDepth == 0 && IsProtected(type, id)) holdUntil = Environment.TickCount64 + 1800;
+    }
+
+    internal static bool Waiting()
+    {
+        var am = ActionManager.Instance();
+        if (am == null) { holdUntil = 0; runnerQueue = default; return false; }
+        long now = Environment.TickCount64;
+        var queued = Queue(am);
+        bool protectedQueue = IsProtected(queued.Type, queued.Id) &&
+            (queued.Type != ActionType.Item || queued != runnerQueue || now >= queueExpires || holdUntil != 0);
+        if (holdUntil != 0 && am->CastActionId != 0 || IsProtected(am->CastActionType, am->CastActionId) || protectedQueue
+            || IsProtected(am->AreaTargetingActionType, am->AreaTargetingActionId))
+            holdUntil = Math.Max(holdUntil, now + 500);
+        if (holdUntil == 0) return false;
+        if (am->AnimationLock > 0) holdUntil = Math.Max(holdUntil, now + 100);
+        if (now < holdUntil) return true;
+        holdUntil = 0;
+        AccordDiagnostics.DiagnosticLog.Event("LimitBreak.Resume", () => new { });
+        return false;
+    }
+
+    internal static bool HasManualQueue()
+    {
+        var queued = Queue(ActionManager.Instance());
+        return queued.Id != 0 && (queued != runnerQueue || Environment.TickCount64 >= queueExpires);
+    }
+
+    internal static RunnerScope TrackRunner() => new(Queue(ActionManager.Instance()));
+    internal readonly ref struct RunnerScope
+    {
+        private readonly QueueEntry before;
+        internal RunnerScope(QueueEntry previous) { before = previous; runnerDepth++; }
+        public void Dispose()
+        {
+            var after = Queue(ActionManager.Instance());
+            if (after != before)
+            {
+                runnerQueue = after;
+                queueExpires = Environment.TickCount64 + 3000;
+            }
+            runnerDepth--;
+        }
+    }
+}

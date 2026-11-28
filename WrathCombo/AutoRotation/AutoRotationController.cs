@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Game.ClientState.Statuses;
@@ -136,9 +136,10 @@ internal unsafe class AutoRotationController
         x.BattleChara is not null &&
         x.BattleChara.IsDead &&
         x.BattleChara.IsTargetable &&
-        (cfg.HealerSettings.AutoRezOutOfParty || GetPartyMembers().Any(y => y.GameObjectId == x.BattleChara.GameObjectId)) &&
+        (GetPartyMembers().Any(y => y.GameObjectId == x.BattleChara.GameObjectId) ||
+         (RotationBehaviour.Managed ? ExperimentalSelection.RaiseNearbyPlayers && x.BattleChara.IsAPlayer() : cfg.HealerSettings.AutoRezOutOfParty)) &&
         GetTargetDistance(x.BattleChara) <= QueryRange &&
-        !x.BattleChara.HasRaiseStatus &&
+        IncomingRaise.Available(x.BattleChara) &&
         !x.BattleChara.HasRaiseInvincibility &&
         TimeSpentDead(x.BattleChara.GameObjectId).TotalSeconds > 2;
 
@@ -170,19 +171,30 @@ internal unsafe class AutoRotationController
 
     private static bool ShouldSkipAutorotation()
     {
-        return !cfg.Enabled
-               || !Player.Available
-               || Player.Object.IsDead
-               || IsOccupied()
-               || Player.Mounted
-               || !EzThrottler.Throttle("Autorot", cfg.Throttler)
-               || (ActionManager.Instance()->QueuedActionId > 0)
-               || Player.Object.HasRaiseInvincibility
-               || Paused;
+        if (!cfg.Enabled) return !AccordDiagnostics.DiagnosticLog.Reject("Runner disabled");
+        if (!Player.Available) return !AccordDiagnostics.DiagnosticLog.Reject("Player unavailable");
+        if (Player.Object.IsDead) return !AccordDiagnostics.DiagnosticLog.Reject("Player dead");
+        if (IsOccupied()) return !AccordDiagnostics.DiagnosticLog.Reject("Player occupied");
+        if (Player.Mounted) return !AccordDiagnostics.DiagnosticLog.Reject("Player mounted");
+        if (!EzThrottler.Throttle("Autorot", cfg.Throttler)) return !AccordDiagnostics.DiagnosticLog.Reject("Runner throttle");
+        if (ActionManager.Instance()->ActionQueued) return !AccordDiagnostics.DiagnosticLog.Reject("Native queue occupied");
+        if (Player.Object.HasRaiseInvincibility) return !AccordDiagnostics.DiagnosticLog.Reject("Raise invincibility");
+        if (Paused) return !AccordDiagnostics.DiagnosticLog.Reject("Runner paused");
+        return false;
     }
 
     internal static void Run()
     {
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.RunnerAttempt);
+        using var diagnosticScope = AccordDiagnostics.DiagnosticLog.Begin("Runner.Tick", () => new { AutomationOwnership.Allowed });
+        if (!AutomationOwnership.Allowed) { AccordDiagnostics.DiagnosticLog.Exit("Automation ownership denied"); return; }
+        using var attempt = NativeExecution.BeginAttempt();
+        if (ExecutionSafety.ChannelBlocksAll) { AccordDiagnostics.DiagnosticLog.Exit("Protected channel in progress"); return; }
+        if (ExecutionSafety.MustStop) { AccordDiagnostics.DiagnosticLog.Exit("Encounter forbids automatic actions"); return; }
+        if (RotationInterop.ManualLimitBreak.Waiting()) { AccordDiagnostics.DiagnosticLog.Exit("Manual limit break in progress"); return; }
+        if (RotationInterop.ManualLimitBreak.HasManualQueue()) { AccordDiagnostics.DiagnosticLog.Exit("Manual action queued"); return; }
+        using var queueScope = RotationInterop.ManualLimitBreak.TrackRunner();
+        using var selectionScope = SelectionRuntime.AutomaticScope();
         cfg ??= new AutoRotationConfigIPCWrapper(Service.Configuration.RotationConfig);
 
         if (!cfg.Enabled)
@@ -192,16 +204,38 @@ internal unsafe class AutoRotationController
         if (ShouldSkipAutorotation())
             return;
 
-        if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat) return;
-        if (RotationBehaviour.Preferences?.Openers == false) WrathOpener.CurrentOpener?.ResetOpener();
+        if (TankPull.Tick()) return;
+        OccultEventTargets.AcquireVisible(cfg.DPSSettings.MaxDistance);
+
+        if (RotationBehaviour.Preferences?.CombatOnly == true && NotInCombat)
+        {
+            if (!RunOutOfCombatRaise())
+                OccultEventTargets.EngageSelected(cfg.DPSSettings.MaxDistance);
+            return;
+        }
+        if (RotationBehaviour.AllowOpeners == false) WrathOpener.CurrentOpener?.ResetOpener();
         uint _ = 0;
 
         // Pre-emptive HoT/Shield for healers
-        if (cfg.HealerSettings.PreEmptiveHoT && Player.Job is Job.CNJ or Job.WHM or Job.AST)
+        if (cfg.HealerSettings.PreEmptiveHoT && !ExperimentalSelection.ActiveHealer && Player.Job is Job.CNJ or Job.WHM or Job.AST)
+        {
             PreEmptiveHot();
+            if (NativeExecution.AttemptSubmitted) return;
+        }
 
-        if (cfg.HealerSettings.PreEmptiveShield && Player.Job is Job.SGE or Job.SCH)
+        if ((cfg.HealerSettings.PreEmptiveShield || cfg.HealerSettings.PreEmptiveHoT) && ExperimentalSelection.ActiveHealer && !PartyInCombat() &&
+            SimpleTarget.FocusTarget is { } shieldFocus && (!InDuty() || Svc.DutyState.IsDutyStarted) &&
+            Svc.Objects.GetBattleCharas().Any(enemy => !enemy.IsDead && enemy.IsTargetable && enemy.IsHostile() && GetTargetDistance(enemy, shieldFocus) <= QueryRange) &&
+            HealerSelection.PrePull(shieldFocus.GameObjectId, cfg.HealerSettings.PreEmptiveHoT, cfg.HealerSettings.PreEmptiveShield) is { } preparation)
+        {
+            if (SelectionRuntime.ExecuteAutomatic(preparation)) return;
+        }
+
+        if (cfg.HealerSettings.PreEmptiveShield && !ExperimentalSelection.ActiveHealer && Player.Job is Job.SGE or Job.SCH)
+        {
             PreEmptiveShield();
+            if (NativeExecution.AttemptSubmitted) return;
+        }
 
         // Bypass buffs logic
         if (cfg.BypassBuffs && NotInCombat)
@@ -212,7 +246,11 @@ internal unsafe class AutoRotationController
 
         // Only run in combat if required
         if (cfg.InCombatOnly && NotInCombat && !CombatBypass)
+        {
+            if (!RunOutOfCombatRaise())
+                OccultEventTargets.EngageSelected(cfg.DPSSettings.MaxDistance);
             return;
+        }
 
         // Check for Pyretic / Reasons to stop
         if (cfg.DPSSettings.UnTargetAndDisableForPenalty && PlayerHasActionPenalty(true))
@@ -222,12 +260,20 @@ internal unsafe class AutoRotationController
         bool isHealer = Player.Object?.Role is CombatRole.Healer ||
                         (Player.Job is Job.BLU && BLU.HasHealerMimicry);
 
-        if (cfg.HealerSettings.HandleRaidwides)
+        if (ExperimentalSelection.ActiveHealer && (ExperimentalSelection.ActiveSage
+                ? SGE.AutomaticPrevention(cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters)
+                : HealerSelection.Prevention(All.AoeHeals, cfg.HealerSettings.HandleRaidwides, cfg.HealerSettings.HandleTankbusters)) is { } prevention)
+        {
+            if (SelectionRuntime.ExecuteAutomatic(prevention)) return;
+        }
+
+        if (cfg.HealerSettings.HandleRaidwides && !(ExperimentalSelection.ActiveHealer && ExperimentalSelection.PreventiveHealing))
         {
             if (isHealer && GroupDamageIncoming(out var multi))
             {
                 AutorotRaidwiding = true;
                 HandleRaidwide(multi);
+                if (NativeExecution.AttemptSubmitted) return;
             }
             else
             {
@@ -243,11 +289,12 @@ internal unsafe class AutoRotationController
 
         if (!cfg.HealerSettings.HandleRaidwides) { AutorotRaidwides = 0; AutorotRaidwiding = false; BlacklistedRaidwides.Clear(); }
         if (!cfg.HealerSettings.HandleTankbusters) TankbusterHandled = false;
-        if (cfg.HealerSettings.HandleTankbusters)
+        if (cfg.HealerSettings.HandleTankbusters && !(ExperimentalSelection.ActiveHealer && ExperimentalSelection.PreventiveHealing))
         {
             if (isHealer && TryGetTankBusterTarget(out var tbtarget))
             {
                 HandleTankbuster(tbtarget.SafeGameObjectId);
+                if (NativeExecution.AttemptSubmitted) return;
             }
             else
                 TankbusterHandled = false;
@@ -281,10 +328,7 @@ internal unsafe class AutoRotationController
                        && actCheck;
 
         // Healer cleanse/rez logic
-        if (isHealer ||
-            (Player.Job is Job.SMN or Job.RDM && cfg.HealerSettings.AutoRezDPSJobs) ||
-            OccultCrescent.CanPhantomRaise() ||
-            Variant.CanRaise())
+        if (CanUseResurrection(isHealer))
         {
             if (ActionManager.Instance()->QueuedActionId == RoleActions.Healer.Esuna ||
                 ActionManager.Instance()->QueuedActionId == BLU.Exuviation)
@@ -294,16 +338,16 @@ internal unsafe class AutoRotationController
                 OpenerState.InOpener)
             {
                 if (cfg.HealerSettings.AutoCleanse && isHealer)
-                    CleanseParty();
+                    { CleanseParty(); if (NativeExecution.AttemptSubmitted) return; }
 
                 if (cfg.HealerSettings.AutoRez)
-                    RezParty();
+                    { RezParty(); if (NativeExecution.AttemptSubmitted) return; }
             }
         }
 
         // SGE Kardia logic
         if (Player.Job is Job.SGE && cfg.HealerSettings.ManageKardia)
-            UpdateKardiaTarget();
+            { UpdateKardiaTarget(); if (NativeExecution.AttemptSubmitted) return; }
 
         // Reset locks if no action for 3 seconds
         if (TimeSinceLastAction.TotalSeconds >= 3)
@@ -312,7 +356,51 @@ internal unsafe class AutoRotationController
             LockedST = false;
         }
 
+        if (isHealer && ExperimentalSelection.ActiveHealer && ExperimentalSelection.EffectiveHealing &&
+            RotationBehaviour.Support != false && TryRotationButtonHeal())
+            return;
+
+        if (!canHeal && ExperimentalSelection.HealEncounterPlayers && isHealer && RotationBehaviour.Support != false &&
+            !IsMoving() && !Player.Object.IsCasting() && RemainingGCD <= cfg.QueueWindow && OccultEventTargets.CanHelpEncounter() &&
+            _autoActions.Keys.Any(preset => preset.Attributes().AutoAction is { IsHeal: true, IsAoE: false }))
+        {
+            const uint input = All.SingleTargetHeals;
+            using var route = new ActionRouteContext(ActionRoutes.For(input));
+            SelectionRuntime.BeginPreview(input);
+            if (OccultEventTargets.HealPatient(input) is { } patient && SelectionRuntime.ExecuteAutomatic(patient))
+                return;
+        }
         ProcessAutoActions(ref _, canHeal, false);
+    }
+
+    private static bool TryRotationButtonHeal()
+    {
+        // Use the same routed input as the combined bar, including its ST/AoE choice.
+        // A native Stone/Dosis input can bypass the bar's allied-action selection.
+        const uint input = PveIntentRouting.FullRotation;
+        using var intent = PveIntentRouting.Enter(input);
+        var policy = ActionRoutes.For(input);
+        if (policy?.Direct == true) return false;
+        using var route = new ActionRouteContext(policy);
+        foreach (var preset in _autoActions.Keys)
+        {
+            if (preset.Attributes().AutoAction is not { IsHeal: false } damage || damage.IsAoE != PveIntentRouting.Area)
+                continue;
+            SelectionRuntime.BeginPreview(input);
+            if (!HealerSelection.TrySelect(input, preset, out var action) && !SGE.TryTestingSelection(input, preset, out action))
+                continue;
+            if (SelectionRuntime.Preview(input) is not { } decision || action != decision.Action || !ActionRoutes.Allowed(action))
+                continue;
+            if ((action.ActionAttackType() == ActionAttackType.Ability ? AnimationLock : RemainingGCD) > cfg!.QueueWindow)
+                return false;
+            if (TimeMoving.TotalMilliseconds > 0 && ActionManager.GetAdjustedCastTime(ActionType.Action, action) > 0 &&
+                !(cfg.OrbwalkerIntegration && OrbwalkerIPC.CanOrbwalk))
+                return false;
+            bool accepted = SelectionRuntime.ExecuteAutomatic(decision);
+            AccordDiagnostics.DiagnosticLog.Event("Runner.RotationHeal", () => new { Input = input, decision.Action, decision.Recipient, Accepted = accepted });
+            return accepted;
+        }
+        return false;
     }
 
     public static IEnumerable<uint> TankbusterActions =
@@ -442,8 +530,27 @@ internal unsafe class AutoRotationController
         return true;
     }
 
+    // Only automatic damage waits. A player who initiates combat manually owns that pull.
+    internal static bool WaitForPartyTank()
+    {
+        if (InPvP() || InCombat() || Player.Object?.Role == CombatRole.Tank) return false;
+
+        bool waiting = false;
+        foreach (var member in Svc.Party)
+        {
+            if (member.GameObject is not IBattleChara { IsDead: false, IsTargetable: true, Role: CombatRole.Tank } tank)
+                continue;
+            if (tank.Struct()->InCombat) return false;
+            waiting = true;
+        }
+        if (waiting) AccordDiagnostics.DiagnosticLog.Exit("Waiting for party tank to pull");
+        return waiting;
+    }
+
     private static bool ProcessAutoActions(ref uint _, bool canHeal, bool stOnly)
     {
+        if (!canHeal && WaitForPartyTank()) return false;
+
         // Pre-filter and cache attributes to avoid repeated lookups
         var filteredActions = _autoActions
             .Select(x => new { Preset = x.Key, Attributes = x.Key.Attributes() })
@@ -470,7 +577,7 @@ internal unsafe class AutoRotationController
 
             if (action.IsHeal)
             {
-                AutomateHealing(entry.Preset, attributes, gameAct);
+                if (AutomateHealing(entry.Preset, attributes, gameAct)) return true;
                 continue;
             }
 
@@ -478,13 +585,13 @@ internal unsafe class AutoRotationController
             if (Player.Object?.GetRole() is CombatRole.Tank ||
                 (Player.Job is Job.BLU && BLU.HasTankMimicry))
             {
-                AutomateTanking(entry.Preset, attributes, gameAct);
+                if (AutomateTanking(entry.Preset, attributes, gameAct)) return true;
                 continue;
             }
 
             // DPS logic
             if (!action.IsHeal && AutomateDPS(entry.Preset, attributes, gameAct))
-                return false;
+                return true;
         }
 
         return false;
@@ -599,8 +706,29 @@ internal unsafe class AutoRotationController
         }
     }
 
+    private static bool CanUseResurrection(bool isHealer) => isHealer ||
+        (Player.Job is Job.SMN or Job.RDM && cfg.HealerSettings.AutoRezDPSJobs) ||
+        OccultCrescent.CanPhantomRaise() || Variant.CanRaise();
+
+    private static bool RunOutOfCombatRaise()
+    {
+        if (InPvP() || Deadtionary.Count == 0 || Player.Object.IsCasting() ||
+            cfg.DPSSettings.UnTargetAndDisableForPenalty && PlayerHasActionPenalty(true))
+            return false;
+
+        if (ExperimentalSelection.ActiveHealer && ExperimentalSelection.IncludeRaise && RotationBehaviour.Support != false)
+        {
+            return HealerSelection.ExecuteAutomaticRaise();
+        }
+
+        if (cfg.HealerSettings.AutoRez && CanUseResurrection(Player.Object.Role is CombatRole.Healer ||
+            Player.Job is Job.BLU && BLU.HasHealerMimicry))
+            return RezParty();
+        return false;
+    }
+
     // Note: Similar to Kardia, because this has its own set of rules but regarding timings I'm not sure if I want to wire this up to retargeting
-    private static void RezParty()
+    private static bool RezParty()
     {
         uint resSpell = 0;
 
@@ -631,7 +759,7 @@ internal unsafe class AutoRotationController
         }
 
         if (resSpell == 0)
-            return;
+            return false;
 
         IEnumerable<WrathPartyMember> deadPeople = DeadPeople.Where(x => x.BattleChara.CanUseOn(resSpell));
 
@@ -647,14 +775,16 @@ internal unsafe class AutoRotationController
         {
             var timeSinceLastRez = TimeSinceLastSuccessfulCast(resSpell);
             if ((timeSinceLastRez != -1f && timeSinceLastRez < 4f) || Player.Object.IsCasting())
-                return;
+                return false;
 
+            if (ExperimentalSelection.RaiseNearbyPlayers && !InPvP())
+                deadPeople = deadPeople.Where(x => x.BattleChara.IfInSightInRangeCanUseOn(resSpell) != null)
+                    .OrderByDescending(x => x.BattleChara.IsInParty()).ThenBy(x => GetTargetDistance(x.BattleChara));
             if (deadPeople.Where(CheckRezTarget).FindFirst(x => x is not null, out var member))
             {
                 if (resSpell == OccultCrescent.Revive || resSpell == OccultCrescent.OccultRaise)
                 {
-                    ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
-                    return;
+                    return IncomingRaise.Submit(resSpell, member.BattleChara.GameObjectId, member.BattleChara.GameObjectId);
                 }
 
                 if (resSpell is Variant.Raise)
@@ -666,16 +796,14 @@ internal unsafe class AutoRotationController
                         {
                             if (ActionManager.Instance()->GetActionStatus(ActionType.Action, RoleActions.Magic.Swiftcast) == 0)
                             {
-                                ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
-                                return;
+                                return IncomingRaise.Submit(RoleActions.Magic.Swiftcast, member.BattleChara.GameObjectId, Player.Object.GameObjectId);
                             }
                         }
                     }
 
                     if (LocalPlayer.HasStatus(RoleActions.Magic.Buffs.Swiftcast) || LocalPlayer.HasStatus(RDM.Buffs.Dualcast) || !IsMoving())
                     {
-                        ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
-                        return;
+                        return IncomingRaise.Submit(resSpell, member.BattleChara.GameObjectId, member.BattleChara.GameObjectId);
                     }
                 }
 
@@ -683,13 +811,12 @@ internal unsafe class AutoRotationController
                 {
                     if (ActionReady(RoleActions.Magic.Swiftcast) && !LocalPlayer.HasStatus(RDM.Buffs.Dualcast))
                     {
-                        ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
-                        return;
+                        return IncomingRaise.Submit(RoleActions.Magic.Swiftcast, member.BattleChara.GameObjectId, Player.Object.GameObjectId);
                     }
 
                     if (ActionManager.GetAdjustedCastTime(ActionType.Action, resSpell) == 0)
                     {
-                        ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
+                        return IncomingRaise.Submit(resSpell, member.BattleChara.GameObjectId, member.BattleChara.GameObjectId);
                     }
 
                 }
@@ -699,8 +826,7 @@ internal unsafe class AutoRotationController
                     {
                         if (ActionManager.Instance()->GetActionStatus(ActionType.Action, RoleActions.Magic.Swiftcast) == 0)
                         {
-                            ActionManager.Instance()->UseAction(ActionType.Action, RoleActions.Magic.Swiftcast);
-                            return;
+                            return IncomingRaise.Submit(RoleActions.Magic.Swiftcast, member.BattleChara.GameObjectId, Player.Object.GameObjectId);
                         }
                     }
 
@@ -709,12 +835,13 @@ internal unsafe class AutoRotationController
 
                         if ((cfg is not null) && ((cfg.HealerSettings.AutoRezRequireSwift && ActionManager.GetAdjustedCastTime(ActionType.Action, resSpell) == 0) || !cfg.HealerSettings.AutoRezRequireSwift))
                         {
-                            ActionManager.Instance()->UseAction(ActionType.Action, resSpell, member.BattleChara.GameObjectId);
+                            return IncomingRaise.Submit(resSpell, member.BattleChara.GameObjectId, member.BattleChara.GameObjectId);
                         }
                     }
                 }
             }
         }
+        return false;
     }
 
     private static void CleanseParty()
@@ -814,6 +941,7 @@ internal unsafe class AutoRotationController
     {
         public static IBattleChara? GetSingleTarget(Enum rotationMode)
         {
+            using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.LegacyTargetRanking);
             if (rotationMode is DPSRotationMode dpsmode)
             {
                 if (Player.Object?.Role is CombatRole.Tank ||
@@ -891,7 +1019,7 @@ internal unsafe class AutoRotationController
                 !(cfg.OrbwalkerIntegration && OrbwalkerIPC.CanOrbwalk)) return false;
             bool canQueue = outAct.ActionAttackType() is { } type &&
                 (type == ActionAttackType.Ability ? AnimationLock <= cfg.QueueWindow : RemainingGCD <= cfg.QueueWindow);
-            if (!canQueue) return false;
+            if (!canQueue || HealerSelection.ReservesDamageGcd && outAct.ActionAttackType() != ActionAttackType.Ability) return false;
             // Execute the checked result directly: re-running the root hook could
             // substitute a targeted action after our safety checks.
             using var checkedAction = new RotationBehaviour.ExecuteChecked(outAct);
@@ -903,10 +1031,13 @@ internal unsafe class AutoRotationController
             if (LocalPlayer is not { } player)
                 return false;
 
-            if (ActionManager.Instance()->QueuedActionId != 0)
+            if (ActionManager.Instance()->ActionQueued)
                 return true;
 
-            if (!attributes.AutoAction!.IsHeal && SimpleTarget.HardTarget is null && RotationBehaviour.Preferences?.ActivityUntargetedAoe is { } untargeted)
+            if (!attributes.AutoAction!.IsHeal && SimpleTarget.HardTarget is null &&
+                !(ExperimentalSelection.ActiveTargets && (ExperimentalSelection.AutomaticEnemies || ExperimentalSelection.AcquireEnemy ||
+                    ExperimentalSelection.OverridesInAutomation && (ExperimentalSelection.EnemyMouseover || ExperimentalSelection.EnemyFocus))) &&
+                RotationBehaviour.Preferences?.ActivityUntargetedAoe is { } untargeted)
             {
                 if (UntargetedAoePolicy.Eligible(RotationBehaviour.Managed, untargeted, InPvP(), RotationBehaviour.Activity,
                     false, cfg.InCombatOnly, InCombat()))
@@ -917,14 +1048,19 @@ internal unsafe class AutoRotationController
                 }
                 if (cfg.DPSRotationMode == DPSRotationMode.Manual) { OverrideTarget = null; return false; }
             }
-            var autoTarget = DPSTargeting.BaseSelection.MaxBy(x => NumberOfEnemiesInRange(OriginalHook(gameAct), x, true));
             var manualTarget = SimpleTarget.HardTarget;
 
             IBattleChara? target = null;
             // Determine target according to rotation mode and AoE settings
 
             var useAutoTarget = cfg.DPSRotationMode != DPSRotationMode.Manual || (cfg.DPSRotationMode == DPSRotationMode.Manual && cfg.DPSSettings.AoEIgnoreManual && (!cfg.DPSSettings.AoEOnlyWhenTargeting || manualTarget is not null));
-            target = useAutoTarget ? autoTarget : manualTarget;
+            if (attributes.AutoAction.IsHeal || !SelectionRuntime.TryResolveAutomaticEnemy(gameAct, out target))
+            {
+                using var ranking = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.LegacyTargetRanking);
+                target = useAutoTarget
+                    ? DPSTargeting.BaseSelection.MaxBy(x => NumberOfEnemiesInRange(OriginalHook(gameAct), x, true))
+                    : manualTarget;
+            }
 
             if ((target is not IBattleChara t || (!t.IsHostile() && !t.IsFriendly())) && cfg.PauseWhenNoTarget) return true;
 
@@ -938,7 +1074,7 @@ internal unsafe class AutoRotationController
                     return false;
 
                 var canQueue = outAct.ActionAttackType() is { } type && (type is ActionAttackType.Ability || type is not ActionAttackType.Ability && RemainingGCD <= cfg.QueueWindow);
-                if (!canQueue)
+                if (!canQueue || HealerSelection.ReservesDamageGcd && outAct.ActionAttackType() != ActionAttackType.Ability)
                     return false;
 
                 if (HealerTargeting.CanAoEHeal(outAct))
@@ -954,7 +1090,7 @@ internal unsafe class AutoRotationController
                     var ret = ActionManager.Instance()->UseAction(ActionType.Action, Service.Configuration.ActionChanging ? gameAct : outAct, targetId);
                     WouldLikeToGroundTarget = false;
 
-                    return true;
+                    return ret || NativeExecution.AttemptSubmitted;
                 }
             }
             else
@@ -978,12 +1114,14 @@ internal unsafe class AutoRotationController
 
                 OverrideTarget = target ?? OverrideTarget;
                 uint outAct = OriginalHook(InvokeCombo(preset, attributes, ref gameAct, OverrideTarget));
+                if (SelectionRuntime.AutomaticRecipient(outAct) is { } resolvedRecipient)
+                { target = resolvedRecipient; OverrideTarget = resolvedRecipient; }
                 if (outAct is All.Cease) return true;
                 if (!ActionReady(outAct))
                     return false;
 
                 var canQueue = outAct.ActionAttackType() is { } type && ((type is ActionAttackType.Ability && AnimationLock <= cfg.QueueWindow) || (type is not ActionAttackType.Ability && RemainingGCD <= cfg.QueueWindow));
-                if (!canQueue)
+                if (!canQueue || HealerSelection.ReservesDamageGcd && outAct.ActionAttackType() != ActionAttackType.Ability)
                     return false;
 
                 var s = ActionSheet.TryGetValue(outAct, out var sheet);
@@ -995,7 +1133,7 @@ internal unsafe class AutoRotationController
                 if (TimeMoving.TotalMilliseconds > 0 && castTime > 0 && !orbwalking)
                     return false;
 
-                if (cfg.DPSSettings.DPSAlwaysHardTarget && OverrideTarget is not null)
+                if (OverrideTarget is not null && SelectionRuntime.MaySwitchVisibleTarget(OverrideTarget, cfg.DPSSettings.DPSAlwaysHardTarget))
                     Svc.Targets.Target = OverrideTarget;
 
                 var canUseSelf = s && sheet.CanTargetSelf;
@@ -1017,6 +1155,7 @@ internal unsafe class AutoRotationController
                     WouldLikeToGroundTarget = areaTargeted;
                     var ret = ActionManager.Instance()->UseAction(ActionType.Action, Service.Configuration.ActionChanging ? gameAct : outAct, targetId);
                     WouldLikeToGroundTarget = false;
+                    if (!NativeExecution.Accepted(ret, outAct, targetId)) return false;
                     if (NIN.MudraSigns.Contains(outAct))
                         _lockedAoE = true;
                     else
@@ -1039,10 +1178,12 @@ internal unsafe class AutoRotationController
             if (LocalPlayer is not { } player)
                 return false;
 
-            if (ActionManager.Instance()->QueuedActionId != 0)
+            if (ActionManager.Instance()->ActionQueued)
                 return true;
 
-            var target = GetSingleTarget(mode);
+            IBattleChara? target = null;
+            if (attributes.AutoAction?.IsHeal == true || !SelectionRuntime.TryResolveAutomaticEnemy(gameAct, out target))
+                target = GetSingleTarget(mode);
 
             if ((target is not { } t || (!t.IsHostile() && !t.IsFriendly())) && cfg.PauseWhenNoTarget) return true;
 
@@ -1052,6 +1193,8 @@ internal unsafe class AutoRotationController
 
             OverrideTarget = target ?? OverrideTarget;
             var outAct = OriginalHook(InvokeCombo(preset, attributes, ref gameAct, target));
+            if (SelectionRuntime.AutomaticRecipient(outAct) is { } resolvedRecipient)
+            { target = resolvedRecipient; OverrideTarget = resolvedRecipient; }
             if (outAct >= All.Items)
             {
                 Svc.Log.Debug($"Using item {outAct.ActionName()}");
@@ -1090,10 +1233,12 @@ internal unsafe class AutoRotationController
 
             var canUse = (canUseSelf || canUseTarget || areaTargeted) && outAct.ActionAttackType() is { } type && ((type is ActionAttackType.Ability && AnimationLock <= cfg.QueueWindow) || (type is not ActionAttackType.Ability && RemainingGCD <= cfg.QueueWindow));
             var isHeal = attributes.AutoAction!.IsHeal;
+            if (!isHeal && HealerSelection.ReservesDamageGcd && outAct.ActionAttackType() != ActionAttackType.Ability) return false;
 
             if (target is not null)
             {
-                if ((!isHeal && cfg.DPSSettings.DPSAlwaysHardTarget && mode is not DPSRotationMode.Manual) || (isHeal && cfg.HealerSettings.HealerAlwaysHardTarget && mode is not HealerRotationMode.Manual))
+                if (SelectionRuntime.MaySwitchVisibleTarget(target,
+                    (!isHeal && cfg.DPSSettings.DPSAlwaysHardTarget && mode is not DPSRotationMode.Manual) || (isHeal && cfg.HealerSettings.HealerAlwaysHardTarget && mode is not HealerRotationMode.Manual)))
                     Svc.Targets.Target = target;
             }
 
@@ -1109,6 +1254,7 @@ internal unsafe class AutoRotationController
                     Svc.Log.Debug($"Updated target to {target.Name} for {replacedWith.ActionName()}");
                 var ret = ActionManager.Instance()->UseAction(ActionType.Action, Service.Configuration.ActionChanging ? gameAct : outAct, targetId);
                 WouldLikeToGroundTarget = false;
+                if (!NativeExecution.Accepted(ret, outAct, targetId)) return false;
 
                 if (NIN.MudraSigns.Contains(outAct))
                     _lockedST = true;
@@ -1138,7 +1284,7 @@ internal unsafe class AutoRotationController
                     {
                         originalAct = actToCheck;
                         outAct = changedAct;
-                        Service.ActionReplacer.LastActionInvokeFor[actToCheck] = outAct;
+                        Service.ActionReplacer.RecordActionInvoke(actToCheck, outAct);
                         break;
                     }
                 }
@@ -1160,14 +1306,17 @@ internal unsafe class AutoRotationController
             !chara.IsInvincible &&
             (RotationBehaviour.Preferences?.Targeting != EnemySelection.PartyCombat || FightingParty(chara)) &&
             !Service.Configuration.IgnoredNPCs.ContainsKey(chara.BaseId) &&
-            ((cfg.DPSSettings.OnlyAttackInCombat && chara.Struct()->InCombat) || !cfg.DPSSettings.OnlyAttackInCombat) &&
+            ((cfg.DPSSettings.OnlyAttackInCombat && chara.Struct()->InCombat) || !cfg.DPSSettings.OnlyAttackInCombat || OccultEventTargets.Matches(chara)) &&
             IsInLineOfSight(chara);
 
-        internal static bool FightingParty(IBattleChara enemy) => enemy.Struct()->InCombat &&
+        internal static bool FightingParty(IBattleChara enemy, IReadOnlyList<WrathPartyMember>? party = null) => OccultEventTargets.Matches(enemy) || enemy.Struct()->InCombat &&
             (enemy.TargetObjectId == Player.Object.GameObjectId ||
-             GetPartyMembers().Any(member => enemy.TargetObjectId == member.GameObjectId ||
+             (party ?? GetPartyMembers()).Any(member => enemy.TargetObjectId == member.GameObjectId ||
                  member.BattleChara is { } ally && ally.Struct()->InCombat && ally.TargetObjectId == enemy.GameObjectId) ||
-             Player.Object.Struct()->InCombat && Player.Object.TargetObjectId == enemy.GameObjectId);
+             Player.Object.Struct()->InCombat && Player.Object.TargetObjectId == enemy.GameObjectId ||
+             // Story allies fight alongside the player without joining the party roster.
+             Player.TerritoryIntendedUseEnum is (TerritoryIntendedUseEnum.Quest_Battle or TerritoryIntendedUseEnum.Quest_Battle_2) &&
+             enemy.TargetObject is IBattleNpc { IsDead: false } storyAlly && !storyAlly.IsHostile());
 
         public static IEnumerable<IBattleChara> BaseSelection
         {

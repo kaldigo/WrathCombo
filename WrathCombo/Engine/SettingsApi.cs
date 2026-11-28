@@ -19,17 +19,25 @@ namespace WrathCombo.Engine;
 internal sealed class SettingsApi : IDisposable
 {
     private readonly ICallGateProvider<string> read = Svc.PluginInterface.GetIpcProvider<string>("WrathFork.Settings.Read.v2");
+    private readonly ICallGateProvider<string, string> commit = Svc.PluginInterface.GetIpcProvider<string, string>("WrathFork.Settings.Commit.v1");
     private readonly ICallGateProvider<string, string> apply = Svc.PluginInterface.GetIpcProvider<string, string>("WrathFork.Settings.Apply.v2");
     private readonly ICallGateProvider<string> discover = Svc.PluginInterface.GetIpcProvider<string>("WrathFork.Settings.Discover.v2");
     private readonly ICallGateProvider<string, string> validate = Svc.PluginInterface.GetIpcProvider<string, string>("WrathFork.Settings.Validate.v2");
     private readonly ICallGateProvider<string, object> changed = Svc.PluginInterface.GetIpcProvider<string, object>("WrathFork.Settings.Changed.v2");
+    private readonly ICallGateProvider<string> stamp = Svc.PluginInterface.GetIpcProvider<string>("WrathFork.Settings.Stamp.v1");
+    private readonly ICallGateProvider<bool, bool> hold = Svc.PluginInterface.GetIpcProvider<bool, bool>("WrathFork.Openers.Hold.v1");
     private string observedRevision = "";
-    private long nextObservation;
+    private long nextObservation, nextBackstop, savedGeneration = -1;
     private uint lastJob;
     private ulong lastCharacter;
     private bool conflict;
     internal bool HasConflict => conflict;
     private readonly string instance = Guid.NewGuid().ToString("N");
+
+    private static void ResetOpenerPreview()
+    {
+        if (Player.Available) Service.ActionReplacer.ClearActionCache();
+    }
 
     internal SettingsApi()
     {
@@ -38,8 +46,30 @@ internal sealed class SettingsApi : IDisposable
             foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static))
                 // BST is not a supported setup job; its type initializer installs a live framework callback.
                 if (type.FullName != "WrathCombo.Combos.PvE.BST" && typeof(UserData).IsAssignableFrom(field.FieldType)) _ = field.GetValue(null);
+        stamp.RegisterFunc(() => Guard(() => new JObject { ["Success"] = true, ["Instance"] = instance,
+            ["ConfigurationId"] = Service.Configuration.ForkConfigurationId, ["Revision"] = observedRevision,
+            ["Hold"] = Service.Configuration.HoldManagedOpeners }));
+        hold.RegisterFunc(value => {
+            if (!Svc.Framework.IsInFrameworkUpdateThread || conflict) throw new InvalidOperationException("Wrath settings unavailable.");
+            if (Service.Configuration.HoldManagedOpeners != value)
+            {
+                Service.Configuration.HoldManagedOpeners = value;
+                try { AccordDiagnostics.PerformanceTimings.SaveConfig(Service.Configuration); }
+                catch { Service.Configuration.HoldManagedOpeners = !value; throw; }
+                if (value && RotationBehaviour.Managed) global::WrathCombo.CustomComboNS.WrathOpener.CurrentOpener?.ResetOpener();
+                ResetOpenerPreview();
+            }
+            return value;
+        });
         read.RegisterFunc(() => Guard(() => Envelope()));
-        apply.RegisterFunc(request => Guard(() => Apply(JObject.Parse(request))));
+        commit.RegisterFunc(request => CommitRequest(request, compact: true));
+        apply.RegisterFunc(request => CommitRequest(request, compact: false));
+        string CommitRequest(string request, bool compact) => Guard(() => {
+            AccordDiagnostics.DiagnosticLog.Event("Settings.ApplyRequest", () => new { Request = request });
+            var response = Apply(JObject.Parse(request), compact);
+            AccordDiagnostics.DiagnosticLog.Event("Settings.ApplyResponse", () => response);
+            return response;
+        });
         discover.RegisterFunc(() => Guard(() => new JObject { ["Success"] = true, ["Schema"] = SettingsSchema.Describe(Snapshot()) }));
         validate.RegisterFunc(request => Guard(() => {
             var current = Snapshot();
@@ -60,7 +90,7 @@ internal sealed class SettingsApi : IDisposable
         catch (Exception ex) { return new JObject { ["Success"] = false, ["Error"] = ex.Message }.ToString(Formatting.None); }
     }
 
-    private JObject Snapshot()
+    internal JObject Snapshot()
     {
         var all = JObject.FromObject(Service.Configuration);
         var result = new JObject();
@@ -90,13 +120,19 @@ internal sealed class SettingsApi : IDisposable
             ["KnownPresets"] = new JArray(Enum.GetValues<Preset>().Select(p => (int)p)) };
     }
 
-    private JObject Apply(JObject request)
+    private JObject Apply(JObject request, bool compact = false)
     {
-        if (WrathCombo.P!.IPC.Leasing.Registrations.Count != 0)
+        // Accord owns the persistent baseline while coordinated. External leases remain
+        // runtime overlays and must not block an idempotent settings transaction.
+        if (!AutomationOwnership.Managed && WrathCombo.P!.IPC.Leasing.Registrations.Count != 0)
             throw new InvalidOperationException("Release existing engine leases before applying persistent settings.");
-        var receipt = SettingsTransaction.Execute(request, instance, Service.Configuration.ForkConfigurationId, Snapshot(),
-            Service.Configuration.ForkOperationReceipts, patch => ValidatePatch(Snapshot(), patch), Persist);
-        var result = Envelope();
+        var current = Snapshot();
+        var receipt = SettingsTransaction.Execute(request, instance, Service.Configuration.ForkConfigurationId, current,
+            Service.Configuration.ForkOperationReceipts, patch => ValidatePatch(current, patch), Persist);
+        var result = compact
+            ? new JObject { ["Success"] = true, ["ConfigurationId"] = Service.Configuration.ForkConfigurationId }
+            : Envelope();
+        if (!receipt.Value<bool>("Replay")) observedRevision = receipt.Value<string>("CommittedRevision")!;
         result["Receipt"] = receipt;
         if (!receipt.Value<bool>("Replay")) Notify("Changed");
         return result;
@@ -114,8 +150,9 @@ internal sealed class SettingsApi : IDisposable
         var before = JObject.FromObject(Service.Configuration);
         var directory = Path.Combine(Svc.PluginInterface.GetPluginConfigDirectory(), "configuration-backups");
         SettingsTransaction.PersistWithRollback(updated, receipts, before, Populate, Refresh,
-            () => Svc.PluginInterface.SavePluginConfig(Service.Configuration), () =>
+            () => AccordDiagnostics.PerformanceTimings.SaveConfig(Service.Configuration), () =>
             {
+                using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.BackupWrite);
                 Directory.CreateDirectory(directory);
                 File.WriteAllText(Path.Combine(directory, $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.json"), before.ToString());
             });
@@ -128,9 +165,9 @@ internal sealed class SettingsApi : IDisposable
         if (WrathCombo.P?.CustomActions?.Manager is { } manager) ActionRoutes.RegisterDirectActions(manager);
         if (Player.Available)
         {
-            if (RotationBehaviour.Preferences?.Openers == false) global::WrathCombo.CustomComboNS.WrathOpener.CurrentOpener?.ResetOpener();
+            if (RotationBehaviour.AllowOpeners == false) global::WrathCombo.CustomComboNS.WrathOpener.CurrentOpener?.ResetOpener();
 
-            Service.ActionReplacer.LastActionInvokeFor.Clear();
+            Service.ActionReplacer.ClearActionCache();
             Service.ActionReplacer.UpdateFilteredCombos();
         }
         WrathCombo.P!.ActionRetargeting.ClearCachedRetargets();
@@ -161,7 +198,7 @@ internal sealed class SettingsApi : IDisposable
     private void Notify(string state)
     {
         try { changed.SendMessage(new JObject { ["State"] = state, ["Instance"] = instance,
-            ["Revision"] = Revision(Snapshot()) }.ToString(Formatting.None)); }
+            ["Revision"] = observedRevision }.ToString(Formatting.None)); }
         catch (Exception ex) { Svc.Log.Warning(ex, "Settings subscriber notification failed"); }
     }
 
@@ -180,10 +217,14 @@ internal sealed class SettingsApi : IDisposable
         if (Environment.TickCount64 >= nextObservation)
         {
             nextObservation = Environment.TickCount64 + 1000;
+            long now = Environment.TickCount64;
+            if (savedGeneration == Configuration.SavedGeneration && now < nextBackstop) return;
+            savedGeneration = Configuration.SavedGeneration;
+            nextBackstop = now + 30000;
             string revision = Revision(Snapshot());
             if (revision != observedRevision) { observedRevision = revision; Notify("Changed"); }
         }
     }
 
-    public void Dispose() { Notify("Unloading"); read.UnregisterFunc(); apply.UnregisterFunc(); discover.UnregisterFunc(); validate.UnregisterFunc(); IntentRouting.Reset(); }
+    public void Dispose() { stamp.UnregisterFunc(); hold.UnregisterFunc(); Notify("Unloading"); read.UnregisterFunc(); commit.UnregisterFunc(); apply.UnregisterFunc(); discover.UnregisterFunc(); validate.UnregisterFunc(); IntentRouting.Reset(); }
 }

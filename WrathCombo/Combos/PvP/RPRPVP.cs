@@ -105,12 +105,15 @@ internal static class RPRPvP
 
             if(PvPIntentRouting.Active && canWeave && LocalPlayer.HasStatus(Buffs.DeathWarrant) &&
                 LocalPlayer.Status(Buffs.DeathWarrant).RemainingTimeOrZero()<=3)
-                return OriginalHook(DeathWarrant);
+                return PvPIntentRouting.BoundRelease(actionID, DeathWarrant, OriginalHook(DeathWarrant));
 
             // Arcane Cirle Option
             if (IsEnabled(Preset.RPRPvP_Burst_ArcaneCircle)
                 && ActionReady(ArcaneCrest) && PlayerHealthPercentageHp() <= RPRPvP_ArcaneCircleThreshold)
                 return ArcaneCrest;
+
+            if (IsEnabled(Preset.RPRPvP_Smite) && GetTargetHPPercent() <= RPRPvP_SmiteThreshold &&
+                Engine.PvpTargetEligibility.GuardedBypass(PvPMelee.Smite)) return PvPMelee.Smite;
 
             if (!PvPCommon.TargetImmuneToDamage()) // Guard check on target
             {

@@ -23,7 +23,10 @@ public static class ContentSpecificActions
     /// <returns>
     ///     Whether any content-specific actions are suggested.
     /// </returns>
-    public static bool TryGet(ref uint actionId, out uint contentAction, bool healing = false)
+    public static bool TryGet(ref uint actionId, out uint contentAction, bool healing = false) =>
+        TryGet(ref actionId, out contentAction, null, healing);
+
+    public static bool TryGet(ref uint actionId, out uint contentAction, int? secondWindThreshold, bool healing = false)
     {
         contentAction = actionId;
         
@@ -42,7 +45,7 @@ public static class ContentSpecificActions
         if (OccultCrescent.TryGetPhantomAction(ref contentAction))
             return true;
 
-        if (Variant.TryGetVariantAction(ref contentAction))
+        if (Variant.TryGetVariantAction(ref contentAction, secondWindThreshold))
             return true;
 
         if (Bozja.TryGetBozjaAction(ref contentAction))

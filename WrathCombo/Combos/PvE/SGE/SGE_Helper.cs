@@ -120,6 +120,10 @@ internal partial class SGE
 
     private static bool UseRaidwide(ref uint actionID)
     {
+        if (Engine.ExperimentalSelection.ActiveSage)
+        {
+            return false; // converted advanced providers use one shared selection path
+        }
         if (CanWeave())
         {
             if (RaidwideKerachole())
@@ -158,6 +162,7 @@ internal partial class SGE
 
     private static bool RaidwideEprognosis()
     {
+        if (Engine.ExperimentalSelection.ActiveSage) return false; // shared preparation path already evaluated it
         bool shieldCheck = GetPartyBuffPercent(Buffs.EukrasianPrognosis) <= SGE_AoE_Adv_Heal_EPrognosisOption &&
                            GetPartyBuffPercent(SCH.Buffs.Galvanize) <= SGE_AoE_Adv_Heal_EPrognosisOption;
 
@@ -401,6 +406,7 @@ internal partial class SGE
 
     private static bool UseEukrasianDiagnosis(IGameObject? healTarget, bool simpleMode, ref uint actionID)
     {
+        if (Engine.ExperimentalSelection.ActiveSage) return SelectDiagnosis(ref actionID, simpleMode);
         if (!ActionLearned(Eukrasia) ||
             healTarget.HasStatus(Buffs.EukrasianDiagnosis))
             return false;

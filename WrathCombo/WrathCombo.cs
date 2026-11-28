@@ -1,4 +1,5 @@
 using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -50,6 +51,8 @@ public sealed partial class WrathCombo : IDalamudPlugin
     internal readonly ConfigWindow ConfigWindow;
     private readonly MajorChangesWindow _majorChangesWindow;
     internal readonly Engine.SettingsApi SettingsApi;
+    private readonly Engine.TestingApi testingApi;
+    private readonly FateStanceRestore fateStance = new();
     private readonly TargetHelper TargetHelper;
     internal static WrathCombo? P;
     private readonly WindowSystem ws;
@@ -59,8 +62,6 @@ public sealed partial class WrathCombo : IDalamudPlugin
         ConnectCallback = new HappyEyeballsCallback().ConnectCallback,
     };
     internal readonly HttpClient HTTPClient = new(httpHandler) { Timeout = TimeSpan.FromSeconds(5) };
-    private readonly IDtrBarEntry DtrBarEntry;
-    public readonly IDtrBarEntry OpenerDtr;
     internal Provider IPC;
     internal Search IPCSearch = null!;
     internal UIHelper UIHelper = null!;
@@ -232,6 +233,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
         _majorChangesWindow = new MajorChangesWindow();
         ResetFeatures();
         SettingsApi = new Engine.SettingsApi();
+        testingApi = new Engine.TestingApi(SettingsApi.Snapshot);
         TargetHelper = new();
         ws = new();
         ws.AddWindow(ConfigWindow);
@@ -246,33 +248,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
         RegisterCommands();
 
-        DtrBarEntry ??= Svc.DtrBar.Get("Wrath Combo");
-        DtrBarEntry.OnClick = (c) =>
-        {
-            if (c.ClickType == MouseClickType.Right)
-                HandleOpenCommand(tab: ConfigWindow.OpenWindow, forceOpen: true);
-            else
-                AutoRotationController.ToggleAutoRotation(!Service.Configuration.RotationConfig.Enabled);
-        };
-        DtrBarEntry.Tooltip = new SeString(
-        new TextPayload("Left Click to toggle Wrath Combo's Auto-Rotation.\n"),
-        new TextPayload("Right Click to toggle Wrath Combo's UI.\n"),
-        new TextPayload("Disable this icon in /xlsettings -> Server Info Bar"));
-
-        OpenerDtr ??= Svc.DtrBar.Get("Wrath Combo Opener");
-
-        OpenerDtr.OnClick += (_) =>
-        {
-            var preset = WrathOpener.CurrentOpener?.Preset;
-            if (preset is not { } pre)
-                return;
-
-            PresetStorage.TogglePreset(pre);
-        };
-
-        OpenerDtr.Tooltip = new SeString(
-        new TextPayload("Click to toggle Opener Preset.\n"),
-        new TextPayload("Disable this icon in /xlsettings -> Server Info Bar"));
+        // Accord owns the server-bar automation control.
 
         Svc.ClientState.Login += PrintLoginMessage;
 
@@ -350,6 +326,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
     private void ClientState_TerritoryChanged(uint territoryId)
     {
+        fateStance.Reset();
         Engine.IntentRouting.Reset();
         UpdateCaches(false, true, false);
         Task.Run(StancePartner.CheckForIPCControl);
@@ -360,12 +337,18 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        AccordDiagnostics.IntegrationTrace.Frame(() => new { Job = JobID, Territory = Svc.ClientState.TerritoryType,
+            Combat = Svc.Condition[ConditionFlag.InCombat], Loading = Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51],
+            Target = Svc.Targets.Target?.GameObjectId, Module = Engine.BossForecastProvider.Current?.Module });
+        AccordDiagnostics.PerformanceTimings.Report();
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.Framework);
         try
         {
             #region Checks that don't require the Player to be loaded
 
             Configuration.ProcessSaveQueue();
             SettingsApi.Tick();
+            testingApi.Tick();
             Engine.PvPIntentRouting.Tick();
 
             //Hacky workaround to ensure it's always running
@@ -377,62 +360,33 @@ public sealed partial class WrathCombo : IDalamudPlugin
             if (Player.Object is null ||
                 !GenericHelpers.IsScreenReady() ||
                 !Svc.ClientState.IsLoggedIn)
+            {
+                fateStance.Reset();
                 return;
+            }
 
             #region Checks and Updates that require the Player
 
             JobID = Player.Job;
+            fateStance.Tick();
 
             PresetStorage.HandleCurrentConflicts();
 
             BlueMageService.PopulateBLUSpells();
             TargetHelper.Draw();
 
+            ActionWatching.TickManualLimitBreak();
             if (!SettingsApi.HasConflict) AutoRotationController.Run();
 
             UpcomingPositionalHintService.Tick();
 
             if (Player.IsDead)
             {
-                ActionRetargeting.Retargets.Clear();
+                ActionRetargeting.ClearRetargetRecords();
                 CustomComboFunctions.CleanupExpiredLineOfSightCache();
             }
 
             #endregion
-
-            #region DTR Bar Updating
-
-            var autoOn = IPC.GetAutoRotationState();
-            var icon = new IconPayload(autoOn
-                ? BitmapFontIcon.SwordUnsheathed
-                : BitmapFontIcon.SwordSheathed);
-
-            var text = autoOn ? ": On" : ": Off";
-            if (!Service.Configuration.ShortDTRText && autoOn)
-                text += $" ({P.IPCSearch.ActiveJobPresets} active)";
-            var ipcControlledText =
-                P.UIHelper.AutoRotationStateControlled() is not null
-                    ? "(Locked)"
-                    : "";
-
-            var pausedText =
-                AutoRotationController.Paused ? "(Paused)" : "";
-
-            var statusText = string.Join(" ", [text, ipcControlledText, pausedText]);
-
-            var payloadText = new TextPayload(statusText);
-            DtrBarEntry.Text = new SeString(icon, payloadText);
-
-            #endregion
-
-            if (Service.Configuration.ShowOpenerDtr)
-            {
-                var status = new TextPayload(WrathOpener.OpenerStatus());
-                OpenerDtr.Text = new SeString(status);
-                OpenerDtr.Shown = true;
-            }
-            else
-                OpenerDtr.Shown = false;
 
             if (Service.Configuration.TankbusterTTS || Service.Configuration.TankbusterToast)
                 CustomComboFunctions.PlayTankbusterAlert();
@@ -526,6 +480,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
         ws.RemoveAllWindows();
         SettingsApi.Dispose();
+        testingApi.Dispose();
         Svc.DtrBar.Remove("Wrath Combo");
         Svc.DtrBar.Remove("Wrath Combo Opener");
         Configuration.ConfigChanged -= DebugFile.LoggingConfigChanges;

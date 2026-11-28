@@ -26,7 +26,9 @@ internal static partial class Variant
         }
     }
 
-    public static bool TryGetVariantAction(ref uint actionID)
+    public static bool TryGetVariantAction(ref uint actionID) => TryGetVariantAction(ref actionID, null);
+
+    public static bool TryGetVariantAction(ref uint actionID, int? secondWindThreshold)
     {
         if (!IsInVariantDungeon) return false;
 
@@ -35,9 +37,9 @@ internal static partial class Variant
             case JobRole.Tank:
                 if (IsEnabled(Preset.Variant_Tank))
                 {
-                    if (CheckCure(Preset.Variant_Tank_Cure, Config.Variant_Tank_Cure))
+                    if (CheckRecovery(Preset.Variant_Tank_Cure, Config.Variant_Tank_Cure, secondWindThreshold, out var recovery))
                     {
-                        actionID = Cure;
+                        actionID = recovery;
                         return true;
                     }
                     if (CheckUltimatum(Preset.Variant_Tank_Ultimatum))
@@ -92,9 +94,9 @@ internal static partial class Variant
             case JobRole.RangedDPS:
                 if (IsEnabled(Preset.Variant_PhysRanged))
                 {
-                    if (CheckCure(Preset.Variant_PhysRanged_Cure, Config.Variant_PhysRanged_Cure))
+                    if (CheckRecovery(Preset.Variant_PhysRanged_Cure, Config.Variant_PhysRanged_Cure, secondWindThreshold, out var recovery))
                     {
-                        actionID = Cure;
+                        actionID = recovery;
                         return true;
                     }
                     if (CheckUltimatum(Preset.Variant_PhysRanged_Ultimatum))
@@ -123,9 +125,9 @@ internal static partial class Variant
             case JobRole.MeleeDPS:
                 if (IsEnabled(Preset.Variant_Melee))
                 {
-                    if (CheckCure(Preset.Variant_Melee_Cure, Config.Variant_Melee_Cure))
+                    if (CheckRecovery(Preset.Variant_Melee_Cure, Config.Variant_Melee_Cure, secondWindThreshold, out var recovery))
                     {
-                        actionID = Cure;
+                        actionID = recovery;
                         return true;
                     }
                     if (CheckUltimatum(Preset.Variant_Melee_Ultimatum))
@@ -154,9 +156,9 @@ internal static partial class Variant
             case JobRole.MagicalDPS:
                 if (IsEnabled(Preset.Variant_Magic))
                 {
-                    if (CheckCure(Preset.Variant_Magic_Cure, Config.Variant_Magic_Cure))
+                    if (CheckRecovery(Preset.Variant_Magic_Cure, Config.Variant_Magic_Cure, secondWindThreshold, out var recovery))
                     {
-                        actionID = Cure;
+                        actionID = recovery;
                         return true;
                     }
                     if (CheckUltimatum(Preset.Variant_Magic_Ultimatum))

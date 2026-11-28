@@ -19,19 +19,16 @@ internal partial class BRD : PhysicalRanged
                 return actionID;
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
             #endregion
 
             const Combo comboFlags = Combo.AoE | Combo.Simple;
 
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-
-            return OriginalHook(QuickNock);
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
+            return plannedGcd;
         }
     }
 
@@ -44,19 +41,16 @@ internal partial class BRD : PhysicalRanged
                 return actionID;
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
             #endregion
 
             const Combo comboFlags = Combo.ST | Combo.Simple;
 
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-
-            return OriginalHook(HeavyShot);
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
+            return plannedGcd;
     }
     }
     #endregion
@@ -71,19 +65,16 @@ internal partial class BRD : PhysicalRanged
                 return actionID;
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.BRD_AoE_SecondWind) ? (int)BRD_AoESecondWindThreshold : null))
                 return contentAction;
             #endregion
             
             const Combo comboFlags = Combo.AoE | Combo.Adv;
 
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-
-            return OriginalHook(QuickNock);
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
+            return plannedGcd;
         }
     }
 
@@ -113,19 +104,16 @@ internal partial class BRD : PhysicalRanged
             #endregion
 
             #region Special Content
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.BRD_ST_SecondWind) ? (int)BRD_STSecondWindThreshold : null))
                 return contentAction;
             #endregion
 
             const Combo comboFlags = Combo.ST | Combo.Adv;
 
-            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-            
-            if (TryGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID))
-                return actionID;
-
-            return OriginalHook(HeavyShot);
+            uint plannedGcd = SelectDamageGcd(comboFlags);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
+            if (TryOGCDAttacks(comboFlags, ref actionID) && ActionReady(actionID)) return actionID;
+            return plannedGcd;
         }
     }
     #endregion

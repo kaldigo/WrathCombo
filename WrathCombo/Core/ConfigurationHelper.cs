@@ -43,6 +43,7 @@ public partial class Configuration
     ///     Process the <see cref="SaveQueue"/>, trying to save each item.
     /// </summary>
     /// <seealso cref="Save"/>
+    internal static long SavedGeneration;
     internal static void ProcessSaveQueue()
     {
         if (_isSaving || SaveQueue.Count == 0) return;
@@ -62,6 +63,7 @@ public partial class Configuration
             PluginLog.Verbose(
                 "[Saving] Attempting to save ...");
             Svc.PluginInterface.SavePluginConfig(config);
+            System.Threading.Interlocked.Increment(ref SavedGeneration);
             _isSaving = false;
             PluginLog.Verbose(
                 $"[Saving] Saved (queue size now: {SaveQueue.Count})");
@@ -92,6 +94,7 @@ public partial class Configuration
                 PluginLog.Verbose(
                     $"[Saving] Retrying save ... (attempt {retryCount})");
                 Svc.PluginInterface.SavePluginConfig(config);
+                System.Threading.Interlocked.Increment(ref SavedGeneration);
                 success = true;
                 PluginLog.Verbose(
                     $"[Saving] Saved (queue size now: {SaveQueue.Count})");

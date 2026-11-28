@@ -49,7 +49,7 @@ internal partial class SCH : Healer
                 if (ActionWatching.NumberOfGcdsUsed > 3 && CanChainStrategem)
                     return ChainStratagem;
 
-                if (ActionReady(EnergyDrain) && AetherflowCD <= 10 &&
+                if (ActionReady(EnergyDrain) && !KeepHealingAetherflow && AetherflowCD <= 10 &&
                     (ChainStrategemCD > 10 || !ActionLearned(ChainStratagem)))
                     return EnergyDrain;
 
@@ -102,7 +102,7 @@ internal partial class SCH : Healer
             if (ActionWatching.NumberOfGcdsUsed > 3 && CanChainStrategem && CanWeave())
                 return ChainStratagem;
 
-            if (ActionReady(EnergyDrain) &&
+            if (ActionReady(EnergyDrain) && !KeepHealingAetherflow &&
                 AetherflowCD <= 10 && CanWeave())
                 return EnergyDrain;
 
@@ -325,7 +325,7 @@ internal partial class SCH : Healer
                     GetTargetHPPercent() > chainThreshold)
                     return ChainStratagem;
 
-                if (IsEnabled(Preset.SCH_ST_ADV_DPS_EnergyDrain) && ActionReady(EnergyDrain) &&
+                if (IsEnabled(Preset.SCH_ST_ADV_DPS_EnergyDrain) && ActionReady(EnergyDrain) && !KeepHealingAetherflow &&
                     AetherflowCD <= SCH_ST_DPS_EnergyDrain &&
                     (!SCH_ST_DPS_EnergyDrain_Burst ||
                      ChainStrategemCD > 10 ||
@@ -403,7 +403,7 @@ internal partial class SCH : Healer
                 (ActionLearned(BanefulImpaction) || !SCH_AoE_DPS_ChainStratagemBanefulOption))
                 return ChainStratagem;
 
-            if (IsEnabled(Preset.SCH_AoE_ADV_DPS_EnergyDrain) && ActionReady(EnergyDrain) &&
+            if (IsEnabled(Preset.SCH_AoE_ADV_DPS_EnergyDrain) && ActionReady(EnergyDrain) && !KeepHealingAetherflow &&
                 AetherflowCD <= SCH_AoE_DPS_EnergyDrain && CanWeave() &&
                 (!SCH_AoE_DPS_EnergyDrain_Burst ||
                  ChainStrategemCD > 10 ||

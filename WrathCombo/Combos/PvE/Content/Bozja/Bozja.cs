@@ -68,7 +68,7 @@ internal static partial class Bozja
                     {
                         (Preset.Bozja_Tank_LostDeath, LostDeath, true),
                         (Preset.Bozja_Tank_LostCure, LostCure, PlayerHealthPercentageHp() <= Config.Bozja_Tank_LostCure_Health),
-                        (Preset.Bozja_Tank_LostArise, LostArise, GetTargetHPPercent() == 0 && !LocalPlayer.HasStatus(RoleActions.Magic.Buffs.Raise)),
+                        (Preset.Bozja_Tank_LostArise, LostArise, Engine.IncomingRaise.Available(CurrentTarget)),
                         (Preset.Bozja_Tank_LostReraise, LostReraise, PlayerHealthPercentageHp() <= Config.Bozja_Tank_LostReraise_Health),
                         (Preset.Bozja_Tank_LostProtect, LostProtect, !LocalPlayer.HasStatus(Buffs.LostProtect)),
                         (Preset.Bozja_Tank_LostShell, LostShell, !LocalPlayer.HasStatus(Buffs.LostShell)),

@@ -34,6 +34,22 @@ internal sealed class ActionReplacer : IDisposable
     public bool ActionReplacingEnabled => getActionHook.IsEnabled;
     private readonly Hook<IsActionReplaceableDelegate> isActionReplaceableHook;
     public readonly Dictionary<uint, uint> LastActionInvokeFor = [];
+    private readonly Dictionary<uint, uint> automaticActions = [];
+    internal void RecordActionInvoke(uint input, uint action) =>
+        (Engine.SelectionRuntime.Automatic ? automaticActions : LastActionInvokeFor)[input] = action;
+    internal bool TryGetLastAction(uint input, out uint action) =>
+        (Engine.SelectionRuntime.Automatic ? automaticActions : LastActionInvokeFor).TryGetValue(input, out action);
+    internal void ClearActionCache() { LastActionInvokeFor.Clear(); automaticActions.Clear(); idleIcons.Clear(); }
+    private readonly Dictionary<uint, (uint Action, Job Job, uint Territory, int Level)> idleIcons = [];
+    internal void RememberIdleIcon(uint input, uint action)
+    {
+        if (!Engine.SelectionRuntime.Automatic) idleIcons[input] = (action, Player.Job, Svc.ClientState.TerritoryType, Player.Level);
+    }
+    private uint DisplayAction(uint input, uint result) =>
+        (result == All.Cease || result == input && Engine.PveIntentRouting.IsDamageButton(input)) && !Engine.SelectionRuntime.HandlingPress && !Engine.SelectionRuntime.Automatic &&
+        idleIcons.TryGetValue(input, out var icon) && icon.Job == Player.Job && icon.Level == Player.Level &&
+        icon.Territory == Svc.ClientState.TerritoryType && Engine.SelectionRuntime.IdleDamageDisplayAllowed
+            ? icon.Action : result;
 
     /// <summary> Initializes a new instance of the <see cref="ActionReplacer" /> class. </summary>
     public unsafe ActionReplacer()
@@ -101,6 +117,9 @@ internal sealed class ActionReplacer : IDisposable
     /// </remarks>
     private unsafe uint GetAdjustedActionDetour(ActionManager* actionManager, uint actionID)
     {
+        using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.Preview);
+        if (actionID is Engine.EmergencyRotation.Single or Engine.EmergencyRotation.Area) return actionID;
+        if (Engine.AutomationOwnership.ExternalAction) return OriginalHook(actionID);
         try
         {
             // A validated targetless result must bypass the icon cache as well as rotation replacement.
@@ -109,17 +128,29 @@ internal sealed class ActionReplacer : IDisposable
                 UpdateFilteredCombos();
 
             // Bail if not wanting to replace actions in this manner
-            if (!Player.Available)
+            if (!Player.Available || !Svc.ClientState.IsLoggedIn || !GenericHelpers.IsScreenReady() ||
+                Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51])
                 return OriginalHook(actionID);
 
-            // Only refresh every so often
-            if (!EzThrottler.Throttle("Actions" + actionID,
+            // Automatic selection owns fresh action/recipient decisions. It must
+            // neither consume a manual icon result nor write its movement/urgency
+            // rejection into the manual preview's throttle or cache.
+            if (Engine.SelectionRuntime.Automatic)
+            {
+                uint automaticAction = GetAdjustedAction(actionID);
+                RecordActionInvoke(actionID, automaticAction);
+                return automaticAction;
+            }
+
+            // Only refresh manual previews every so often.
+            if (!Engine.SelectionRuntime.ConsumePressRefresh() && !EzThrottler.Throttle("Actions" + actionID,
                     Service.Configuration.Throttle) && LastActionInvokeFor.TryGetValue(actionID, out var cached))
-                return cached;
+                return DisplayAction(actionID, cached);
 
             // Actually get the action
+            idleIcons.Remove(actionID);
             LastActionInvokeFor[actionID] = GetAdjustedAction(actionID);
-            return LastActionInvokeFor[actionID];
+            return DisplayAction(actionID, LastActionInvokeFor[actionID]);
         }
         catch (Exception e)
         {
@@ -136,6 +167,13 @@ internal sealed class ActionReplacer : IDisposable
     /// <returns>The action a combo returns.</returns>
     private unsafe uint GetAdjustedAction(uint actionID)
     {
+        uint result = ResolveAdjustedAction(actionID);
+        Engine.TestingApi.Observe("Selection", actionID, result);
+        return result;
+    }
+
+    private unsafe uint ResolveAdjustedAction(uint actionID)
+    {
         try
         {
             if (ClassLocked() ||
@@ -146,7 +184,9 @@ internal sealed class ActionReplacer : IDisposable
                 (DisabledJobsPVP.Any(x => x == Player.Job) && Svc.ClientState.IsPvP))
                 return OriginalHook(actionID);
 
+            if (actionID == Engine.TankPull.Button) return Engine.TankPull.Preview();
             using var intent = Engine.PvPIntentRouting.Enter(actionID);
+            using var adaptive = Engine.PveIntentRouting.Enter(actionID);
             var route = Engine.ActionRoutes.For(actionID);
             if (route?.Direct == true) return OriginalHook(route.Target == 0 ? actionID : route.Target);
             using var actionRoute = new WrathFork.Contract.ActionRouteContext(route);
@@ -169,11 +209,19 @@ internal sealed class ActionReplacer : IDisposable
                         return All.Cease;
                     }
 
-                    return Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(newActionID));
+                    var selected = Engine.ActionRoutes.Filter(Engine.PvPIntentRouting.Filter(newActionID));
+                    if (selected == All.Cease && !idleIcons.ContainsKey(actionID))
+                        RememberProviderStarter(actionID, combo);
+                    return selected;
                 }
             }
 
-            return Engine.ActionRoutes.Filter(OriginalHook(actionID));
+            // Some enabled rotations decline the input entirely when no enemy exists.
+            if (Engine.PveIntentRouting.IsDamageButton(actionID) && Engine.SelectionRuntime.IdleDamageDisplayAllowed)
+                foreach (var combo in FilteredCombos)
+                    if (CustomComboFunctions.IsEnabled(combo.Preset) && RememberProviderStarter(actionID, combo)) break;
+
+            return actionID == Engine.PveIntentRouting.FullRotation ? All.Cease : Engine.ActionRoutes.Filter(OriginalHook(actionID));
         }
 
         catch (Exception ex)
@@ -181,6 +229,30 @@ internal sealed class ActionReplacer : IDisposable
             Svc.Log.Error(ex, "Preset error");
             return OriginalHook(actionID);
         }
+    }
+
+    private bool RememberProviderStarter(uint input, CustomCombo combo)
+    {
+        if (!Engine.SelectionRuntime.IdleDamageDisplayAllowed) return false;
+        var preset = combo.Preset.Attributes();
+        if (preset.IsPvP || preset.AutoAction is not { IsHeal: false } damage ||
+            preset.ReplaceSkill?.ActionIDs is not { Count: > 0 } roots) return false;
+        var type = damage.IsAoE ? Native.CustomActionType.AoEDPS : Native.CustomActionType.SingleTargetDPS;
+        bool virtualInput = Engine.PveIntentRouting.IsDamageButton(input);
+        bool matches = Engine.PveIntentRouting.Matches(input, type) ??
+            (Native.CustomActionHelper.CustomActionEnabled(type) ? input == Native.CustomActionHelper.GetActionId(type) : roots.Contains(input));
+        if (!matches) return false;
+        foreach (var root in roots)
+        {
+            if (!virtualInput && root != input) continue;
+            var icon = OriginalHook(root);
+            if (icon == 0 || icon >= All.SingleTargetDPS || !CustomComboFunctions.ActionLearned(icon) ||
+                !Engine.ActionRoutes.Allowed(root) || !Engine.ActionRoutes.Allowed(icon) ||
+                Player.Job == Job.BLU && !CustomComboFunctions.IsSpellActive(root)) continue;
+            RememberIdleIcon(input, icon);
+            return true;
+        }
+        return false;
     }
 
     internal static bool DisableJobCheck = false;
@@ -224,6 +296,7 @@ internal sealed class ActionReplacer : IDisposable
 
     public void UpdateFilteredCombos()
     {
+        ClearActionCache();
         var playerJob = Player.Job;
         var upgradedJob = playerJob.GetUpgradedJob();
 
