@@ -46,6 +46,7 @@ public class ActionRetargeting : IDisposable
     internal readonly Dictionary<uint, Retargeting> Retargets = [];
     private readonly Dictionary<uint, Retargeting> automaticRetargets = [];
     private Dictionary<uint, Retargeting> ActiveRetargets => Engine.SelectionRuntime.Automatic ? automaticRetargets : Retargets;
+    internal IReadOnlyCollection<KeyValuePair<uint, Retargeting>> AllRetargets => Retargets.Concat(automaticRetargets).ToArray();
 
     public ActionRetargeting()
     {
@@ -398,9 +399,15 @@ public class ActionRetargeting : IDisposable
     /// Clears all cached Retargets.
     internal void ClearCachedRetargets()
     {
+        ClearRetargetRecords();
+        log("cleared cached Retargets", logLevel: 1);
+    }
+
+    // Also used on every dead-player frame; do not emit a log on that path.
+    internal void ClearRetargetRecords()
+    {
         Retargets.Clear();
         automaticRetargets.Clear();
-        log("cleared cached Retargets", logLevel: 1);
     }
 
     private void ClearCachedRetargetsOnConfigChange

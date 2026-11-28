@@ -378,7 +378,7 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
             if (Player.IsDead)
             {
-                ActionRetargeting.Retargets.Clear();
+                ActionRetargeting.ClearRetargetRecords();
                 CustomComboFunctions.CleanupExpiredLineOfSightCache();
             }
 

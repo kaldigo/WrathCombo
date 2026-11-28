@@ -862,7 +862,7 @@ internal class Debug : ConfigWindow, IDisposable
 
         if (ImGui.CollapsingHeader("Action Retargeting"))
         {
-            var retargets = P.ActionRetargeting.Retargets;
+            var retargets = P.ActionRetargeting.AllRetargets;
 
             CustomStyleText("Current Unique Retargeting entries:",
                 $"{retargets.Select(x => x.Value.ID)

@@ -27,6 +27,7 @@ FIELDS
 ADD
 REMOVE
 CLEAR
+RECORDS
  public static void Run(){
   var f=new Fixture();
   void Check(bool b,string m){if(!b)throw new Exception(m);}
@@ -47,7 +48,7 @@ CLEAR
   Console.WriteLine("Retarget context isolation passed");
  }
 }
-'''.replace('FIELDS',fields).replace('ADD',method('private void AddRetarget(')).replace('REMOVE',method('private void RemoveRetarget(')).replace('CLEAR',method('internal void ClearCachedRetargets('))
+'''.replace('FIELDS',fields).replace('ADD',method('private void AddRetarget(')).replace('REMOVE',method('private void RemoveRetarget(')).replace('CLEAR',method('internal void ClearCachedRetargets(')).replace('RECORDS',method('internal void ClearRetargetRecords('))
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)
             (path/'Test.csproj').write_text('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>',encoding='utf-8')
