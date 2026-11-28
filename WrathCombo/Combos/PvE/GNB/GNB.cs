@@ -264,6 +264,10 @@ internal partial class GNB : Tank
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            if (Engine.ExperimentalSelection.TankAoeRangedFallback && HasBattleTarget() &&
+                ActionReady(LightningShot) && !CanWeave() && !InActionRange(DemonSlice) && InActionRange(LightningShot))
+                return LightningShot;
+
             if (GNB_AoE_MitOptions != 1 || P.UIHelper.PresetControlled(Preset)?.enabled == true)
             {
                 if (TryUseMits(RotationMode.simple, ref actionID))
@@ -341,6 +345,10 @@ internal partial class GNB : Tank
 
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+
+            if (Engine.ExperimentalSelection.TankAoeRangedFallback && HasBattleTarget() &&
+                ActionReady(LightningShot) && !CanWeave() && !InActionRange(DemonSlice) && InActionRange(LightningShot))
+                return LightningShot;
 
             if (GNB_AoE_Advanced_MitOptions != 1 || P.UIHelper.PresetControlled(Preset)?.enabled == true)
             {

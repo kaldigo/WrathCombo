@@ -207,6 +207,10 @@ internal partial class DRK : Tank
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+            if (Engine.ExperimentalSelection.TankAoeRangedFallback && HasBattleTarget() &&
+                ActionReady(Unmend) && !CanWeave() && !InActionRange(Unleash) && InActionRange(Unmend))
+                return Unmend;
+
             // Bail if not in combat
             if (!InCombat())
             {
@@ -247,6 +251,10 @@ internal partial class DRK : Tank
 
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
+
+            if (Engine.ExperimentalSelection.TankAoeRangedFallback && HasBattleTarget() &&
+                ActionReady(Unmend) && !CanWeave() && !InActionRange(Unleash) && InActionRange(Unmend))
+                return Unmend;
 
             // Bail if not in combat
             if (!InCombat())

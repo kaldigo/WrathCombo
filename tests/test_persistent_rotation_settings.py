@@ -20,6 +20,8 @@ class Program {
  static void Main() {
   using(var api = new RotationSettingsApi()) {
    var expected = ExperimentalSelection.Read();
+   Check(expected.Value<bool>("TankAoeRangedFallback"),"Warrior AoE ranged uptime changed on upgrade");
+   expected["TankAoeRangedFallback"]=false;
    expected["BlackMage"]=true; expected["Forecasts"]=true; expected["EnemyTargeting"]=true;
    expected["EnemyFocus"]=true; expected["EnemyOverrideOrder"]=new JArray("Focus","Selected","WorldMouseover");
    Check(Call(expected.ToString()).Value<bool>("Success"),"valid settings rejected");
@@ -41,11 +43,12 @@ class Program {
    Check(!Call("{\"EnemyOverrideOrder\":[\"Focus\",\"Focus\",\"Selected\"]}").Value<bool>("Success"),"invalid order accepted");
   }
   var disk=JObject.Parse(Svc.PluginInterface.Disk);
-  ExperimentalSelection.Apply(new JObject { ["BlackMage"]=false, ["Forecasts"]=false, ["EnemyTargeting"]=false },restoring:true);
+  ExperimentalSelection.Apply(new JObject { ["BlackMage"]=false, ["Forecasts"]=false, ["EnemyTargeting"]=false, ["TankAoeRangedFallback"]=true },restoring:true);
   Service.Configuration=new Configuration { RotationSelectionSettings=disk };
   WrathCombo.CustomComboNS.Functions.CustomComboFunctions.Combat=true;
   using(var reloaded = new RotationSettingsApi()) {
    Check(ExperimentalSelection.ActiveBlackMage && ExperimentalSelection.ActiveTargets && ExperimentalSelection.Forecasts,"reload lost runtime settings");
+   Check(!ExperimentalSelection.TankAoeRangedFallback,"reload lost Warrior AoE Tomahawk preference");
    Check(JToken.DeepEquals(disk,Call("read")["Settings"]),"reload lost saved overrides");
   }
   Console.WriteLine("Persistent engine settings: saved runtime activation, reload, combat rejection, malformed batches and save rollback passed.");

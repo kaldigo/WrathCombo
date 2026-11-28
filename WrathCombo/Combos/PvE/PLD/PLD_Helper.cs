@@ -645,9 +645,10 @@ internal partial class PLD
             IsSTEnabled(flags, Preset.PLD_ST_AdvancedMode_Atonement);
         
         bool rangedUptimeEnabled =
-            flags.HasFlag(Combo.Simple) ||
+            (flags.HasFlag(Combo.Simple) ||
             IsSTEnabled(flags, Preset.PLD_ST_AdvancedMode_ShieldLob) ||
-            IsAoEEnabled(flags, Preset.PLD_AoE_AdvancedMode_ShieldLob);
+            IsAoEEnabled(flags, Preset.PLD_AoE_AdvancedMode_ShieldLob)) &&
+            (!flags.HasFlag(Combo.AoE) || Engine.ExperimentalSelection.TankAoeRangedFallback);
         
         bool interuptStunEnabled =
             flags.HasFlag(Combo.Simple) ||

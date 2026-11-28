@@ -72,6 +72,7 @@ internal static class ExperimentalSelection
     internal static bool AllowPhantomKick { get; private set; } = true;
     internal static bool AutoRoleMechanics { get; private set; }
     internal static bool AllowPhantomRage { get; private set; }
+    internal static bool TankAoeRangedFallback { get; private set; } = true;
     internal static bool HealEncounterPlayers { get; private set; }
     internal static bool RaiseNearbyPlayers { get; private set; }
     internal static bool HardCastRaise { get; private set; } = true;
@@ -110,7 +111,7 @@ internal static class ExperimentalSelection
         ["Viper"] = Viper, ["Reaper"] = Reaper, ["Summoner"] = Summoner, ["RedMage"] = RedMage, ["Pictomancer"] = Pictomancer, ["BlackMage"] = BlackMage, ["Samurai"] = Samurai, ["Monk"] = Monk, ["Ninja"] = Ninja,
         ["Warrior"] = Warrior, ["DarkKnight"] = DarkKnight, ["Gunbreaker"] = Gunbreaker, ["PvpMachinist"] = PvpMachinist, ["PvpScheduling"] = PvpScheduling,
         ["IncludeHealing"] = IncludeHealing, ["IncludeRaise"] = IncludeRaise, ["AllowPhantomKick"] = AllowPhantomKick, ["AllowPhantomRage"] = AllowPhantomRage, ["AutoRoleMechanics"] = AutoRoleMechanics, ["RaiseNearbyPlayers"] = RaiseNearbyPlayers, ["HealEncounterPlayers"] = HealEncounterPlayers, ["HardCastRaise"] = HardCastRaise,
-        ["IncludeCleanse"] = IncludeCleanse, ["PreventiveHealing"] = PreventiveHealing,
+        ["IncludeCleanse"] = IncludeCleanse, ["PreventiveHealing"] = PreventiveHealing, ["TankAoeRangedFallback"] = TankAoeRangedFallback,
         ["HealingGcds"] = HealingGcds, ["PartyMouseover"] = PartyMouseover, ["WorldMouseover"] = WorldMouseover,
         ["Focus"] = Focus, ["GroundTargets"] = GroundTargets, ["SpaceMitigation"] = SpaceMitigation, ["Fallback"] = Fallback, ["AutomaticAllies"] = AutomaticAllies, ["AutomaticEnemies"] = AutomaticEnemies,
         ["EnemyTargeting"] = EnemyTargeting, ["AcquireEnemy"] = AcquireEnemy, ["OverridesInAutomation"] = OverridesInAutomation,
@@ -159,6 +160,7 @@ internal static class ExperimentalSelection
         AllowPhantomKick = current.Value<bool>("AllowPhantomKick");
         AutoRoleMechanics = current.Value<bool>("AutoRoleMechanics");
         AllowPhantomRage = current.Value<bool>("AllowPhantomRage");
+        TankAoeRangedFallback = current.Value<bool>("TankAoeRangedFallback");
         HealEncounterPlayers = current.Value<bool>("HealEncounterPlayers");
         RaiseNearbyPlayers = current.Value<bool>("RaiseNearbyPlayers");
         IncludeRaise = current.Value<bool>("IncludeRaise"); HardCastRaise = current.Value<bool>("HardCastRaise");

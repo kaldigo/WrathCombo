@@ -298,9 +298,10 @@ internal partial class WAR : Tank
             IsAoEEnabled(flags, Preset.WAR_AoE_PrimalRend);
 
         bool rangedUptimeEnabled =
-            flags.HasFlag(Combo.Simple) ||
+            (flags.HasFlag(Combo.Simple) ||
             IsSTEnabled(flags, Preset.WAR_ST_RangedUptime) ||
-            IsAoEEnabled(flags, Preset.WAR_AoE_RangedUptime);
+            IsAoEEnabled(flags, Preset.WAR_AoE_RangedUptime)) &&
+            (!flags.HasFlag(Combo.AoE) || Engine.ExperimentalSelection.TankAoeRangedFallback);
 
         bool primalRuinationEnabled =
             flags.HasFlag(Combo.Simple) ||
