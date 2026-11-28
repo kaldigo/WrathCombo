@@ -131,7 +131,7 @@ internal static unsafe class ExecutionSafety
             destination = distance > .01f ? from + delta / distance * Math.Max(0, distance - target.HitboxRadius) : from;
         }
         else destination = from + new Vector3(MathF.Sin(player.Rotation), 0, MathF.Cos(player.Rotation)) * fixedDistance;
-        bool? safe = BossForecastProvider.DashSafe(from, destination, !targeted);
+        bool? safe = targeted ? BossForecastProvider.DashSafe(from, destination) : BossForecastProvider.FixedDashSafe(fixedDistance);
         AccordDiagnostics.DiagnosticLog.Event("Execution.DashSafety", () => new { Action = action, Recipient = recipient, From = from, To = destination, Safe = safe });
         return safe != false; // Unsupported hints preserve existing behavior and manual access.
     }

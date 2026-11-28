@@ -1,0 +1,13 @@
+# Integration and frame-spike tracing
+
+Normal logging reports bounded per-endpoint call counts, total/max milliseconds and exception counts every 30 seconds. These measure synchronous work inside the called endpoint, including the other plugin's handler. Nested scope and endpoint timings overlap and must not be summed as exclusive CPU time.
+
+The existing detailed duty capture adds endpoint-keyed read samples, every write, slow calls (at least 2 ms), failures and one-second frame windows. Forecast samples use endpoint-specific keys so HasActiveModule cannot mask later values or errors. The recorder keeps at most 64 recent calls and a bounded endpoint table. It uses the existing asynchronous writer, compressed duty budget and retention rules; no new settings or automation switches are introduced.
+
+Frame windows measure the interval between framework callbacks, including work outside this plugin. They include mean/max duration, counts over 25/50 ms, the peak's monotonic timestamp, game context and recent calls at the peak. UTC and monotonic times correlate the independently recorded plugin streams. New capture sessions clear recent-call/frame context. A nearby call is correlation, not proof that it caused a stall; GPU/OS delays and asynchronous work remain possible. Context construction is lazy and makes no extra IPC calls.
+
+Wrath traces forecast/dash IPCs and the existing BossMod conflict adapter. Forecast context changes record activation/deactivation and combat/territory changes. Accord traces BossMod movement/preset reads and writes, engine ownership/settings reads, settings commits and AutoDuty state reads. Movement records include preset or configuration field, previous/requested values and the returned result. A successful IPC invocation is not physical acknowledgement: inspect Result, and treat elapsed-only reflection scopes as unknown outcome.
+
+Fixed-distance dash checks now call BossMod.Hints.IsFixedDashSafe with float positive range and bool backwards. Targeted checks continue using Hints.IsDashSafe with two Vector3 positions. Missing/stale forecasts and unavailable endpoints retain unknown-result behavior and the existing five-second backoff. Manual execution policy is unchanged.
+
+Validation covers the production recorder/transport, endpoint-specific sampling, propagated return values and exceptions, bounded correlation, session restart, forward/backward and targeted dash contracts, fresh/stale forecasts, retry backoff, movement write deduplication, field restoration and AutoDuty/RSR positional ownership. Native duty/frame-time validation follows publication.

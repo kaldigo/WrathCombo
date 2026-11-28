@@ -38,25 +38,29 @@ internal static class BossForecastProvider
         {
             if (!Readers<T>.Calls.TryGetValue(endpoint, out var call))
                 Readers<T>.Calls[endpoint] = call = Svc.PluginInterface.GetIpcSubscriber<T>("BossMod." + endpoint).InvokeFunc;
-            var value = call();
+            var value = AccordDiagnostics.IntegrationTrace.Call("BossMod." + endpoint, call);
             unavailable.Remove(endpoint);
-            AccordDiagnostics.DiagnosticLog.Event("Forecast.Read", () => new { Endpoint = endpoint, Available = true, Value = value });
+            AccordDiagnostics.DiagnosticLog.Event("Forecast.Read", () => new { Endpoint = endpoint, Available = true, Value = value }, "Forecast.Read:" + endpoint);
             return value;
         }
         catch (Exception ex)
         {
             unavailable[endpoint] = Environment.TickCount64 + 5000;
-            AccordDiagnostics.DiagnosticLog.Event("Forecast.Read", () => new { Endpoint = endpoint, Available = false, Error = ex.Message });
+            AccordDiagnostics.DiagnosticLog.Event("Forecast.Read", () => new { Endpoint = endpoint, Available = false, Error = ex.Message }, "Forecast.Read:" + endpoint);
             return null;
         }
     }
     private static float? Seconds(string endpoint) => EncounterForecast.Normalize(Read<float>(endpoint));
-    internal static bool? DashSafe(Vector3 from, Vector3 to, bool fixedDistance = false)
+    internal static bool? DashSafe(Vector3 from, Vector3 to) => CheckDash("Hints.IsDashSafe",
+        () => Svc.PluginInterface.GetIpcSubscriber<Vector3, Vector3, bool>("BossMod.Hints.IsDashSafe").InvokeFunc(from, to), new { From = from, To = to });
+    internal static bool? FixedDashSafe(float signedDistance) => CheckDash("Hints.IsFixedDashSafe",
+        () => Svc.PluginInterface.GetIpcSubscriber<float, bool, bool>("BossMod.Hints.IsFixedDashSafe").InvokeFunc(Math.Abs(signedDistance), signedDistance < 0),
+        new { Range = Math.Abs(signedDistance), Backwards = signedDistance < 0 });
+    private static bool? CheckDash(string endpoint, Func<bool> invoke, object input)
     {
         if (Fresh == null) return null;
-        string endpoint = fixedDistance ? "Hints.IsFixedDashSafe" : "Hints.IsDashSafe";
         if (unavailable.TryGetValue(endpoint, out long retry) && Environment.TickCount64 < retry) return null;
-        try { return Svc.PluginInterface.GetIpcSubscriber<Vector3, Vector3, bool>("BossMod." + endpoint).InvokeFunc(from, to); }
+        try { return AccordDiagnostics.IntegrationTrace.Call("BossMod." + endpoint, invoke, input: input); }
         catch { unavailable[endpoint] = Environment.TickCount64 + 5000; return null; }
     }
     internal static void Tick()
@@ -67,9 +71,14 @@ internal static class BossForecastProvider
         nextPoll = now + 250;
         string module = "";
         if (Player.Available && !Player.IsDead && !Svc.ClientState.IsPvP && Read<bool>("HasActiveModule") == true)
-            try { module = Svc.PluginInterface.GetIpcSubscriber<string>("BossMod.ActiveModuleName").InvokeFunc() ?? ""; } catch { }
+            try { module = AccordDiagnostics.IntegrationTrace.Call("BossMod.ActiveModuleName",
+                Svc.PluginInterface.GetIpcSubscriber<string>("BossMod.ActiveModuleName").InvokeFunc) ?? ""; } catch { }
         string currentContext = $"{Player.Object?.GameObjectId}:{Svc.ClientState.TerritoryType}:{Player.IsDead}:{CustomComboNS.Functions.CustomComboFunctions.InCombat()}:{module}";
-        if (context != currentContext) { context = currentContext; Generation++; Current = null; }
+        if (context != currentContext)
+        {
+            AccordDiagnostics.DiagnosticLog.Event("Integration.Context", () => new { Previous = context, Current = currentContext, Module = module });
+            context = currentContext; Generation++; Current = null;
+        }
         if (module.Length == 0) { Current = null; return; }
         float? damage = Seconds("Hints.NextDamageIn");
         int damageType = Read<int>("Hints.NextDamageType") ?? 0;

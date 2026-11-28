@@ -41,7 +41,7 @@ internal sealed class BossModIPC(
 
         try
         {
-            var hasEntries = _hasEntries();
+            var hasEntries = AccordDiagnostics.IntegrationTrace.Call("BossMod.Rotation.ActionQueue.HasEntries", _hasEntries);
             PluginLog.Verbose(
                 $"[ConflictingPlugins] [{PluginName}] `ActionQueue.HasEntries`: " +
                 hasEntries);
@@ -356,7 +356,7 @@ internal sealed class BossModIPC(
 
         try
         {
-            return _lastModified();
+            return AccordDiagnostics.IntegrationTrace.Call("BossMod.Configuration.LastModified", _lastModified);
         }
         catch (Exception e)
         {

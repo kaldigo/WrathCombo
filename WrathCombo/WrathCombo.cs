@@ -1,4 +1,5 @@
 using Dalamud.Game.Gui.Dtr;
+using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Game.Text;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Game.Text.SeStringHandling.Payloads;
@@ -336,6 +337,9 @@ public sealed partial class WrathCombo : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        AccordDiagnostics.IntegrationTrace.Frame(() => new { Job = JobID, Territory = Svc.ClientState.TerritoryType,
+            Combat = Svc.Condition[ConditionFlag.InCombat], Loading = Svc.Condition[ConditionFlag.BetweenAreas] || Svc.Condition[ConditionFlag.BetweenAreas51],
+            Target = Svc.Targets.Target?.GameObjectId, Module = Engine.BossForecastProvider.Current?.Module });
         AccordDiagnostics.PerformanceTimings.Report();
         using var timing = AccordDiagnostics.PerformanceTimings.Measure(AccordDiagnostics.TimedPath.Framework);
         try

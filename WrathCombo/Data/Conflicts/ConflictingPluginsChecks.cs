@@ -129,6 +129,7 @@ public static class ConflictingPluginsChecks
         {
             if (!ThrottlePassed(8, false, forceRefresh))
                 return;
+            using var integrationTiming = AccordDiagnostics.IntegrationTrace.Measure("BossMod.Reflection.ConflictCheck");
 #if DEBUG
             _maxConflictsInARow = 1;
 #endif
