@@ -437,7 +437,11 @@ public sealed unsafe class CustomActionSetup : IDisposable
             new CustomAction(Engine.PvPIntentRouting.Support,"Allied support","Select eligible allied support.",1510),
             new CustomAction(Engine.PvPIntentRouting.Mechanic,"Job mechanic","Begin an eligible job mechanic; damage presses carry it through.",1505),
             new CustomAction(Engine.PvPIntentRouting.Release,"Release early","Release an already active effect; never starts a new one.",1505),
-            new CustomAction(Engine.PvPIntentRouting.FullRotation,"PvP full rotation","Use the supported rotation; Ninja chooses by enemy count.",1504));
+            new CustomAction(Engine.PvPIntentRouting.FullRotation,"PvP full rotation","Use the supported rotation; Ninja chooses by enemy count.",1504),
+            new CustomAction(Engine.EmergencyRotation.Single, "Wrath backup ST", "Manual single-target damage while Accord backup is active.", 1504, customIconPath: Path.Combine(Svc.PluginInterface.AssemblyLocation.DirectoryName!, "Resources/SingleTargetDPS.png")),
+            new CustomAction(Engine.EmergencyRotation.Area, "Wrath backup AoE", "Manual area damage while Accord backup is active.", 1505, customIconPath: Path.Combine(Svc.PluginInterface.AssemblyLocation.DirectoryName!, "Resources/AoEDPS.png")),
+            new CustomAction(Engine.TankPull.Button,"Pull","Tag your selected enemy with a basic area attack, ranged pull or Provoke.",1504),
+            new CustomAction(Engine.PveIntentRouting.FullRotation,"Adaptive rotation","Choose the enabled single-target or area rotation using action coverage.",1504));
         Engine.ActionRoutes.RegisterDirectActions(Manager);
     }
     public void Dispose()
@@ -512,13 +516,13 @@ public class CustomActionHelper()
     /// <returns></returns>
     public static bool OneButtonRotationChecker(uint actionId, CustomActionType type, params uint[] originals)
     {
-        if(Engine.PvPIntentRouting.Matches(actionId,type) is {} routed)return routed;
-        bool enabled = CustomActionEnabled(type);
-
-        if (enabled)
-            return actionId == GetActionId(type);
-
-        return originals.Contains(actionId);
+        if (Engine.EmergencyRotation.Resolving)
+            return type is CustomActionType.SingleTargetDPS or CustomActionType.AoEDPS && actionId == GetActionId(type);
+        bool matches = Engine.PvPIntentRouting.Matches(actionId, type) ?? Engine.PveIntentRouting.Matches(actionId, type) ??
+            (CustomActionEnabled(type) ? actionId == GetActionId(type) : originals.Contains(actionId));
+        if (matches && type is CustomActionType.SingleTargetDPS or CustomActionType.AoEDPS && originals.Length > 0)
+            Engine.SelectionRuntime.ObserveDamageControl(originals[0]);
+        return matches;
     }
 
     public static bool CustomActionEnabled(CustomActionType type)

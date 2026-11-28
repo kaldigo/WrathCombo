@@ -134,7 +134,7 @@ internal static class SAMPvP
                 return OriginalHook(Zantetsuken);
 
             //Smite
-            if (IsEnabled(Preset.SAMPvP_Smite) && PvPMelee.CanSmite() && !PvPCommon.TargetImmuneToDamage() && InActionRange(PvPMelee.Smite) && HasTarget() &&
+            if (IsEnabled(Preset.SAMPvP_Smite) && PvPMelee.CanSmite() && (Engine.ExperimentalSelection.PvpTargeting ? CurrentTarget is { } smiteTarget && Engine.PvpTargetEligibility.CanDamage(PvPMelee.Smite, smiteTarget) : !PvPCommon.TargetImmuneToDamage()) && InActionRange(PvPMelee.Smite) && HasTarget() &&
                 GetTargetHPPercent() <= SAMPvP_SmiteThreshold)
                 return PvPMelee.Smite;
 
@@ -160,7 +160,8 @@ internal static class SAMPvP
                         return OriginalHook(MeikyoShisui);
 
                     // Mineuchi
-                    if (IsEnabled(Preset.SAMPvP_Mineuchi) && IsOffCooldown(Mineuchi) && !HasBattleTarget() &&
+                    if (IsEnabled(Preset.SAMPvP_Mineuchi) && IsOffCooldown(Mineuchi) &&
+                        (Engine.ExperimentalSelection.PvpTargeting ? HasBattleTarget() : !HasBattleTarget()) &&
                         (targetCurrentPercentHp < SAMPvP_Mineuchi_TargetHP || (SAMPvP_Mineuchi_SubOption && hasTendo && !hasKaiten)))
                         return OriginalHook(Mineuchi);
                 }

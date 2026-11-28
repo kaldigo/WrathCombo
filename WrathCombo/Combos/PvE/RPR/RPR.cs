@@ -23,9 +23,41 @@ internal partial class RPR : Melee
 
             if (!LocalPlayer.HasStatus(Buffs.Executioner) &&
                 !LocalPlayer.HasStatus(Buffs.SoulReaver) &&
-                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 25))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (UsePerfectio())
+                    return PerfectioAction;
+
+                if (PostBurstGCD(false) is var postBurstGcd and not 0)
+                    return postBurstGcd;
+
+                if (UseShadowOfDeath())
+                    return ShadowOfDeath;
+
+                if (UseGibbetGallowsGCD() &&
+                    UseGibbetGallows(ref candidate))
+                    return candidate;
+
+                if (UsePlentifulHarvest())
+                    return PlentifulHarvest;
+
+                if (UseEnshroudComboGCD(ref candidate, false))
+                    return candidate;
+
+                if (UseSoulSliceScythe(false))
+                    return SoulSlice;
+
+                return !InMeleeRange() && HasBattleTarget() &&
+                       !LocalPlayer.HasStatus(Buffs.Executioner) && !LocalPlayer.HasStatus(Buffs.SoulReaver)
+                    ? RangedAttack(candidate, true, true)
+                    : DoBasicCombo();
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseArcaneCircle())
@@ -61,33 +93,7 @@ internal partial class RPR : Melee
                 if (Role.CanBloodBath(40))
                     return Role.Bloodbath;
             }
-
-            if (UsePerfectio())
-                return PerfectioAction;
-
-            if (PostBurstGCD(false) is var postBurstGcd and not 0)
-                return postBurstGcd;
-
-            if (UseShadowOfDeath())
-                return ShadowOfDeath;
-
-            if (UseGibbetGallowsGCD() &&
-                UseGibbetGallows(ref actionID))
-                return actionID;
-
-            if (UsePlentifulHarvest())
-                return PlentifulHarvest;
-
-            if (UseEnshroudComboGCD(ref actionID, false))
-                return actionID;
-
-            if (UseSoulSliceScythe(false))
-                return SoulSlice;
-
-            return !InMeleeRange() && HasBattleTarget() &&
-                   !LocalPlayer.HasStatus(Buffs.Executioner) && !LocalPlayer.HasStatus(Buffs.SoulReaver)
-                ? RangedAttack(actionID, true, true)
-                : DoBasicCombo();
+            return plannedGcd;
         }
     }
 
@@ -103,9 +109,37 @@ internal partial class RPR : Melee
                 !LocalPlayer.HasStatus(Buffs.Soulsow) && !PartyInCombat())
                 return Soulsow;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 25))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (UseWhorlOfDeath())
+                    return WhorlOfDeath;
+
+                if (UsePerfectio())
+                    return PerfectioAction;
+
+                if (PostBurstGCD(true) is var postBurstGcd and not 0)
+                    return postBurstGcd;
+
+                if (UsePlentifulHarvest())
+                    return PlentifulHarvest;
+
+                if (UseGuillotine())
+                    return OriginalHook(Guillotine);
+
+                if (UseEnshroudComboGCD(ref candidate, true))
+                    return candidate;
+
+                if (UseSoulSliceScythe(true))
+                    return SoulScythe;
+
+                return DoBasicCombo(onAoE: true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseArcaneCircle(onAoE: true))
@@ -130,29 +164,7 @@ internal partial class RPR : Melee
                 if (Role.CanBloodBath(40))
                     return Role.Bloodbath;
             }
-
-            if (UseWhorlOfDeath())
-                return WhorlOfDeath;
-
-            if (UsePerfectio())
-                return PerfectioAction;
-
-            if (PostBurstGCD(true) is var postBurstGcd and not 0)
-                return postBurstGcd;
-
-            if (UsePlentifulHarvest())
-                return PlentifulHarvest;
-
-            if (UseGuillotine())
-                return OriginalHook(Guillotine);
-
-            if (UseEnshroudComboGCD(ref actionID, true))
-                return actionID;
-
-            if (UseSoulSliceScythe(true))
-                return SoulScythe;
-
-            return DoBasicCombo(onAoE: true);
+            return plannedGcd;
         }
     }
 
@@ -179,9 +191,60 @@ internal partial class RPR : Melee
 
             if (!LocalPlayer.HasStatus(Buffs.Executioner) &&
                 !LocalPlayer.HasStatus(Buffs.SoulReaver) &&
-                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.RPR_ST_ComboHeals) ? (int)RPR_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (IsEnabled(Preset.RPR_ST_Perfectio) &&
+                    UsePerfectio())
+                    return PerfectioAction;
+
+                if (PostBurstGCD(false,
+                    IsEnabled(Preset.RPR_ST_SoulSlice)) is var postBurstGcd and not 0)
+                    return postBurstGcd;
+
+                if (IsEnabled(Preset.RPR_ST_SoD) &&
+                    UseShadowOfDeath(RPR_SoDRefreshRange, RPR_ST_ArcaneCircleHPBossOption == 1,
+                        IsEnabled(Preset.RPR_ST_ArcaneCircle)) &&
+                    GetTargetHPPercent() > RPR_SoDHPThreshold)
+                    return ShadowOfDeath;
+
+                //Gibbet/Gallows
+                if (IsEnabled(Preset.RPR_ST_GibbetGallows) &&
+                    UseGibbetGallowsGCD(enshroudEnabled: IsEnabled(Preset.RPR_ST_Enshroud)) &&
+                    UseGibbetGallows(ref candidate, positionalChoice,
+                        false,
+                        IsEnabled(Preset.RPR_ST_TrueNorthDynamic),
+                        RPR_ManualTN,
+                        RPR_ST_TrueNorthDynamicHoldCharge))
+                    return candidate;
+
+                if (IsEnabled(Preset.RPR_ST_PlentifulHarvest) &&
+                    UsePlentifulHarvest())
+                    return PlentifulHarvest;
+
+                if (UseEnshroudComboGCD(ref candidate, false,
+                    IsEnabled(Preset.RPR_ST_Communio),
+                    IsEnabled(Preset.RPR_ST_Reaping)))
+                    return candidate;
+
+                if (IsEnabled(Preset.RPR_ST_SoulSlice) &&
+                    UseSoulSliceScythe(false))
+                    return SoulSlice;
+
+                return !InMeleeRange() && HasBattleTarget() &&
+                       !LocalPlayer.HasStatus(Buffs.Executioner) && !LocalPlayer.HasStatus(Buffs.SoulReaver)
+                    ? RangedAttack(candidate,
+                        IsEnabled(Preset.RPR_ST_RangedFillerHarvestMoon),
+                        IsEnabled(Preset.RPR_ST_RangedFiller),
+                        RPR_ST_EnhancedHarpe,
+                        !RPR_ST_EnhancedHarpe)
+                    : DoBasicCombo();
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (IsEnabled(Preset.RPR_ST_ArcaneCircle) &&
@@ -236,52 +299,7 @@ internal partial class RPR : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.RPR_ST_Perfectio) &&
-                UsePerfectio())
-                return PerfectioAction;
-
-            if (PostBurstGCD(false,
-                IsEnabled(Preset.RPR_ST_SoulSlice)) is var postBurstGcd and not 0)
-                return postBurstGcd;
-
-            if (IsEnabled(Preset.RPR_ST_SoD) &&
-                UseShadowOfDeath(RPR_SoDRefreshRange, RPR_ST_ArcaneCircleHPBossOption == 1,
-                    IsEnabled(Preset.RPR_ST_ArcaneCircle)) &&
-                GetTargetHPPercent() > RPR_SoDHPThreshold)
-                return ShadowOfDeath;
-
-            //Gibbet/Gallows
-            if (IsEnabled(Preset.RPR_ST_GibbetGallows) &&
-                UseGibbetGallowsGCD(enshroudEnabled: IsEnabled(Preset.RPR_ST_Enshroud)) &&
-                UseGibbetGallows(ref actionID, positionalChoice,
-                    false,
-                    IsEnabled(Preset.RPR_ST_TrueNorthDynamic),
-                    RPR_ManualTN,
-                    RPR_ST_TrueNorthDynamicHoldCharge))
-                return actionID;
-
-            if (IsEnabled(Preset.RPR_ST_PlentifulHarvest) &&
-                UsePlentifulHarvest())
-                return PlentifulHarvest;
-
-            if (UseEnshroudComboGCD(ref actionID, false,
-                IsEnabled(Preset.RPR_ST_Communio),
-                IsEnabled(Preset.RPR_ST_Reaping)))
-                return actionID;
-
-            if (IsEnabled(Preset.RPR_ST_SoulSlice) &&
-                UseSoulSliceScythe(false))
-                return SoulSlice;
-
-            return !InMeleeRange() && HasBattleTarget() &&
-                   !LocalPlayer.HasStatus(Buffs.Executioner) && !LocalPlayer.HasStatus(Buffs.SoulReaver)
-                ? RangedAttack(actionID,
-                    IsEnabled(Preset.RPR_ST_RangedFillerHarvestMoon),
-                    IsEnabled(Preset.RPR_ST_RangedFiller),
-                    RPR_ST_EnhancedHarpe,
-                    !RPR_ST_EnhancedHarpe)
-                : DoBasicCombo();
+            return plannedGcd;
         }
     }
 
@@ -298,9 +316,45 @@ internal partial class RPR : Melee
                 !LocalPlayer.HasStatus(Buffs.Soulsow) && !PartyInCombat())
                 return Soulsow;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.RPR_AoE_ComboHeals) ? (int)RPR_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (IsEnabled(Preset.RPR_AoE_Perfectio) &&
+                    UsePerfectio())
+                    return PerfectioAction;
+
+                if (PostBurstGCD(true,
+                    IsEnabled(Preset.RPR_AoE_SoulScythe)) is var postBurstGcd and not 0)
+                    return postBurstGcd;
+
+                if (IsEnabled(Preset.RPR_AoE_WoD) &&
+                    UseWhorlOfDeath(hpThreshold: RPR_WoDHPThreshold))
+                    return WhorlOfDeath;
+
+                if (IsEnabled(Preset.RPR_AoE_PlentifulHarvest) &&
+                    UsePlentifulHarvest())
+                    return PlentifulHarvest;
+
+                if (IsEnabled(Preset.RPR_AoE_Guillotine) &&
+                    UseGuillotine(enshroudEnabled: IsEnabled(Preset.RPR_AoE_Enshroud)))
+                    return OriginalHook(Guillotine);
+
+                if (UseEnshroudComboGCD(ref candidate, true,
+                    IsEnabled(Preset.RPR_AoE_Communio),
+                    IsEnabled(Preset.RPR_AoE_Reaping)))
+                    return candidate;
+
+                if (IsEnabled(Preset.RPR_AoE_SoulScythe) &&
+                    UseSoulSliceScythe(true))
+                    return SoulScythe;
+
+                return DoBasicCombo(onAoE: true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (IsEnabled(Preset.RPR_AoE_ArcaneCircle) &&
@@ -341,37 +395,7 @@ internal partial class RPR : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.RPR_AoE_Perfectio) &&
-                UsePerfectio())
-                return PerfectioAction;
-
-            if (PostBurstGCD(true,
-                IsEnabled(Preset.RPR_AoE_SoulScythe)) is var postBurstGcd and not 0)
-                return postBurstGcd;
-
-            if (IsEnabled(Preset.RPR_AoE_WoD) &&
-                UseWhorlOfDeath(hpThreshold: RPR_WoDHPThreshold))
-                return WhorlOfDeath;
-
-            if (IsEnabled(Preset.RPR_AoE_PlentifulHarvest) &&
-                UsePlentifulHarvest())
-                return PlentifulHarvest;
-
-            if (IsEnabled(Preset.RPR_AoE_Guillotine) &&
-                UseGuillotine(enshroudEnabled: IsEnabled(Preset.RPR_AoE_Enshroud)))
-                return OriginalHook(Guillotine);
-
-            if (UseEnshroudComboGCD(ref actionID, true,
-                IsEnabled(Preset.RPR_AoE_Communio),
-                IsEnabled(Preset.RPR_AoE_Reaping)))
-                return actionID;
-
-            if (IsEnabled(Preset.RPR_AoE_SoulScythe) &&
-                UseSoulSliceScythe(true))
-                return SoulScythe;
-
-            return DoBasicCombo(onAoE: true);
+            return plannedGcd;
         }
     }
 

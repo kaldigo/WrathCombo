@@ -1,4 +1,4 @@
-#region
+﻿#region
 
 using System;
 using Dalamud.Game.ClientState.JobGauge.Types;
@@ -250,6 +250,7 @@ internal partial class WHM
 
     internal static bool RaidwideAsylum()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.WHM_Raidwide_Asylum) &&
                ActionReady(Asylum) &&
                CanWeave() && GroupDamageIncoming();
@@ -257,6 +258,7 @@ internal partial class WHM
 
     internal static bool RaidwideTemperance()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.WHM_Raidwide_Temperance) &&
                ActionReady(Temperance) &&
                CanWeave() && GroupDamageIncoming();
@@ -264,6 +266,7 @@ internal partial class WHM
 
     internal static bool RaidwideLiturgyOfTheBell()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.WHM_Raidwide_LiturgyOfTheBell) &&
                ActionReady(LiturgyOfTheBell) &&
                !LocalPlayer.HasStatus(Buffs.LiturgyOfTheBell) &&
@@ -271,6 +274,7 @@ internal partial class WHM
     }
     internal static bool RaidwidePlenaryIndulgence()
     {
+        if (Engine.HealerSelection.ReplacesLegacyPrevention) return false;
         return IsEnabled(Preset.WHM_Raidwide_PlenaryIndulgence) &&
                ActionReady(PlenaryIndulgence) &&
                GroupDamageIncoming() && CanWeave();

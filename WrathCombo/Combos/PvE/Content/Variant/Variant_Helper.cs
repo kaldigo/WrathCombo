@@ -64,13 +64,26 @@ namespace WrathCombo.Combos.PvE
             IsEnabled(preset) && ActionReady(SpiritDart) &&
             HasBattleTarget() && EnemiesInRange(SpiritDart).Any(x => x.Status(Debuffs.SustainedDamage).RemainingTimeOrZero() <= 3);
 
-        private static bool CheckCure(Preset preset, int healthpercent) =>
-            IsEnabled(preset) && ActionReady(Cure) &&
-            PlayerHealthPercentageHp() <= healthpercent;
+        private static bool CheckRecovery(Preset preset, int healthpercent, int? secondWindThreshold, out uint action)
+        {
+            action = Cure;
+            if (Cure == 0 || !IsEnabled(preset) || !Engine.EncounterDamage.ShouldSelfHeal(Cure, healthpercent)) return false;
+            // A needed GCD heal must not hide an independently usable, configured
+            // instant recovery ability. Keep native locks and route permissions.
+            if (secondWindThreshold is > 0 && Engine.RotationBehaviour.Support != false &&
+                Engine.ActionRoutes.Allowed(RoleActions.Physical.SecondWind) &&
+                RoleActions.Physical.CanSecondWind(secondWindThreshold.Value) &&
+                (CanWeave() || Engine.NativeExecution.Capture().CanSubmit(false, 0)))
+            {
+                action = RoleActions.Physical.SecondWind;
+                return true;
+            }
+            return ActionReady(Cure) && Engine.ActionRoutes.Allowed(Cure);
+        }
 
         private static bool CheckRaise(Preset preset) =>
             IsEnabled(preset) && ActionReady(Raise) &&
-            TargetIsFriendly() && TargetIsDead();
+            TargetIsFriendly() && Engine.IncomingRaise.Available(CurrentTarget);
 
         private static bool CheckUltimatum(Preset preset) =>
             IsEnabled(preset) && ActionReady(Ultimatum)

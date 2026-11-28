@@ -24,6 +24,27 @@ internal partial class SAM : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (UseTsubame(false))
+                    return OriginalHook(TsubameGaeshi);
+
+                if (UseOgiNamikiri(false))
+                    return OriginalHook(OgiNamikiri);
+
+                if (UseIaiJutsu(false))
+                    return OriginalHook(Iaijutsu);
+
+                if (ActionReady(Enpi) && !InMeleeRange() && HasBattleTarget())
+                    return Enpi;
+
+                return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
+                    ? DoMeikyoCombo(candidate, false)
+                    : DoBasicCombo(false);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseMeikyo(false))
@@ -53,22 +74,7 @@ internal partial class SAM : Melee
                 if (UseKenki(ref actionID, false))
                     return actionID;
             }
-
-            if (UseTsubame(false))
-                return OriginalHook(TsubameGaeshi);
-
-            if (UseOgiNamikiri(false))
-                return OriginalHook(OgiNamikiri);
-
-            if (UseIaiJutsu(false))
-                return OriginalHook(Iaijutsu);
-
-            if (ActionReady(Enpi) && !InMeleeRange() && HasBattleTarget())
-                return Enpi;
-
-            return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
-                ? DoMeikyoCombo(actionID, false)
-                : DoBasicCombo(false);
+            return plannedGcd;
         }
     }
 
@@ -87,6 +93,24 @@ internal partial class SAM : Melee
             if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (UseTsubame(true))
+                    return OriginalHook(TsubameGaeshi);
+
+                if (UseOgiNamikiri(true))
+                    return OriginalHook(OgiNamikiri);
+
+                if (UseIaiJutsu(true))
+                    return OriginalHook(Iaijutsu);
+
+                return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
+                    ? DoMeikyoCombo(candidate, true)
+                    : DoBasicCombo(true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (UseMeikyo(true))
@@ -107,19 +131,7 @@ internal partial class SAM : Melee
                 if (UseKenki(ref actionID, true))
                     return actionID;
             }
-
-            if (UseTsubame(true))
-                return OriginalHook(TsubameGaeshi);
-
-            if (UseOgiNamikiri(true))
-                return OriginalHook(OgiNamikiri);
-
-            if (UseIaiJutsu(true))
-                return OriginalHook(Iaijutsu);
-
-            return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
-                ? DoMeikyoCombo(actionID, true)
-                : DoBasicCombo(true);
+            return plannedGcd;
         }
     }
 
@@ -145,9 +157,58 @@ internal partial class SAM : Melee
                 UsePrepullMeikyo(requireNotJustUsed: true))
                 return MeikyoShisui;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.SAM_ST_Adv_ComboHeals) ? (int)SAM_ST_SecondWindOption : null))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (IsEnabled(Preset.SAM_ST_Adv_Damage))
+                {
+                    if (IsEnabled(Preset.SAM_ST_Adv_Iaijutsu) &&
+                        IsEnabled(Preset.SAM_ST_Adv_Tsubame) &&
+                        UseTsubame(false))
+                        return OriginalHook(TsubameGaeshi);
+
+                    if (IsEnabled(Preset.SAM_ST_Adv_OgiNamikiri) &&
+                        UseOgiNamikiri(false, SAM_ST_OgiNamikiri_Movement))
+                        return OriginalHook(OgiNamikiri);
+
+                    if (IsEnabled(Preset.SAM_ST_Adv_Iaijutsu) &&
+                        UseIaiJutsu(
+                            false,
+                            IsEnabled(Preset.SAM_ST_Adv_Higanbana),
+                            IsEnabled(Preset.SAM_ST_Adv_TenkaGoken),
+                            IsEnabled(Preset.SAM_ST_Adv_Midare),
+                            IsEnabled(Preset.SAM_ST_Adv_Iaijutsu_Movement),
+                            HiganbanaHPThreshold(),
+                            SAM_ST_HiganbanaRefresh))
+                        return OriginalHook(Iaijutsu);
+
+                    if (IsEnabled(Preset.SAM_ST_Adv_RangedUptime) &&
+                        ActionReady(Enpi) && !InMeleeRange() && HasBattleTarget())
+                        return Enpi;
+                }
+
+                return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
+                    ? DoMeikyoCombo(
+                        candidate,
+                        false,
+                        IsEnabled(Preset.SAM_ST_Adv_TrueNorth),
+                        IsEnabled(Preset.SAM_ST_Adv_Yukikaze),
+                        IsEnabled(Preset.SAM_ST_Adv_Kasha),
+                        IsEnabled(Preset.SAM_ST_Adv_Gekko),
+                        trueNorthCharges: SAM_ST_TrueNorthCharges)
+                    : DoBasicCombo(
+                        false,
+                        IsEnabled(Preset.SAM_ST_Adv_TrueNorth),
+                        IsEnabled(Preset.SAM_ST_Adv_Yukikaze),
+                        IsEnabled(Preset.SAM_ST_Adv_Kasha),
+                        IsEnabled(Preset.SAM_ST_Adv_Gekko),
+                        trueNorthCharges: SAM_ST_TrueNorthCharges);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (IsEnabled(Preset.SAM_ST_Adv_CDs) &&
@@ -231,50 +292,7 @@ internal partial class SAM : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.SAM_ST_Adv_Damage))
-            {
-                if (IsEnabled(Preset.SAM_ST_Adv_Iaijutsu) &&
-                    IsEnabled(Preset.SAM_ST_Adv_Tsubame) &&
-                    UseTsubame(false))
-                    return OriginalHook(TsubameGaeshi);
-
-                if (IsEnabled(Preset.SAM_ST_Adv_OgiNamikiri) &&
-                    UseOgiNamikiri(false, SAM_ST_OgiNamikiri_Movement))
-                    return OriginalHook(OgiNamikiri);
-
-                if (IsEnabled(Preset.SAM_ST_Adv_Iaijutsu) &&
-                    UseIaiJutsu(
-                        false,
-                        IsEnabled(Preset.SAM_ST_Adv_Higanbana),
-                        IsEnabled(Preset.SAM_ST_Adv_TenkaGoken),
-                        IsEnabled(Preset.SAM_ST_Adv_Midare),
-                        IsEnabled(Preset.SAM_ST_Adv_Iaijutsu_Movement),
-                        HiganbanaHPThreshold(),
-                        SAM_ST_HiganbanaRefresh))
-                    return OriginalHook(Iaijutsu);
-
-                if (IsEnabled(Preset.SAM_ST_Adv_RangedUptime) &&
-                    ActionReady(Enpi) && !InMeleeRange() && HasBattleTarget())
-                    return Enpi;
-            }
-
-            return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
-                ? DoMeikyoCombo(
-                    actionID,
-                    false,
-                    IsEnabled(Preset.SAM_ST_Adv_TrueNorth),
-                    IsEnabled(Preset.SAM_ST_Adv_Yukikaze),
-                    IsEnabled(Preset.SAM_ST_Adv_Kasha),
-                    IsEnabled(Preset.SAM_ST_Adv_Gekko),
-                    trueNorthCharges: SAM_ST_TrueNorthCharges)
-                : DoBasicCombo(
-                    false,
-                    IsEnabled(Preset.SAM_ST_Adv_TrueNorth),
-                    IsEnabled(Preset.SAM_ST_Adv_Yukikaze),
-                    IsEnabled(Preset.SAM_ST_Adv_Kasha),
-                    IsEnabled(Preset.SAM_ST_Adv_Gekko),
-                    trueNorthCharges: SAM_ST_TrueNorthCharges);
+            return plannedGcd;
         }
     }
 
@@ -292,9 +310,33 @@ internal partial class SAM : Melee
                 UsePrepullMeikyo(requireNotJustUsed: true))
                 return MeikyoShisui;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.SAM_AoE_Adv_ComboHeals) ? (int)SAM_AoE_SecondWindOption : null))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                if (IsEnabled(Preset.SAM_AoE_Adv_Damage))
+                {
+                    if (IsEnabled(Preset.SAM_AoE_Adv_TenkaGoken) &&
+                        UseTsubame(true))
+                        return OriginalHook(TsubameGaeshi);
+
+                    if (IsEnabled(Preset.SAM_AoE_Adv_OgiNamikiri) &&
+                        UseOgiNamikiri(true))
+                        return OriginalHook(OgiNamikiri);
+
+                    if (IsEnabled(Preset.SAM_AoE_Adv_TenkaGoken) &&
+                        UseIaiJutsu(true))
+                        return OriginalHook(Iaijutsu);
+                }
+
+                return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
+                    ? DoMeikyoCombo(candidate, true, useOka: IsEnabled(Preset.SAM_AoE_Adv_Oka))
+                    : DoBasicCombo(true, useOka: IsEnabled(Preset.SAM_AoE_Adv_Oka));
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeave())
             {
                 if (IsEnabled(Preset.SAM_AoE_Adv_CDs) &&
@@ -359,25 +401,7 @@ internal partial class SAM : Melee
                     RoleActions.Melee.CanLegSweep())
                     return Role.LegSweep;
             }
-
-            if (IsEnabled(Preset.SAM_AoE_Adv_Damage))
-            {
-                if (IsEnabled(Preset.SAM_AoE_Adv_TenkaGoken) &&
-                    UseTsubame(true))
-                    return OriginalHook(TsubameGaeshi);
-
-                if (IsEnabled(Preset.SAM_AoE_Adv_OgiNamikiri) &&
-                    UseOgiNamikiri(true))
-                    return OriginalHook(OgiNamikiri);
-
-                if (IsEnabled(Preset.SAM_AoE_Adv_TenkaGoken) &&
-                    UseIaiJutsu(true))
-                    return OriginalHook(Iaijutsu);
-            }
-
-            return LocalPlayer.HasStatus(Buffs.MeikyoShisui)
-                ? DoMeikyoCombo(actionID, true, useOka: IsEnabled(Preset.SAM_AoE_Adv_Oka))
-                : DoBasicCombo(true, useOka: IsEnabled(Preset.SAM_AoE_Adv_Oka));
+            return plannedGcd;
         }
     }
 

@@ -17,9 +17,10 @@ internal partial class MCH : PhysicalRanged
                 return actionID;
 
             if (!IsOverheated &&
-                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: false) : PlannedReassembleGcd(false));
             if (CanWeave())
             {
                 if (OvercapGaussRicochetProtection(ref actionID))
@@ -94,9 +95,10 @@ internal partial class MCH : PhysicalRanged
             if (HoldingFlamethrower)
                 return All.Cease;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: true) : PlannedReassembleGcd(true));
             if (CanWeave())
             {
                 if (OvercapGaussRicochetProtection(ref actionID))
@@ -166,9 +168,10 @@ internal partial class MCH : PhysicalRanged
                 return actionID;
 
             if (!IsOverheated &&
-                ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+                ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.MCH_ST_Adv_SecondWind) ? (int)MCH_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: false) : PlannedReassembleGcd(false));
             if (CanWeave())
             {
                 if (IsEnabled(Preset.MCH_ST_Adv_GaussRicochet) &&
@@ -307,9 +310,10 @@ internal partial class MCH : PhysicalRanged
             if (HoldingFlamethrower)
                 return All.Cease;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.MCH_AoE_Adv_SecondWind) ? (int)MCH_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
+            Engine.SelectionRuntime.Plan(actionID, IsOverheated ? OverheatGCD(onAoE: true) : PlannedReassembleGcd(true));
             if (CanWeave())
             {
                 if (Engine.Options.Enabled(Feature.MchWildfireOnAoe) &&

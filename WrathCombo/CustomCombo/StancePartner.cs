@@ -132,12 +132,15 @@ public static class StancePartner
     (Job job, uint action, ushort buff, ulong? target, ref bool
         callAgain)
     {
+        if (!global::WrathCombo.Engine.AutomationOwnership.Allowed) return;
         if (WrathCombo.JobID != job || CustomComboFunctions.LocalPlayer.HasStatus(buff))
             return;
         PluginLog.Verbose(
             $"OnIPCInstanceChange: Trying to cast {action.ActionName()}");
 
         callAgain = true;
+
+        if (RotationInterop.ManualLimitBreak.Waiting()) return;
 
         if (CustomComboFunctions.JustUsed(action, 0.5f))
             return;

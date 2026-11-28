@@ -17,9 +17,18 @@ internal partial class DRG : Melee
 
             ReportDRGPositionalHints();
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                return !InMeleeRange() && HasBattleTarget()
+                    ? OutsideOfMelee(candidate, OutsideOfMeleeOptions.SimpleSt)
+                    : DoBasicCombo(useTrueNorth: true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeaveOgcds())
             {
                 if (CanDRGWeave())
@@ -76,10 +85,7 @@ internal partial class DRG : Melee
                 if (UseStardiver() && CanDRGWeave(1.5f, true))
                     return Stardiver;
             }
-
-            return !InMeleeRange() && HasBattleTarget()
-                ? OutsideOfMelee(actionID, OutsideOfMeleeOptions.SimpleSt)
-                : DoBasicCombo(useTrueNorth: true);
+            return plannedGcd;
         }
     }
 
@@ -92,9 +98,18 @@ internal partial class DRG : Melee
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, DoomSpike))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: 40))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                return !InActionRange(DoomSpike) && HasBattleTarget()
+                    ? OutsideOfMelee(candidate, OutsideOfMeleeOptions.SimpleAoE)
+                    : DoBasicCombo(onAoE: true, includeDisembowel: true);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeaveOgcds())
             {
                 if (CanDRGWeave())
@@ -148,10 +163,7 @@ internal partial class DRG : Melee
                 if (UseStardiver() && CanDRGWeave(1.5f, true))
                     return Stardiver;
             }
-
-            return !InActionRange(DoomSpike) && HasBattleTarget()
-                ? OutsideOfMelee(actionID, OutsideOfMeleeOptions.SimpleAoE)
-                : DoBasicCombo(onAoE: true, includeDisembowel: true);
+            return plannedGcd;
         }
     }
 
@@ -170,9 +182,33 @@ internal partial class DRG : Melee
                 Opener().FullOpener(ref actionID))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.DRG_ST_ComboHeals) ? (int)DRG_ST_SecondWindHPThreshold : null))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                OutsideOfMeleeOptions stRanged = new()
+                {
+                    GeirskogulHpThreshold = GeirskogulHPThreshold(),
+                    UseDamage = IsEnabled(Preset.DRG_ST_Damage),
+                    UseMirage = IsEnabled(Preset.DRG_ST_Mirage),
+                    UseWyrmwind = IsEnabled(Preset.DRG_ST_Wyrmwind),
+                    UseStarcross = IsEnabled(Preset.DRG_ST_Starcross),
+                    UseRiseOfTheDragon = IsEnabled(Preset.DRG_ST_RiseOfTheDragon),
+                    UseGeirskogul = IsEnabled(Preset.DRG_ST_Geirskogul),
+                    UseNastrond = IsEnabled(Preset.DRG_ST_Nastrond),
+                    UseRangedUptime = IsEnabled(Preset.DRG_ST_RangedUptime),
+                    UseTrueNorth = IsEnabled(Preset.DRG_TrueNorthDynamic),
+                    TrueNorthCharges = DRG_ManualTN
+                };
+
+                return !InMeleeRange() && HasBattleTarget()
+                    ? OutsideOfMelee(candidate, stRanged)
+                    : DoBasicCombo(IsEnabled(Preset.DRG_TrueNorthDynamic), trueNorthCharges: DRG_ManualTN);
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeaveOgcds())
             {
                 if (CanDRGWeave())
@@ -258,25 +294,7 @@ internal partial class DRG : Melee
                         return Stardiver;
                 }
             }
-
-            OutsideOfMeleeOptions stRanged = new()
-            {
-                GeirskogulHpThreshold = GeirskogulHPThreshold(),
-                UseDamage = IsEnabled(Preset.DRG_ST_Damage),
-                UseMirage = IsEnabled(Preset.DRG_ST_Mirage),
-                UseWyrmwind = IsEnabled(Preset.DRG_ST_Wyrmwind),
-                UseStarcross = IsEnabled(Preset.DRG_ST_Starcross),
-                UseRiseOfTheDragon = IsEnabled(Preset.DRG_ST_RiseOfTheDragon),
-                UseGeirskogul = IsEnabled(Preset.DRG_ST_Geirskogul),
-                UseNastrond = IsEnabled(Preset.DRG_ST_Nastrond),
-                UseRangedUptime = IsEnabled(Preset.DRG_ST_RangedUptime),
-                UseTrueNorth = IsEnabled(Preset.DRG_TrueNorthDynamic),
-                TrueNorthCharges = DRG_ManualTN
-            };
-
-            return !InMeleeRange() && HasBattleTarget()
-                ? OutsideOfMelee(actionID, stRanged)
-                : DoBasicCombo(IsEnabled(Preset.DRG_TrueNorthDynamic), trueNorthCharges: DRG_ManualTN);
+            return plannedGcd;
         }
     }
 
@@ -289,9 +307,33 @@ internal partial class DRG : Melee
             if (!CustomActionHelper.OneButtonRotationChecker(actionID, CustomActionType.AoEDPS, DoomSpike))
                 return actionID;
 
-            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction))
+            if (ContentSpecificActions.TryGet(ref actionID, out uint contentAction, secondWindThreshold: IsEnabled(Preset.DRG_AoE_ComboHeals) ? (int)DRG_AoE_SecondWindHPThreshold : null))
                 return contentAction;
 
+
+            uint SelectPlannedGcd(uint candidate)
+            {
+                OutsideOfMeleeOptions aoeRanged = new()
+                {
+                    OnAoE = true,
+                    GeirskogulHpThreshold = DRG_AoE_GeirskogulHPThreshold,
+                    UseDamage = IsEnabled(Preset.DRG_AoE_Damage),
+                    UseMirage = IsEnabled(Preset.DRG_AoE_Mirage),
+                    UseWyrmwind = IsEnabled(Preset.DRG_AoE_Wyrmwind),
+                    UseStarcross = IsEnabled(Preset.DRG_AoE_Starcross),
+                    UseRiseOfTheDragon = IsEnabled(Preset.DRG_AoE_RiseOfTheDragon),
+                    UseGeirskogul = IsEnabled(Preset.DRG_AoE_Geirskogul),
+                    UseNastrond = IsEnabled(Preset.DRG_AoE_Nastrond),
+                    UseRangedUptime = IsEnabled(Preset.DRG_AoE_RangedUptime),
+                    IncludeDisembowel = IsEnabled(Preset.DRG_AoE_Disembowel)
+                };
+
+                return !InActionRange(DoomSpike) && HasBattleTarget()
+                    ? OutsideOfMelee(candidate, aoeRanged)
+                    : DoBasicCombo(onAoE: true, includeDisembowel: IsEnabled(Preset.DRG_AoE_Disembowel));
+            }
+            uint plannedGcd = SelectPlannedGcd(actionID);
+            Engine.SelectionRuntime.Plan(actionID, plannedGcd);
             if (CanWeaveOgcds())
             {
                 if (CanDRGWeave())
@@ -371,25 +413,7 @@ internal partial class DRG : Melee
                         return Stardiver;
                 }
             }
-
-            OutsideOfMeleeOptions aoeRanged = new()
-            {
-                OnAoE = true,
-                GeirskogulHpThreshold = DRG_AoE_GeirskogulHPThreshold,
-                UseDamage = IsEnabled(Preset.DRG_AoE_Damage),
-                UseMirage = IsEnabled(Preset.DRG_AoE_Mirage),
-                UseWyrmwind = IsEnabled(Preset.DRG_AoE_Wyrmwind),
-                UseStarcross = IsEnabled(Preset.DRG_AoE_Starcross),
-                UseRiseOfTheDragon = IsEnabled(Preset.DRG_AoE_RiseOfTheDragon),
-                UseGeirskogul = IsEnabled(Preset.DRG_AoE_Geirskogul),
-                UseNastrond = IsEnabled(Preset.DRG_AoE_Nastrond),
-                UseRangedUptime = IsEnabled(Preset.DRG_AoE_RangedUptime),
-                IncludeDisembowel = IsEnabled(Preset.DRG_AoE_Disembowel)
-            };
-
-            return !InActionRange(DoomSpike) && HasBattleTarget()
-                ? OutsideOfMelee(actionID, aoeRanged)
-                : DoBasicCombo(onAoE: true, includeDisembowel: IsEnabled(Preset.DRG_AoE_Disembowel));
+            return plannedGcd;
         }
     }
 

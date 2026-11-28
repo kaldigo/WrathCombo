@@ -128,6 +128,8 @@ internal partial class BLU : Caster
         {
             if (actionID is FinalSting)
             {
+                if (Engine.ExperimentalSelection.ActiveBlueMage && (!IsSpellActive(FinalSting) ||
+                    !Engine.ActionRoutes.Allowed(FinalSting) || !ActionReady(FinalSting))) return All.Cease;
                 if (IsEnabled(Preset.BLU_SoloMode) && HasCondition(ConditionFlag.BoundByDuty) && !LocalPlayer.HasStatus(Buffs.BasicInstinct) && GetPartyMembers().Count == 0 && ActionReady(BasicInstinct))
                     return BasicInstinct;
                 if (!LocalPlayer.HasStatus(Buffs.Whistle) && ActionReady(Whistle) && !WasLastAction(Whistle))

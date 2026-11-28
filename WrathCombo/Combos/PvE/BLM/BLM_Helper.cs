@@ -437,9 +437,9 @@ internal partial class BLM
         GetCooldownRemainingTime(Amplifier) < 5 &&
         IsPolyglotCapped;
 
-    private static bool UseMovementGcd(ref uint actionID, bool useConfiguredPriority = false)
+    private static bool UseMovementGcd(ref uint actionID, bool useConfiguredPriority = false, bool forecast = false)
     {
-        if (!IsMoving() || !InCombat() || !HasBattleTarget() || !InActionRange(Fire))
+        if (!IsMoving() && !forecast || !InCombat() || !HasBattleTarget() || !InActionRange(Fire))
             return false;
 
         if (useConfiguredPriority)

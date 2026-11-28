@@ -1,7 +1,7 @@
 {
   "internal_name": "WrathCombo",
   "repository": "kaldigo/WrathCombo",
-  "minimum_version": "1.0.4.28",
+  "minimum_version": "1.0.4.85",
   "project": "WrathCombo/WrathCombo.csproj",
   "build": "WrathCombo/bin/WrathCombo/Release",
   "required_dlls": [

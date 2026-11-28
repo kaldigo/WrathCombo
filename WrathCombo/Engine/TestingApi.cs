@@ -1,0 +1,126 @@
+using System;
+using System.Linq;
+using Dalamud.Plugin.Ipc;
+using ECommons.DalamudServices;
+using ECommons.GameHelpers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+namespace WrathCombo.Engine;
+
+internal sealed class TestingApi : IDisposable
+{
+    private readonly AutomationOwnership ownership = new();
+    private readonly RotationSettingsApi rotationSettings = new();
+    private readonly EmergencyRotation emergency = new();
+    private readonly AccordDiagnostics.DiagnosticEndpoint diagnostics;
+    private static readonly object Gate = new();
+    private static readonly DecisionTrace Trace = new();
+    private static readonly System.Collections.Generic.Queue<JObject> Decisions = new();
+    private static long droppedDecisions;
+    private readonly ICallGateProvider<string, string> api = Svc.PluginInterface.GetIpcProvider<string, string>("WrathCombo.Testing.Trace.v1");
+    private JObject baseline = new();
+    private static string Context => $"{Player.Object?.GameObjectId}:{Player.Job}:{Player.Level}:{Svc.ClientState.TerritoryType}:{Svc.ClientState.IsPvP}";
+    internal TestingApi(Func<JObject> settings)
+    {
+        diagnostics = new("WrathCombo", "WrathCombo.Diagnostics.v1", DiagnosticState, () => new { Settings = settings(), Experimental = ExperimentalSelection.Read() });
+        api.RegisterFunc(command =>
+        {
+            try
+            {
+                if (!Svc.Framework.IsInFrameworkUpdateThread) throw new InvalidOperationException("Use the framework thread.");
+                lock (Gate)
+                {
+                    if (command == "start")
+                    {
+                        if (!Player.Available) throw new InvalidOperationException("Log in before capturing.");
+                        baseline = new JObject { ["Job"] = (int)Player.Job, ["Level"] = Player.Level,
+                            ["Territory"] = Svc.ClientState.TerritoryType, ["PvP"] = Svc.ClientState.IsPvP,
+                            ["StartedUtc"] = DateTime.UtcNow, ["EngineBuild"] = typeof(TestingApi).Assembly.ManifestModule.ModuleVersionId.ToString(),
+                            ["Settings"] = settings().DeepClone(), ["Experimental"] = ExperimentalSelection.Read(),
+                            ["CaptureId"] = Guid.NewGuid().ToString(), ["StartedMonotonicMs"] = Environment.TickCount64,
+                            ["EngineVersion"] = typeof(TestingApi).Assembly.GetName().Version?.ToString(),
+                            ["Encounter"] = BossForecastProvider.Current is { } initialForecast ? JObject.FromObject(initialForecast) : null };
+                        Trace.Start(Environment.TickCount64, Context);
+                        Decisions.Clear(); droppedDecisions = 0;
+                    }
+                    else if (command == "stop") Trace.Stop("Stopped by user");
+                    else if (command.StartsWith("configure:")) RotationSettingsApi.ApplySaved(JObject.Parse(command[10..]));
+                    else if (command != "read") throw new InvalidOperationException("Unknown trace command.");
+                    Trace.Check(Environment.TickCount64, Context);
+                    return new JObject { ["Success"] = true, ["Schema"] = 1, ["Active"] = Trace.Active,
+                        ["StopReason"] = Trace.StopReason, ["Dropped"] = Trace.Dropped, ["RepeatedSelections"] = Trace.RepeatedSelections,
+                        ["SettingsAtRead"] = settings().DeepClone(), ["Baseline"] = baseline.DeepClone(),
+                        ["Experimental"] = ExperimentalSelection.Read(),
+                        ["Encounter"] = BossForecastProvider.Current is { } forecast ? JObject.FromObject(forecast) : null,
+                        ["DecisionSamples"] = new JArray(Decisions), ["DroppedDecisionSamples"] = droppedDecisions,
+                        ["Entries"] = JArray.FromObject(Trace.Snapshot()) }.ToString(Formatting.None);
+                }
+            }
+            catch (Exception ex) { return new JObject { ["Success"] = false, ["Error"] = ex.Message }.ToString(); }
+        });
+    }
+    internal static void Observe(string kind, uint input, uint output, ulong? recipient = null)
+    {
+        AccordDiagnostics.DiagnosticLog.Event(kind, () => new { Input = input, Output = output, Recipient = recipient });
+        // Diagnostics must never interrupt an action hook, even during teardown.
+        try { lock (Gate) { if (Trace.Active) Trace.Add(Environment.TickCount64, Context, kind, input, output, recipient); } }
+        catch { lock (Gate) Trace.Stop("Observation failed"); }
+    }
+    internal static void RecordDecision(string provider, object input, object? output)
+    {
+        AccordDiagnostics.DiagnosticLog.Event("Decision." + provider, () => new { Input = input, Output = output });
+        try
+        {
+            lock (Gate)
+            {
+                if (!Trace.Active || !Trace.Check(Environment.TickCount64, Context)) return;
+                if (Decisions.Count == 128) { Decisions.Dequeue(); droppedDecisions++; }
+                Decisions.Enqueue(new JObject { ["Provider"] = provider, ["Input"] = JToken.FromObject(input),
+                    ["Output"] = output is null ? JValue.CreateNull() : JToken.FromObject(output) });
+            }
+        }
+        catch { /* Observation must not affect selection. */ }
+    }
+    private static unsafe object DiagnosticState()
+    {
+        var manager = FFXIVClientStructs.FFXIV.Client.Game.ActionManager.Instance();
+        return new { AutomationOwnership.Allowed, AutomationOwnership.ExternalAction, SelectionRuntime.Automatic,
+            PartyMouseover = global::WrathCombo.CustomComboNS.SimpleTarget.UIMouseOverTarget?.GameObjectId,
+            Commitment = SelectionRuntime.Commitment, Experimental = ExperimentalSelection.Read(),
+            Encounter = BossForecastProvider.Current,
+            DamageRecipients = Player.Available && !Svc.ClientState.IsPvP ? EncounterDamage.Busters() : null,
+            RaidwideEvents = SelectionRuntime.Prevention.Active("raidwide").ToArray(),
+            TankbusterEvents = SelectionRuntime.Prevention.Active("tankbuster").ToArray(), AutoPaused = AutoRotation.AutoRotationController.Paused,
+            Queue = manager == null ? null : new { ActionQueued = manager->ActionQueued, QueuedActionId = manager->QueuedActionId, Target = manager->QueuedTargetId.Id, AnimationLock = manager->AnimationLock, CastActionId = manager->CastActionId, CastTimeElapsed = manager->CastTimeElapsed, CastTimeTotal = manager->CastTimeTotal } };
+    }
+    private static long normalWindow;
+    private static int manualPresses, autoPresses, sends;
+    private static uint lastInput, lastSend;
+    internal static void ObserveNormalPress(uint input, bool automatic, bool queued)
+    {
+        if (queued) return;
+        if (automatic) autoPresses++; else manualPresses++;
+        lastInput = input;
+    }
+    internal static void ObserveNormalSend(uint action) { sends++; lastSend = action; }
+    internal void Tick()
+    {
+        if (Environment.TickCount64 >= normalWindow)
+        {
+            normalWindow = Environment.TickCount64 + 30000;
+            if (Player.Available && (manualPresses + autoPresses + sends > 0 || Svc.Condition[Dalamud.Game.ClientState.Conditions.ConditionFlag.InCombat]))
+                Svc.Log.Information("Combat summary job={Job} manual presses={Manual} automatic presses={Automatic} sends={Sends} last input={Input} last send={Action}", Player.Job, manualPresses, autoPresses, sends, lastInput, lastSend);
+            manualPresses = autoPresses = sends = 0;
+            lastInput = lastSend = 0;
+        }
+        if (ExperimentalSelection.Forecasts) BossForecastProvider.Tick();
+        EncounterDamage.ObserveSelfHealth();
+        TargetLifetime.Tick();
+        NativeExecution.ObserveCast();
+        ExecutionSafety.Tick();
+        SelectionRuntime.Tick();
+        lock (Gate) { if (Trace.Active) Trace.Check(Environment.TickCount64, Context); }
+    }
+    public void Dispose() { diagnostics.Dispose(); rotationSettings.Dispose(); emergency.Dispose(); ownership.Dispose(); api.UnregisterFunc(); lock (Gate) Trace.Stop("Plugin unloaded"); }
+}

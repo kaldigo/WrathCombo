@@ -271,7 +271,7 @@ internal partial class PLD
     {
         #region Initial Bailout
 
-        if (!InCombat() || !CanWeave() || !InBossEncounter() || !IsEnabled(Preset.PLD_Mitigation_Boss)) return false;
+        if (!InCombat() || (!CanWeave() && !Engine.EncounterDamage.EmergencyAbilityWindow) || !InBossEncounter() || !IsEnabled(Preset.PLD_Mitigation_Boss)) return false;
 
         #endregion
 
@@ -330,7 +330,7 @@ internal partial class PLD
         bool sheltronOvercap = IsEnabled(Preset.PLD_Mitigation_Boss_SheltronOvercap) && 
                                Gauge.OathGauge >= sheltronOathThreshold && IsPlayerTargeted() && PlayerHealthPercentageHp() <= sheltronHealthThreshold;
         bool sheltronTankbuster = IsEnabled(Preset.PLD_Mitigation_Boss_SheltronTankbuster) && Gauge.OathGauge >= 50 && sheltronInMitigationContent &&
-                                  HasIncomingTankBusterEffect(out var incomingBusterAge) && incomingBusterAge >= sheltronDelay;
+                                  Engine.EncounterDamage.TankbusterWindow(sheltronDelay, ActionLearned(HolySheltron) ? 4 : 6);
 
         if (ActionReady(OriginalHook(Sheltron)) &&
             !LocalPlayer.HasStatus(Buffs.Sheltron) &&
@@ -551,7 +551,19 @@ internal partial class PLD
                 return true;
             }
             
-            if (fightOrFlightEnabled && !HasWeaved() && CombatEngageDuration().TotalSeconds >= 8 && //Time to hold buffing for non opener pulls.
+            bool burstWindow = CombatEngageDuration().TotalSeconds >= 8;
+            if (Engine.ExperimentalSelection.ActivePaladin)
+            {
+                uint planned = Engine.SelectionRuntime.PlannedGcd != 0 ? Engine.SelectionRuntime.PlannedGcd : SelectDamageGcd(flags);
+                bool proc = HasDivineMight || LocalPlayer.HasStatus(Buffs.AtonementReady) ||
+                    LocalPlayer.HasStatus(Buffs.SupplicationReady) || LocalPlayer.HasStatus(Buffs.SepulchreReady);
+                var snapshot = new Engine.Selection.PldBurstInput(planned,
+                    Engine.ActionRoutes.Allowed(planned) && ActionReady(planned), LocalPlayer.HasStatus(Buffs.FightOrFlight), proc,
+                    flags.HasFlag(Combo.AoE), ActionLearned(RiotBlade), ActionLearned(RageOfHalone), ActionLearned(Prominence), ActionLearned(Atonement));
+                burstWindow = Engine.Selection.PldBurst.Start(snapshot);
+                Engine.TestingApi.RecordDecision("PLD.Burst", snapshot, burstWindow);
+            }
+            if (fightOrFlightEnabled && !HasWeaved() && burstWindow &&
                 OriginalHook(FightOrFlight) is FightOrFlight && ActionReady(FightOrFlight) && //To make sure it doesnt try to weave gcd Goring Blade
                 (!ActionLearned(Requiescat) || hasRequiescatMp) && //Must Have Enough Mana to combo
                 (InMeleeRange() || ActionLearned(Imperator) && InActionRange(Imperator) && IsOffCooldown(Imperator)) && // in melee or ready to start ranged combo with imperator
@@ -561,7 +573,10 @@ internal partial class PLD
                 return true;
             }
             
-            if ((requiescatEnabled && ActionReady(OriginalHook(Requiescat)) && GetCooldownRemainingTime(FightOrFlight) > 50 && InActionRange(OriginalHook(Requiescat))) || //Requiescat Logic, in action range because Imperator gets 25y range
+            bool acceptedBurst = Engine.ExperimentalSelection.ActivePaladin
+                ? LocalPlayer.HasStatus(Buffs.FightOrFlight) || JustUsed(FightOrFlight, 2f)
+                : GetCooldownRemainingTime(FightOrFlight) > 50;
+            if ((requiescatEnabled && ActionReady(OriginalHook(Requiescat)) && acceptedBurst && InActionRange(OriginalHook(Requiescat))) || //Requiescat Logic, in action range because Imperator gets 25y range
                 (bladeOfHonorEnabled && ActionLearned(BladeOfHonor) && OriginalHook(Requiescat) == BladeOfHonor && ActionReady(BladeOfHonor)))
             {
                 actionID = OriginalHook(Requiescat);
@@ -630,9 +645,10 @@ internal partial class PLD
             IsSTEnabled(flags, Preset.PLD_ST_AdvancedMode_Atonement);
         
         bool rangedUptimeEnabled =
-            flags.HasFlag(Combo.Simple) ||
+            (flags.HasFlag(Combo.Simple) ||
             IsSTEnabled(flags, Preset.PLD_ST_AdvancedMode_ShieldLob) ||
-            IsAoEEnabled(flags, Preset.PLD_AoE_AdvancedMode_ShieldLob);
+            IsAoEEnabled(flags, Preset.PLD_AoE_AdvancedMode_ShieldLob)) &&
+            (!flags.HasFlag(Combo.AoE) || Engine.ExperimentalSelection.TankAoeRangedFallback);
         
         bool interuptStunEnabled =
             flags.HasFlag(Combo.Simple) ||
